@@ -1,0 +1,42 @@
+version: "3"
+
+vars:
+  TESTENT_DIR: ./testent
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list
+
+  generate:
+    desc: Run ent codegen with entcascade extension
+    dir: "{{.TESTENT_DIR}}"
+    cmds:
+      - go run entc.go
+
+  test:
+    desc: Run all tests
+    dir: "{{.TESTENT_DIR}}"
+    cmds:
+      - go test ./... -v -count=1
+
+  test:short:
+    desc: Run tests (short output)
+    dir: "{{.TESTENT_DIR}}"
+    cmds:
+      - go test ./... -count=1
+
+  build:
+    desc: Build all workspace modules
+    cmds:
+      - go build ./entcascade/...
+      - go build ./entgqlmulti/...
+      - go build ./testent/...
+
+  tidy:
+    desc: Run go mod tidy on all modules
+    cmds:
+      - cd entcascade && go mod tidy
+      - cd entgqlmulti && go mod tidy
+      - cd testent && go mod tidy
