@@ -12,11 +12,23 @@ type Article func(*sql.Selector)
 // Category is the predicate function for category builders.
 type Category func(*sql.Selector)
 
+// Channel is the predicate function for channel builders.
+type Channel func(*sql.Selector)
+
 // Comment is the predicate function for comment builders.
 type Comment func(*sql.Selector)
 
+// Doc is the predicate function for doc builders.
+type Doc func(*sql.Selector)
+
+// Folder is the predicate function for folder builders.
+type Folder func(*sql.Selector)
+
 // Member is the predicate function for member builders.
 type Member func(*sql.Selector)
+
+// Note is the predicate function for note builders.
+type Note func(*sql.Selector)
 
 // Post is the predicate function for post builders.
 type Post func(*sql.Selector)
@@ -38,3 +50,6 @@ type Team func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// Workspace is the predicate function for workspace builders.
+type Workspace func(*sql.Selector)

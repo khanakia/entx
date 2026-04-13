@@ -208,11 +208,30 @@ func buildUnlinkOp(e gen.Edge) deleteOp {
 }
 
 // buildChildOps returns delete ops for a target type's own children (recursive).
-// Uses auto-detection for soft delete; no annotation overrides at child level.
+// Respects the intermediate type's own Cascade() annotation if present, then falls
+// back to auto-detected soft delete and default hard delete. This mirrors the rule
+// ladder in buildOps so that nested cascades honor intermediate-type policies
+// (e.g. Folder.WithUnlink("channels") is respected when Chatbot cascades through
+// Folder into Channel).
 func buildChildOps(t *gen.Type, typeMap map[string]*gen.Type, visited map[string]bool) []deleteOp {
+	// Read this intermediate type's own annotation (may be nil if not annotated).
+	var skipSet, unlinkSet, hardDeleteSet map[string]bool
+	softDeleteMap := make(map[string]string)
+	if ann, ok := decodeAnnotation(t); ok {
+		skipSet = toSet(ann.SkipEdges)
+		unlinkSet = toSet(ann.UnlinkEdges)
+		hardDeleteSet = toSet(ann.HardDeleteEdges)
+		for _, sd := range ann.SoftDeleteEdges {
+			softDeleteMap[sd.Edge] = sd.Field
+		}
+	}
+
 	var ops []deleteOp
 	for _, e := range t.Edges {
 		if e.IsInverse() || len(e.Rel.Columns) == 0 {
+			continue
+		}
+		if skipSet[e.Name] {
 			continue
 		}
 		if visited[e.Type.Name] && !e.M2M() {
@@ -235,10 +254,22 @@ func buildChildOps(t *gen.Type, typeMap map[string]*gen.Type, visited map[string
 			continue
 		}
 
-		// Auto-detect soft delete on child targets.
-		if field, found := detectSoftDeleteField(target); found {
-			ops = append(ops, buildSoftDeleteOp(*e, field))
+		// Apply intermediate-type edge rules in priority order.
+		switch {
+		case unlinkSet[e.Name]:
+			ops = append(ops, buildUnlinkOp(*e))
 			continue
+		case softDeleteMap[e.Name] != "":
+			ops = append(ops, buildSoftDeleteOp(*e, softDeleteMap[e.Name]))
+			continue
+		case hardDeleteSet[e.Name]:
+			// Force hard delete — skip auto-detect, fall through to default cascade.
+		default:
+			// Auto-detect soft delete on target (only when no explicit rule applies).
+			if field, found := detectSoftDeleteField(target); found {
+				ops = append(ops, buildSoftDeleteOp(*e, field))
+				continue
+			}
 		}
 
 		childVisited := copyVisited(visited)

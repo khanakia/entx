@@ -296,7 +296,7 @@ The extension classifies edges and generates different delete strategies:
 | M2M without Through | Skipped (ent manages junction internally) |
 | Inverse edges (`edge.From`) | Always skipped |
 
-Nested cascades: if a child type is also annotated with `Cascade()`, its children are recursively deleted. Cycle detection prevents infinite loops.
+Nested cascades: if a child type is also annotated with `Cascade()`, its children are recursively deleted. Intermediate types' annotations are also respected — `SkipEdges`, `WithUnlink`, `WithSoftDelete`, and `WithHardDelete` rules on a child type apply when a parent cascade traverses through it. Cycle detection prevents infinite loops.
 
 ## Transaction Behavior
 

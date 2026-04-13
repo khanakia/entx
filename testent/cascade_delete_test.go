@@ -40,6 +40,10 @@ func newClient(t *testing.T) *ent.Client {
 // Test 1: Basic O2M cascade — User → Posts → Comments + PostTags
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_Basic covers a full single-entity cascade: deleting a
+// user removes the user, their posts, each post's comments, each post's M2M
+// junction rows (post_tags), and the user's profile — while unrelated rows
+// (the Tag itself, referenced only via the junction) survive untouched.
 func TestCascadeDeleteUser_Basic(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -88,6 +92,9 @@ func TestCascadeDeleteUser_Basic(t *testing.T) {
 // Test 2: Nested cascade — Post has Comments + PostTags
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeletePost_Nested covers a mid-tree cascade: deleting a post
+// (not the top-level user) removes the post itself, its comments, and its
+// M2M junction rows — while the parent user and the referenced tags remain.
 func TestCascadeDeletePost_Nested(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -127,6 +134,9 @@ func TestCascadeDeletePost_Nested(t *testing.T) {
 // Test 3: Unlink — Category deletion clears FK on Posts (posts survive)
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteCategory_Unlink covers the WithUnlink rule: deleting a
+// category SET-NULLs the category_id on its posts instead of deleting them.
+// The post survives with category_id = NULL.
 func TestCascadeDeleteCategory_Unlink(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -155,6 +165,10 @@ func TestCascadeDeleteCategory_Unlink(t *testing.T) {
 // Test 4: Soft delete — Article deletion soft-deletes Revisions
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteArticle_SoftDelete covers auto-detected soft delete:
+// because Revision has a deleted_at field, cascading an Article must set
+// deleted_at on revisions rather than hard-deleting them. The article row
+// itself is still hard-deleted.
 func TestCascadeDeleteArticle_SoftDelete(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -188,6 +202,9 @@ func TestCascadeDeleteArticle_SoftDelete(t *testing.T) {
 // Test 5: SkipEdges — Team deletion cascades Members, skips Owner
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteTeam_SkipOwner covers the SkipEdges rule: the team's
+// owner edge is excluded from the cascade, so the owner user is preserved
+// while team members (non-skipped edge) are still removed.
 func TestCascadeDeleteTeam_SkipOwner(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -220,6 +237,9 @@ func TestCascadeDeleteTeam_SkipOwner(t *testing.T) {
 // Test 6: Batch delete — multiple users at once
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUserBatch covers the batch API: deleting multiple users
+// in a single transaction cascades each one's subtree, using IN (...)
+// predicates instead of per-id queries.
 func TestCascadeDeleteUserBatch(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -251,6 +271,8 @@ func TestCascadeDeleteUserBatch(t *testing.T) {
 // Test 7: Batch delete with empty slice — no-op
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUserBatch_Empty covers the empty-slice short-circuit:
+// calling the batch API with no ids must be a zero-query no-op, not an error.
 func TestCascadeDeleteUserBatch_Empty(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -265,6 +287,10 @@ func TestCascadeDeleteUserBatch_Empty(t *testing.T) {
 // Test 8: WithHooks — Pre/Post hooks fire inside transaction
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_WithHooks covers the Pre/Post hook injection points:
+// Pre runs before any delete ops (can see the full entity), Post runs after
+// all deletes (can observe post-deletion state), both execute inside the
+// cascade transaction so they see transactional state.
 func TestCascadeDeleteUser_WithHooks(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -308,6 +334,9 @@ func TestCascadeDeleteUser_WithHooks(t *testing.T) {
 // Test 9: Pre hook error aborts and rolls back
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_PreHookError covers pre-hook abort semantics: a Pre
+// hook returning an error must abort the cascade and roll back the
+// transaction, leaving the entity untouched.
 func TestCascadeDeleteUser_PreHookError(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -336,6 +365,9 @@ func TestCascadeDeleteUser_PreHookError(t *testing.T) {
 // Test 10: Idempotent — deleting already-deleted entity is not an error
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_Idempotent covers double-delete safety: re-running
+// CascadeDelete on an already-deleted id must not error, because generated
+// WHERE clauses match zero rows rather than raising "not found".
 func TestCascadeDeleteUser_Idempotent(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -358,6 +390,9 @@ func TestCascadeDeleteUser_Idempotent(t *testing.T) {
 // Test 11: Deep nested — User → Post → Comment (3-level cascade)
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_DeepNested covers fan-out at depth: a user with
+// multiple posts, each with multiple comments. Verifies the cascade queries
+// mid-level ids then uses IN (...) to remove grandchildren in bulk.
 func TestCascadeDeleteUser_DeepNested(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -388,6 +423,9 @@ func TestCascadeDeleteUser_DeepNested(t *testing.T) {
 // Test 12: Parent with no children — cascade is a no-op for children
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_NoChildren covers the no-children case: cascade still
+// deletes the root entity cleanly when it has zero dependents (the generated
+// mid-level IN(...) guards must handle empty id slices without erroring).
 func TestCascadeDeleteUser_NoChildren(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -408,6 +446,9 @@ func TestCascadeDeleteUser_NoChildren(t *testing.T) {
 // Test 13: Post hook error — rollback after delete ops already executed
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_PostHookError covers late-failure rollback: a Post
+// hook returning an error must roll back even though delete ops already ran.
+// Verifies the entire subtree reappears after rollback (nothing committed).
 func TestCascadeDeleteUser_PostHookError(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -440,6 +481,9 @@ func TestCascadeDeleteUser_PostHookError(t *testing.T) {
 // Test 14: Batch with single item — same behavior as single delete
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUserBatch_SingleItem covers the batch API with a
+// one-element slice: behavior must match the single-entity call, confirming
+// callers can pass variable-length slices without a special case.
 func TestCascadeDeleteUserBatch_SingleItem(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -465,6 +509,9 @@ func TestCascadeDeleteUserBatch_SingleItem(t *testing.T) {
 // Test 15: Unlink with no linked posts — no-op, no error
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteCategory_UnlinkNoChildren covers WithUnlink on an entity
+// with zero linked children: the category is deleted and the UPDATE SET NULL
+// runs against zero rows (no error, no side effects).
 func TestCascadeDeleteCategory_UnlinkNoChildren(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -485,6 +532,9 @@ func TestCascadeDeleteCategory_UnlinkNoChildren(t *testing.T) {
 // Test 16: Multiple tags on a single post — all junction rows removed
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeletePost_MultipleTags covers M2M junction cleanup at scale:
+// a post with N tags has N junction rows deleted in one statement, and all
+// the originally-referenced tags survive (junction-only deletion).
 func TestCascadeDeletePost_MultipleTags(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -515,6 +565,10 @@ func TestCascadeDeletePost_MultipleTags(t *testing.T) {
 // Test 17: Soft delete idempotent — second delete re-sets deleted_at
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteArticle_SoftDeleteIdempotent covers the soft-delete path
+// under repeated calls: after the article is gone, a second CascadeDelete
+// on the same id finds no rows (WHERE article_id = <gone>) and returns
+// cleanly without touching anything.
 func TestCascadeDeleteArticle_SoftDeleteIdempotent(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -539,6 +593,10 @@ func TestCascadeDeleteArticle_SoftDeleteIdempotent(t *testing.T) {
 // Test 18: Batch category unlink — multiple categories at once
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteCategoryBatch_Unlink covers batching combined with
+// WithUnlink: the generated code must emit a single UPDATE ... IN (...) to
+// clear category_id across every matching post at once, then delete all
+// categories. Posts from every deleted category survive with NULL category_id.
 func TestCascadeDeleteCategoryBatch_Unlink(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -570,6 +628,10 @@ func TestCascadeDeleteCategoryBatch_Unlink(t *testing.T) {
 // Test 19: User with profile but no posts — only profile cascaded
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_ProfileOnly covers a partial subtree: the user has
+// a 1:1 Profile but no posts. Verifies the cascade still executes every
+// registered op (including those that find zero rows to act on) without
+// short-circuiting.
 func TestCascadeDeleteUser_ProfileOnly(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -594,6 +656,10 @@ func TestCascadeDeleteUser_ProfileOnly(t *testing.T) {
 // Test 20: Batch article soft delete — multiple articles at once
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteArticleBatch_SoftDelete covers batch + auto-soft-delete
+// together: revisions across every batched article get deleted_at set via
+// a single UPDATE ... WHERE article_id IN (...), and every revision row
+// remains in the table (soft, not hard).
 func TestCascadeDeleteArticleBatch_SoftDelete(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -627,6 +693,9 @@ func TestCascadeDeleteArticleBatch_SoftDelete(t *testing.T) {
 // Test 21: Isolation — deleting one user leaves other users' data intact
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_Isolation covers blast-radius containment: deleting
+// user A leaves user B's full subtree (posts, comments, profile, M2M rows)
+// intact. Guards against accidental cross-owner queries missing a WHERE.
 func TestCascadeDeleteUser_Isolation(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -679,6 +748,10 @@ func TestCascadeDeleteUser_Isolation(t *testing.T) {
 // Test 22: Unlink preserves post's other fields
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteCategory_UnlinkPreservesData covers unlink fidelity:
+// after SET category_id = NULL, every other column on the post (title,
+// body, author_id) is unchanged. Guards against an accidental bulk-UPDATE
+// that overwrites more than the FK.
 func TestCascadeDeleteCategory_UnlinkPreservesData(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -713,6 +786,10 @@ func TestCascadeDeleteCategory_UnlinkPreservesData(t *testing.T) {
 // Test 23: Batch team delete — multiple teams, shared users survive
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteTeamBatch covers batch + SkipEdges together: deleting
+// multiple teams cascades members for all batched teams while leaving the
+// skipped owners AND all member users alive (members are a separate entity
+// table, not the User skipped edge).
 func TestCascadeDeleteTeamBatch(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -748,6 +825,9 @@ func TestCascadeDeleteTeamBatch(t *testing.T) {
 // Test 24: Nonexistent ID — cascade delete on ID that never existed
 // ---------------------------------------------------------------------------
 
+// TestCascadeDeleteUser_NonexistentID covers calling cascade on an id that
+// never existed: every delete/update hits zero rows and returns cleanly.
+// Ensures the cascade contract is "id-based", not "existence-based".
 func TestCascadeDeleteUser_NonexistentID(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -755,5 +835,130 @@ func TestCascadeDeleteUser_NonexistentID(t *testing.T) {
 
 	if err := ent.CascadeDeleteUser(ctx, client, 99999); err != nil {
 		t.Fatalf("expected no error for nonexistent ID, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test 25: NESTED-ANNOTATION REGRESSION — Workspace → Folder → Channel.
+// Folder carries WithUnlink("channels"); that rule MUST be respected when
+// Workspace cascades through Folder. Before the fix, buildChildOps ignored
+// intermediate-type annotations and hard-deleted channels via their folder_id.
+// After the fix, channels are unlinked (folder_id = NULL) and survive.
+// ---------------------------------------------------------------------------
+
+// TestCascadeDeleteWorkspace_NestedUnlink covers the nested-annotation
+// regression: Folder (intermediate) carries WithUnlink("channels"), so when
+// Workspace cascades through Folder the channels MUST be unlinked, not
+// hard-deleted. Before the fix, buildChildOps ignored intermediate
+// annotations and channels were erroneously deleted.
+func TestCascadeDeleteWorkspace_NestedUnlink(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	ws := client.Workspace.Create().SetName("ws-unlink").SaveX(ctx)
+	f := client.Folder.Create().SetName("f1").SetWorkspaceID(ws.ID).SaveX(ctx)
+	c := client.Channel.Create().SetName("c1").SetFolderID(f.ID).SaveX(ctx)
+
+	if err := ent.CascadeDeleteWorkspace(ctx, client, ws.ID); err != nil {
+		t.Fatalf("CascadeDeleteWorkspace: %v", err)
+	}
+
+	// Workspace + Folder hard-deleted.
+	if n := client.Workspace.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 workspaces, got %d", n)
+	}
+	if n := client.Folder.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 folders, got %d", n)
+	}
+
+	// Channel MUST survive with folder_id cleared — this is the regression guard.
+	survivor, err := client.Channel.Get(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("expected channel to survive, got error: %v", err)
+	}
+	if survivor.FolderID != nil {
+		t.Errorf("expected channel.folder_id = NULL (unlinked); got %v", *survivor.FolderID)
+	}
+	if survivor.Name != "c1" {
+		t.Errorf("expected channel name preserved; got %q", survivor.Name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test 26: NESTED-ANNOTATION REGRESSION — Workspace → Doc → Note.
+// Doc carries WithSoftDelete("notes", "archived_at"). The non-default field
+// name is deliberate: auto-detect only looks for "deleted_at", so this can
+// only pass if Doc's annotation is consulted during the nested walk.
+// ---------------------------------------------------------------------------
+
+// TestCascadeDeleteWorkspace_NestedSoftDelete covers the nested-annotation
+// regression for the soft-delete rule: Doc (intermediate) carries
+// WithSoftDelete("notes", "archived_at"). The custom field name is deliberate
+// — auto-detect only looks for "deleted_at", so the only way notes get
+// archived_at set during Workspace → Doc → Note is by reading Doc's
+// annotation during the nested walk.
+func TestCascadeDeleteWorkspace_NestedSoftDelete(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	ws := client.Workspace.Create().SetName("ws-soft").SaveX(ctx)
+	d := client.Doc.Create().SetTitle("d1").SetWorkspaceID(ws.ID).SaveX(ctx)
+	n1 := client.Note.Create().SetBody("n1").SetDocID(d.ID).SaveX(ctx)
+	n2 := client.Note.Create().SetBody("n2").SetDocID(d.ID).SaveX(ctx)
+
+	if err := ent.CascadeDeleteWorkspace(ctx, client, ws.ID); err != nil {
+		t.Fatalf("CascadeDeleteWorkspace: %v", err)
+	}
+
+	// Workspace + Doc hard-deleted.
+	if n := client.Workspace.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 workspaces, got %d", n)
+	}
+	if n := client.Doc.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 docs, got %d", n)
+	}
+
+	// Notes survive with archived_at set (soft-deleted via intermediate rule).
+	notes := client.Note.Query().AllX(ctx)
+	if len(notes) != 2 {
+		t.Fatalf("expected 2 notes (soft-deleted), got %d", len(notes))
+	}
+	seen := map[int]bool{n1.ID: false, n2.ID: false}
+	for _, note := range notes {
+		if note.ArchivedAt == nil {
+			t.Errorf("note %d: expected archived_at set; got nil", note.ID)
+		}
+		seen[note.ID] = true
+	}
+	for id, ok := range seen {
+		if !ok {
+			t.Errorf("note %d not found after cascade", id)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test 27: NESTED-ANNOTATION — direct Workspace delete with no children
+// leaves the channel unlink and doc soft-delete as no-ops.
+// ---------------------------------------------------------------------------
+
+// TestCascadeDeleteWorkspace_EmptyChildren covers the empty-children edge
+// for the nested-annotation code path: an annotated intermediate type with
+// no dependents must still complete cleanly. Confirms the if-len > 0 guards
+// generated around nested cascades work for the Workspace chain too.
+func TestCascadeDeleteWorkspace_EmptyChildren(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	ws := client.Workspace.Create().SetName("ws-empty").SaveX(ctx)
+
+	if err := ent.CascadeDeleteWorkspace(ctx, client, ws.ID); err != nil {
+		t.Fatalf("CascadeDeleteWorkspace empty: %v", err)
+	}
+	if n := client.Workspace.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 workspaces, got %d", n)
 	}
 }

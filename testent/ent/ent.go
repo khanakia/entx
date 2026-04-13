@@ -14,8 +14,12 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/khanakia/entx/testent/ent/article"
 	"github.com/khanakia/entx/testent/ent/category"
+	"github.com/khanakia/entx/testent/ent/channel"
 	"github.com/khanakia/entx/testent/ent/comment"
+	"github.com/khanakia/entx/testent/ent/doc"
+	"github.com/khanakia/entx/testent/ent/folder"
 	"github.com/khanakia/entx/testent/ent/member"
+	"github.com/khanakia/entx/testent/ent/note"
 	"github.com/khanakia/entx/testent/ent/post"
 	"github.com/khanakia/entx/testent/ent/posttag"
 	"github.com/khanakia/entx/testent/ent/profile"
@@ -23,6 +27,7 @@ import (
 	"github.com/khanakia/entx/testent/ent/tag"
 	"github.com/khanakia/entx/testent/ent/team"
 	"github.com/khanakia/entx/testent/ent/user"
+	"github.com/khanakia/entx/testent/ent/workspace"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -83,17 +88,22 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			article.Table:  article.ValidColumn,
-			category.Table: category.ValidColumn,
-			comment.Table:  comment.ValidColumn,
-			member.Table:   member.ValidColumn,
-			post.Table:     post.ValidColumn,
-			posttag.Table:  posttag.ValidColumn,
-			profile.Table:  profile.ValidColumn,
-			revision.Table: revision.ValidColumn,
-			tag.Table:      tag.ValidColumn,
-			team.Table:     team.ValidColumn,
-			user.Table:     user.ValidColumn,
+			article.Table:   article.ValidColumn,
+			category.Table:  category.ValidColumn,
+			channel.Table:   channel.ValidColumn,
+			comment.Table:   comment.ValidColumn,
+			doc.Table:       doc.ValidColumn,
+			folder.Table:    folder.ValidColumn,
+			member.Table:    member.ValidColumn,
+			note.Table:      note.ValidColumn,
+			post.Table:      post.ValidColumn,
+			posttag.Table:   posttag.ValidColumn,
+			profile.Table:   profile.ValidColumn,
+			revision.Table:  revision.ValidColumn,
+			tag.Table:       tag.ValidColumn,
+			team.Table:      team.ValidColumn,
+			user.Table:      user.ValidColumn,
+			workspace.Table: workspace.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

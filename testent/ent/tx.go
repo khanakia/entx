@@ -16,10 +16,18 @@ type Tx struct {
 	Article *ArticleClient
 	// Category is the client for interacting with the Category builders.
 	Category *CategoryClient
+	// Channel is the client for interacting with the Channel builders.
+	Channel *ChannelClient
 	// Comment is the client for interacting with the Comment builders.
 	Comment *CommentClient
+	// Doc is the client for interacting with the Doc builders.
+	Doc *DocClient
+	// Folder is the client for interacting with the Folder builders.
+	Folder *FolderClient
 	// Member is the client for interacting with the Member builders.
 	Member *MemberClient
+	// Note is the client for interacting with the Note builders.
+	Note *NoteClient
 	// Post is the client for interacting with the Post builders.
 	Post *PostClient
 	// PostTag is the client for interacting with the PostTag builders.
@@ -34,6 +42,8 @@ type Tx struct {
 	Team *TeamClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// Workspace is the client for interacting with the Workspace builders.
+	Workspace *WorkspaceClient
 
 	// lazily loaded.
 	client     *Client
@@ -167,8 +177,12 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.Article = NewArticleClient(tx.config)
 	tx.Category = NewCategoryClient(tx.config)
+	tx.Channel = NewChannelClient(tx.config)
 	tx.Comment = NewCommentClient(tx.config)
+	tx.Doc = NewDocClient(tx.config)
+	tx.Folder = NewFolderClient(tx.config)
 	tx.Member = NewMemberClient(tx.config)
+	tx.Note = NewNoteClient(tx.config)
 	tx.Post = NewPostClient(tx.config)
 	tx.PostTag = NewPostTagClient(tx.config)
 	tx.Profile = NewProfileClient(tx.config)
@@ -176,6 +190,7 @@ func (tx *Tx) init() {
 	tx.Tag = NewTagClient(tx.config)
 	tx.Team = NewTeamClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.Workspace = NewWorkspaceClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

@@ -9,14 +9,19 @@ import (
 
 	"github.com/khanakia/entx/testent/ent/article"
 	"github.com/khanakia/entx/testent/ent/category"
+	"github.com/khanakia/entx/testent/ent/channel"
 	"github.com/khanakia/entx/testent/ent/comment"
+	"github.com/khanakia/entx/testent/ent/doc"
+	"github.com/khanakia/entx/testent/ent/folder"
 	"github.com/khanakia/entx/testent/ent/member"
+	"github.com/khanakia/entx/testent/ent/note"
 	"github.com/khanakia/entx/testent/ent/post"
 	"github.com/khanakia/entx/testent/ent/posttag"
 	"github.com/khanakia/entx/testent/ent/profile"
 	"github.com/khanakia/entx/testent/ent/revision"
 	"github.com/khanakia/entx/testent/ent/team"
 	"github.com/khanakia/entx/testent/ent/user"
+	"github.com/khanakia/entx/testent/ent/workspace"
 )
 
 // CascadeDeleteArticleHooks allows injecting business logic around the cascade delete.
@@ -203,6 +208,194 @@ func cascadeDeleteCategoryBatchOps(ctx context.Context, client *Client, ids []in
 	// Delete Category entities.
 	if _, err := client.Category.Delete().Where(category.IDIn(ids...)).Exec(ctx); err != nil {
 		return fmt.Errorf("cascade delete category batch: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteDocHooks allows injecting business logic around the cascade delete.
+// Both hooks run inside the transaction. Return an error to abort and rollback.
+type CascadeDeleteDocHooks struct {
+	// Pre runs before any delete operations.
+	Pre func(ctx context.Context, client *Client, id int) error
+	// Post runs after all deletes (including the entity itself).
+	Post func(ctx context.Context, client *Client, id int) error
+}
+
+// CascadeDeleteDoc deletes a Doc and all its dependent entities in a transaction.
+func CascadeDeleteDoc(ctx context.Context, client *Client, id int) error {
+	return CascadeDeleteDocWithHooks(ctx, client, id, CascadeDeleteDocHooks{})
+}
+
+// CascadeDeleteDocWithHooks deletes a Doc and all its dependent entities in a transaction,
+// calling the provided hooks inside the transaction boundary.
+func CascadeDeleteDocWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteDocHooks) error {
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete doc: start tx: %w", err)
+	}
+	if hooks.Pre != nil {
+		if err := hooks.Pre(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete doc: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := cascadeDeleteDocOps(ctx, tx.Client(), id); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete doc: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if hooks.Post != nil {
+		if err := hooks.Post(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete doc: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete doc: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteDocOps(ctx context.Context, client *Client, id int) error {
+	// Soft-delete notes (soft-delete via archived_at).
+	if err := client.Note.Update().Where(note.DocID(id)).SetArchivedAt(time.Now()).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete: soft-delete note: %w", err)
+	}
+	// Delete Doc itself.
+	if _, err := client.Doc.Delete().Where(doc.ID(id)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete doc: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteDocBatch deletes multiple Doc entities and all their dependents in a single transaction.
+func CascadeDeleteDocBatch(ctx context.Context, client *Client, ids []int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete doc batch: start tx: %w", err)
+	}
+	if err := cascadeDeleteDocBatchOps(ctx, tx.Client(), ids); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete doc batch: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete doc batch: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteDocBatchOps(ctx context.Context, client *Client, ids []int) error {
+	// Soft-delete notes (soft-delete via archived_at).
+	if err := client.Note.Update().Where(note.DocIDIn(ids...)).SetArchivedAt(time.Now()).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete: soft-delete note: %w", err)
+	}
+	// Delete Doc entities.
+	if _, err := client.Doc.Delete().Where(doc.IDIn(ids...)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete doc batch: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteFolderHooks allows injecting business logic around the cascade delete.
+// Both hooks run inside the transaction. Return an error to abort and rollback.
+type CascadeDeleteFolderHooks struct {
+	// Pre runs before any delete operations.
+	Pre func(ctx context.Context, client *Client, id int) error
+	// Post runs after all deletes (including the entity itself).
+	Post func(ctx context.Context, client *Client, id int) error
+}
+
+// CascadeDeleteFolder deletes a Folder and all its dependent entities in a transaction.
+func CascadeDeleteFolder(ctx context.Context, client *Client, id int) error {
+	return CascadeDeleteFolderWithHooks(ctx, client, id, CascadeDeleteFolderHooks{})
+}
+
+// CascadeDeleteFolderWithHooks deletes a Folder and all its dependent entities in a transaction,
+// calling the provided hooks inside the transaction boundary.
+func CascadeDeleteFolderWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteFolderHooks) error {
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete folder: start tx: %w", err)
+	}
+	if hooks.Pre != nil {
+		if err := hooks.Pre(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete folder: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := cascadeDeleteFolderOps(ctx, tx.Client(), id); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete folder: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if hooks.Post != nil {
+		if err := hooks.Post(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete folder: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete folder: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteFolderOps(ctx context.Context, client *Client, id int) error {
+	// Unlink channels (unlink).
+	if err := client.Channel.Update().Where(channel.FolderID(id)).ClearFolderID().Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete: unlink channel: %w", err)
+	}
+	// Delete Folder itself.
+	if _, err := client.Folder.Delete().Where(folder.ID(id)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete folder: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteFolderBatch deletes multiple Folder entities and all their dependents in a single transaction.
+func CascadeDeleteFolderBatch(ctx context.Context, client *Client, ids []int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete folder batch: start tx: %w", err)
+	}
+	if err := cascadeDeleteFolderBatchOps(ctx, tx.Client(), ids); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete folder batch: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete folder batch: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteFolderBatchOps(ctx context.Context, client *Client, ids []int) error {
+	// Unlink channels (unlink).
+	if err := client.Channel.Update().Where(channel.FolderIDIn(ids...)).ClearFolderID().Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete: unlink channel: %w", err)
+	}
+	// Delete Folder entities.
+	if _, err := client.Folder.Delete().Where(folder.IDIn(ids...)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete folder batch: %w", err)
 	}
 	return nil
 }
@@ -529,6 +722,148 @@ func cascadeDeleteUserBatchOps(ctx context.Context, client *Client, ids []int) e
 	// Delete User entities.
 	if _, err := client.User.Delete().Where(user.IDIn(ids...)).Exec(ctx); err != nil {
 		return fmt.Errorf("cascade delete user batch: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteWorkspaceHooks allows injecting business logic around the cascade delete.
+// Both hooks run inside the transaction. Return an error to abort and rollback.
+type CascadeDeleteWorkspaceHooks struct {
+	// Pre runs before any delete operations.
+	Pre func(ctx context.Context, client *Client, id int) error
+	// Post runs after all deletes (including the entity itself).
+	Post func(ctx context.Context, client *Client, id int) error
+}
+
+// CascadeDeleteWorkspace deletes a Workspace and all its dependent entities in a transaction.
+func CascadeDeleteWorkspace(ctx context.Context, client *Client, id int) error {
+	return CascadeDeleteWorkspaceWithHooks(ctx, client, id, CascadeDeleteWorkspaceHooks{})
+}
+
+// CascadeDeleteWorkspaceWithHooks deletes a Workspace and all its dependent entities in a transaction,
+// calling the provided hooks inside the transaction boundary.
+func CascadeDeleteWorkspaceWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteWorkspaceHooks) error {
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete workspace: start tx: %w", err)
+	}
+	if hooks.Pre != nil {
+		if err := hooks.Pre(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete workspace: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := cascadeDeleteWorkspaceOps(ctx, tx.Client(), id); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete workspace: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if hooks.Post != nil {
+		if err := hooks.Post(ctx, tx.Client(), id); err != nil {
+			if rerr := tx.Rollback(); rerr != nil {
+				return fmt.Errorf("cascade delete workspace: rollback: %w (original: %w)", rerr, err)
+			}
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete workspace: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteWorkspaceOps(ctx context.Context, client *Client, id int) error {
+	// Cascade into folders (cascade).
+	folderIDs, err := client.Folder.Query().Where(folder.WorkspaceID(id)).IDs(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete: query folder: %w", err)
+	}
+	if len(folderIDs) > 0 {
+		// Unlink channels (unlink).
+		if err := client.Channel.Update().Where(channel.FolderIDIn(folderIDs...)).ClearFolderID().Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: unlink channel: %w", err)
+		}
+		if _, err := client.Folder.Delete().Where(folder.WorkspaceID(id)).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: delete folder: %w", err)
+		}
+	}
+	// Cascade into docs (cascade).
+	docIDs, err := client.Doc.Query().Where(doc.WorkspaceID(id)).IDs(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete: query doc: %w", err)
+	}
+	if len(docIDs) > 0 {
+		// Soft-delete notes (soft-delete via archived_at).
+		if err := client.Note.Update().Where(note.DocIDIn(docIDs...)).SetArchivedAt(time.Now()).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: soft-delete note: %w", err)
+		}
+		if _, err := client.Doc.Delete().Where(doc.WorkspaceID(id)).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: delete doc: %w", err)
+		}
+	}
+	// Delete Workspace itself.
+	if _, err := client.Workspace.Delete().Where(workspace.ID(id)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete workspace: %w", err)
+	}
+	return nil
+}
+
+// CascadeDeleteWorkspaceBatch deletes multiple Workspace entities and all their dependents in a single transaction.
+func CascadeDeleteWorkspaceBatch(ctx context.Context, client *Client, ids []int) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete workspace batch: start tx: %w", err)
+	}
+	if err := cascadeDeleteWorkspaceBatchOps(ctx, tx.Client(), ids); err != nil {
+		if rerr := tx.Rollback(); rerr != nil {
+			return fmt.Errorf("cascade delete workspace batch: rollback: %w (original: %w)", rerr, err)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("cascade delete workspace batch: commit: %w", err)
+	}
+	return nil
+}
+
+func cascadeDeleteWorkspaceBatchOps(ctx context.Context, client *Client, ids []int) error {
+	// Cascade into folders (cascade).
+	folderIDs, err := client.Folder.Query().Where(folder.WorkspaceIDIn(ids...)).IDs(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete: query folder: %w", err)
+	}
+	if len(folderIDs) > 0 {
+		// Unlink channels (unlink).
+		if err := client.Channel.Update().Where(channel.FolderIDIn(folderIDs...)).ClearFolderID().Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: unlink channel: %w", err)
+		}
+		if _, err := client.Folder.Delete().Where(folder.WorkspaceIDIn(ids...)).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: delete folder: %w", err)
+		}
+	}
+	// Cascade into docs (cascade).
+	docIDs, err := client.Doc.Query().Where(doc.WorkspaceIDIn(ids...)).IDs(ctx)
+	if err != nil {
+		return fmt.Errorf("cascade delete: query doc: %w", err)
+	}
+	if len(docIDs) > 0 {
+		// Soft-delete notes (soft-delete via archived_at).
+		if err := client.Note.Update().Where(note.DocIDIn(docIDs...)).SetArchivedAt(time.Now()).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: soft-delete note: %w", err)
+		}
+		if _, err := client.Doc.Delete().Where(doc.WorkspaceIDIn(ids...)).Exec(ctx); err != nil {
+			return fmt.Errorf("cascade delete: delete doc: %w", err)
+		}
+	}
+	// Delete Workspace entities.
+	if _, err := client.Workspace.Delete().Where(workspace.IDIn(ids...)).Exec(ctx); err != nil {
+		return fmt.Errorf("cascade delete workspace batch: %w", err)
 	}
 	return nil
 }

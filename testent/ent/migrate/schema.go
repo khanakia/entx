@@ -30,6 +30,26 @@ var (
 		Columns:    CategoriesColumns,
 		PrimaryKey: []*schema.Column{CategoriesColumns[0]},
 	}
+	// ChannelsColumns holds the columns for the "channels" table.
+	ChannelsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "folder_id", Type: field.TypeInt, Nullable: true},
+	}
+	// ChannelsTable holds the schema information for the "channels" table.
+	ChannelsTable = &schema.Table{
+		Name:       "channels",
+		Columns:    ChannelsColumns,
+		PrimaryKey: []*schema.Column{ChannelsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "channels_folders_channels",
+				Columns:    []*schema.Column{ChannelsColumns[2]},
+				RefColumns: []*schema.Column{FoldersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// CommentsColumns holds the columns for the "comments" table.
 	CommentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -46,6 +66,46 @@ var (
 				Symbol:     "comments_posts_comments",
 				Columns:    []*schema.Column{CommentsColumns[2]},
 				RefColumns: []*schema.Column{PostsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// DocsColumns holds the columns for the "docs" table.
+	DocsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "title", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeInt},
+	}
+	// DocsTable holds the schema information for the "docs" table.
+	DocsTable = &schema.Table{
+		Name:       "docs",
+		Columns:    DocsColumns,
+		PrimaryKey: []*schema.Column{DocsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "docs_workspaces_docs",
+				Columns:    []*schema.Column{DocsColumns[2]},
+				RefColumns: []*schema.Column{WorkspacesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// FoldersColumns holds the columns for the "folders" table.
+	FoldersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeInt},
+	}
+	// FoldersTable holds the schema information for the "folders" table.
+	FoldersTable = &schema.Table{
+		Name:       "folders",
+		Columns:    FoldersColumns,
+		PrimaryKey: []*schema.Column{FoldersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "folders_workspaces_folders",
+				Columns:    []*schema.Column{FoldersColumns[2]},
+				RefColumns: []*schema.Column{WorkspacesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 		},
@@ -73,6 +133,27 @@ var (
 				Symbol:     "members_teams_members",
 				Columns:    []*schema.Column{MembersColumns[3]},
 				RefColumns: []*schema.Column{TeamsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// NotesColumns holds the columns for the "notes" table.
+	NotesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "body", Type: field.TypeString},
+		{Name: "archived_at", Type: field.TypeTime, Nullable: true},
+		{Name: "doc_id", Type: field.TypeInt},
+	}
+	// NotesTable holds the schema information for the "notes" table.
+	NotesTable = &schema.Table{
+		Name:       "notes",
+		Columns:    NotesColumns,
+		PrimaryKey: []*schema.Column{NotesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "notes_docs_notes",
+				Columns:    []*schema.Column{NotesColumns[3]},
+				RefColumns: []*schema.Column{DocsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 		},
@@ -223,12 +304,27 @@ var (
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 	}
+	// WorkspacesColumns holds the columns for the "workspaces" table.
+	WorkspacesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString, Unique: true},
+	}
+	// WorkspacesTable holds the schema information for the "workspaces" table.
+	WorkspacesTable = &schema.Table{
+		Name:       "workspaces",
+		Columns:    WorkspacesColumns,
+		PrimaryKey: []*schema.Column{WorkspacesColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ArticlesTable,
 		CategoriesTable,
+		ChannelsTable,
 		CommentsTable,
+		DocsTable,
+		FoldersTable,
 		MembersTable,
+		NotesTable,
 		PostsTable,
 		PostTagsTable,
 		ProfilesTable,
@@ -236,13 +332,18 @@ var (
 		TagsTable,
 		TeamsTable,
 		UsersTable,
+		WorkspacesTable,
 	}
 )
 
 func init() {
+	ChannelsTable.ForeignKeys[0].RefTable = FoldersTable
 	CommentsTable.ForeignKeys[0].RefTable = PostsTable
+	DocsTable.ForeignKeys[0].RefTable = WorkspacesTable
+	FoldersTable.ForeignKeys[0].RefTable = WorkspacesTable
 	MembersTable.ForeignKeys[0].RefTable = UsersTable
 	MembersTable.ForeignKeys[1].RefTable = TeamsTable
+	NotesTable.ForeignKeys[0].RefTable = DocsTable
 	PostsTable.ForeignKeys[0].RefTable = CategoriesTable
 	PostsTable.ForeignKeys[1].RefTable = UsersTable
 	PostTagsTable.ForeignKeys[0].RefTable = PostsTable
