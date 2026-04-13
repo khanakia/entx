@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Article is the client for interacting with the Article builders.
 	Article *ArticleClient
+	// AuditLog is the client for interacting with the AuditLog builders.
+	AuditLog *AuditLogClient
 	// Category is the client for interacting with the Category builders.
 	Category *CategoryClient
 	// Channel is the client for interacting with the Channel builders.
@@ -176,6 +178,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Article = NewArticleClient(tx.config)
+	tx.AuditLog = NewAuditLogClient(tx.config)
 	tx.Category = NewCategoryClient(tx.config)
 	tx.Channel = NewChannelClient(tx.config)
 	tx.Comment = NewCommentClient(tx.config)

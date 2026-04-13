@@ -106,13 +106,18 @@ entcascade.Cascade(entcascade.WithHardDelete("draft_versions"))
 
 ### 6. Skip an edge entirely (`SkipEdges`)
 
-**Problem.** A `Team` has an `owner` edge pointing at a `User`, but the user is shared and you never want to delete them when deleting the team. Manual cascades have to remember the exception every time.
+**First, a clarification on what entcascade does NOT do.** Deleting a child never walks "up" to its parent. entcascade only traverses O2M edges (parent → children) and O2O where the FK lives on the child. Parent-pointing edges (e.g., `Team.edge.To("owner", User.Type).Unique()` — Team owns the `owner_id` FK) are **auto-skipped**; no annotation needed. You can't accidentally delete a User by cascade-deleting a Team.
 
-**entcascade.**
+**Where `SkipEdges` is load-bearing.** A parent has an O2M edge to a child you want to *preserve* — typically compliance records, reference data, or anything with historical value. Without `SkipEdges`, entcascade would walk that edge and hard-delete the children.
 
 ```go
-entcascade.Cascade(entcascade.SkipEdges("owner"))
+// Team has O2M to AuditLog. AuditLog.team_id is optional+nullable so the
+// row stays valid after the team row is gone (kept for compliance).
+entcascade.Cascade(entcascade.SkipEdges("audit_logs"))
+// -> Team deletion cascades members, preserves audit_logs.
 ```
+
+Covered by `TestCascadeDeleteTeam_SkipEdges` — removing the `SkipEdges` from Team's annotation causes the test to fail because audit logs get hard-deleted.
 
 ---
 

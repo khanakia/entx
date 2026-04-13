@@ -199,13 +199,19 @@ func TestCascadeDeleteArticle_SoftDelete(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: SkipEdges — Team deletion cascades Members, skips Owner
+// Test 5: SkipEdges — Team cascade deletes Members but preserves AuditLogs
 // ---------------------------------------------------------------------------
 
-// TestCascadeDeleteTeam_SkipOwner covers the SkipEdges rule: the team's
-// owner edge is excluded from the cascade, so the owner user is preserved
-// while team members (non-skipped edge) are still removed.
-func TestCascadeDeleteTeam_SkipOwner(t *testing.T) {
+// TestCascadeDeleteTeam_SkipEdges covers the SkipEdges rule on a real O2M
+// edge that entcascade would otherwise walk. Team.Cascade(SkipEdges(
+// "audit_logs")) preserves compliance history when a team is deleted.
+// Members (non-skipped O2M) are still removed.
+//
+// Bonus assertion: the owner user also survives. That's NOT because of
+// SkipEdges — it's because Team owns the owner_id FK, making "owner" a
+// parent-pointing M2O edge that entcascade auto-skips. Adding
+// SkipEdges("owner") would have been a no-op.
+func TestCascadeDeleteTeam_SkipEdges(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
 	ctx := context.Background()
@@ -214,6 +220,9 @@ func TestCascadeDeleteTeam_SkipOwner(t *testing.T) {
 	team := client.Team.Create().SetName("alpha").SetOwnerID(owner.ID).SaveX(ctx)
 	member1 := client.User.Create().SetName("m1").SetEmail("m1@test.com").SaveX(ctx)
 	client.Member.Create().SetRole("dev").SetTeamID(team.ID).SetUserID(member1.ID).SaveX(ctx)
+	// Audit logs attached to the team — must survive the cascade.
+	client.AuditLog.Create().SetAction("created").SetTeamID(team.ID).SaveX(ctx)
+	client.AuditLog.Create().SetAction("renamed").SetTeamID(team.ID).SaveX(ctx)
 
 	if err := ent.CascadeDeleteTeam(ctx, client, team.ID); err != nil {
 		t.Fatalf("CascadeDeleteTeam: %v", err)
@@ -223,11 +232,16 @@ func TestCascadeDeleteTeam_SkipOwner(t *testing.T) {
 	if n := client.Team.Query().CountX(ctx); n != 0 {
 		t.Errorf("expected 0 teams, got %d", n)
 	}
-	// Members gone.
+	// Members gone (non-skipped O2M).
 	if n := client.Member.Query().CountX(ctx); n != 0 {
 		t.Errorf("expected 0 members, got %d", n)
 	}
-	// Owner survives (edge was skipped).
+	// Audit logs survive — THIS is the SkipEdges assertion.
+	if n := client.AuditLog.Query().CountX(ctx); n != 2 {
+		t.Errorf("expected 2 audit logs preserved (SkipEdges), got %d", n)
+	}
+	// Bonus: owner + member users survive (M2O auto-skip + members is a
+	// separate entity table, not User).
 	if n := client.User.Query().CountX(ctx); n != 2 {
 		t.Errorf("expected 2 users (owner + member1 survive), got %d", n)
 	}
@@ -787,9 +801,9 @@ func TestCascadeDeleteCategory_UnlinkPreservesData(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestCascadeDeleteTeamBatch covers batch + SkipEdges together: deleting
-// multiple teams cascades members for all batched teams while leaving the
-// skipped owners AND all member users alive (members are a separate entity
-// table, not the User skipped edge).
+// multiple teams cascades members across every batched team while
+// preserving audit logs (SkipEdges) and users (owner is auto-skipped M2O;
+// member user rows live in a separate table from Member join rows).
 func TestCascadeDeleteTeamBatch(t *testing.T) {
 	client := newClient(t)
 	defer client.Close()
@@ -804,6 +818,10 @@ func TestCascadeDeleteTeamBatch(t *testing.T) {
 	client.Member.Create().SetRole("pm").SetTeamID(t2.ID).SetUserID(m2.ID).SaveX(ctx)
 	// m1 is also in t2.
 	client.Member.Create().SetRole("dev").SetTeamID(t2.ID).SetUserID(m1.ID).SaveX(ctx)
+	// Audit logs for each team — must all survive.
+	client.AuditLog.Create().SetAction("t1-created").SetTeamID(t1.ID).SaveX(ctx)
+	client.AuditLog.Create().SetAction("t2-created").SetTeamID(t2.ID).SaveX(ctx)
+	client.AuditLog.Create().SetAction("t2-renamed").SetTeamID(t2.ID).SaveX(ctx)
 
 	if err := ent.CascadeDeleteTeamBatch(ctx, client, []int{t1.ID, t2.ID}); err != nil {
 		t.Fatalf("CascadeDeleteTeamBatch: %v", err)
@@ -815,7 +833,11 @@ func TestCascadeDeleteTeamBatch(t *testing.T) {
 	if n := client.Member.Query().CountX(ctx); n != 0 {
 		t.Errorf("expected 0 members, got %d", n)
 	}
-	// All users survive (owner skipped, members are leaf nodes not users).
+	// Audit logs across both teams survive — SkipEdges applied to batch path.
+	if n := client.AuditLog.Query().CountX(ctx); n != 3 {
+		t.Errorf("expected 3 audit logs preserved, got %d", n)
+	}
+	// All users survive (owner auto-skipped, members join table lives elsewhere).
 	if n := client.User.Query().CountX(ctx); n != 3 {
 		t.Errorf("expected 3 users (all survive), got %d", n)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/khanakia/entx/testent/ent/auditlog"
 	"github.com/khanakia/entx/testent/ent/member"
 	"github.com/khanakia/entx/testent/ent/team"
 	"github.com/khanakia/entx/testent/ent/user"
@@ -59,6 +60,21 @@ func (_c *TeamCreate) SetNillableOwnerID(id *int) *TeamCreate {
 // SetOwner sets the "owner" edge to the User entity.
 func (_c *TeamCreate) SetOwner(v *User) *TeamCreate {
 	return _c.SetOwnerID(v.ID)
+}
+
+// AddAuditLogIDs adds the "audit_logs" edge to the AuditLog entity by IDs.
+func (_c *TeamCreate) AddAuditLogIDs(ids ...int) *TeamCreate {
+	_c.mutation.AddAuditLogIDs(ids...)
+	return _c
+}
+
+// AddAuditLogs adds the "audit_logs" edges to the AuditLog entity.
+func (_c *TeamCreate) AddAuditLogs(v ...*AuditLog) *TeamCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAuditLogIDs(ids...)
 }
 
 // Mutation returns the TeamMutation object of the builder.
@@ -159,6 +175,22 @@ func (_c *TeamCreate) createSpec() (*Team, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.team_owner = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.AuditLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   team.AuditLogsTable,
+			Columns: []string{team.AuditLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(auditlog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

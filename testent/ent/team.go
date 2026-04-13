@@ -32,9 +32,11 @@ type TeamEdges struct {
 	Members []*Member `json:"members,omitempty"`
 	// Owner holds the value of the owner edge.
 	Owner *User `json:"owner,omitempty"`
+	// AuditLogs holds the value of the audit_logs edge.
+	AuditLogs []*AuditLog `json:"audit_logs,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // MembersOrErr returns the Members value or an error if the edge
@@ -55,6 +57,15 @@ func (e TeamEdges) OwnerOrErr() (*User, error) {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
+}
+
+// AuditLogsOrErr returns the AuditLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e TeamEdges) AuditLogsOrErr() ([]*AuditLog, error) {
+	if e.loadedTypes[2] {
+		return e.AuditLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "audit_logs"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -123,6 +134,11 @@ func (_m *Team) QueryMembers() *MemberQuery {
 // QueryOwner queries the "owner" edge of the Team entity.
 func (_m *Team) QueryOwner() *UserQuery {
 	return NewTeamClient(_m.config).QueryOwner(_m)
+}
+
+// QueryAuditLogs queries the "audit_logs" edge of the Team entity.
+func (_m *Team) QueryAuditLogs() *AuditLogQuery {
+	return NewTeamClient(_m.config).QueryAuditLogs(_m)
 }
 
 // Update returns a builder for updating this Team.

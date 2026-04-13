@@ -11,7 +11,7 @@ quick index.
 | 2  | `...Post_Nested`                        | Mid-tree cascade (parent user untouched)                                               |
 | 3  | `...Category_Unlink`                    | `WithUnlink` rule — SET NULL on children                                               |
 | 4  | `...Article_SoftDelete`                 | Auto-detected soft delete via `deleted_at`                                             |
-| 5  | `...Team_SkipOwner`                     | `SkipEdges` preserves a specific edge                                                  |
+| 5  | `...Team_SkipEdges`                     | `SkipEdges` on a real O2M edge preserves audit logs across team deletion               |
 | 6  | `...UserBatch`                          | Batch API with multiple ids                                                            |
 | 7  | `...UserBatch_Empty`                    | Empty-slice short-circuit                                                              |
 | 8  | `...WithHooks`                          | Pre/Post hooks inside transaction                                                      |

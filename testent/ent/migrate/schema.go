@@ -19,6 +19,26 @@ var (
 		Columns:    ArticlesColumns,
 		PrimaryKey: []*schema.Column{ArticlesColumns[0]},
 	}
+	// AuditLogsColumns holds the columns for the "audit_logs" table.
+	AuditLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "action", Type: field.TypeString},
+		{Name: "team_id", Type: field.TypeInt, Nullable: true},
+	}
+	// AuditLogsTable holds the schema information for the "audit_logs" table.
+	AuditLogsTable = &schema.Table{
+		Name:       "audit_logs",
+		Columns:    AuditLogsColumns,
+		PrimaryKey: []*schema.Column{AuditLogsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "audit_logs_teams_audit_logs",
+				Columns:    []*schema.Column{AuditLogsColumns[2]},
+				RefColumns: []*schema.Column{TeamsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// CategoriesColumns holds the columns for the "categories" table.
 	CategoriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -318,6 +338,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ArticlesTable,
+		AuditLogsTable,
 		CategoriesTable,
 		ChannelsTable,
 		CommentsTable,
@@ -337,6 +358,7 @@ var (
 )
 
 func init() {
+	AuditLogsTable.ForeignKeys[0].RefTable = TeamsTable
 	ChannelsTable.ForeignKeys[0].RefTable = FoldersTable
 	CommentsTable.ForeignKeys[0].RefTable = PostsTable
 	DocsTable.ForeignKeys[0].RefTable = WorkspacesTable

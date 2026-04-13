@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/khanakia/entx/testent/ent/article"
+	"github.com/khanakia/entx/testent/ent/auditlog"
 	"github.com/khanakia/entx/testent/ent/category"
 	"github.com/khanakia/entx/testent/ent/channel"
 	"github.com/khanakia/entx/testent/ent/comment"
@@ -89,6 +90,7 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			article.Table:   article.ValidColumn,
+			auditlog.Table:  auditlog.ValidColumn,
 			category.Table:  category.ValidColumn,
 			channel.Table:   channel.ValidColumn,
 			comment.Table:   comment.ValidColumn,

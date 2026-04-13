@@ -18,6 +18,8 @@ const (
 	EdgeMembers = "members"
 	// EdgeOwner holds the string denoting the owner edge name in mutations.
 	EdgeOwner = "owner"
+	// EdgeAuditLogs holds the string denoting the audit_logs edge name in mutations.
+	EdgeAuditLogs = "audit_logs"
 	// Table holds the table name of the team in the database.
 	Table = "teams"
 	// MembersTable is the table that holds the members relation/edge.
@@ -34,6 +36,13 @@ const (
 	OwnerInverseTable = "users"
 	// OwnerColumn is the table column denoting the owner relation/edge.
 	OwnerColumn = "team_owner"
+	// AuditLogsTable is the table that holds the audit_logs relation/edge.
+	AuditLogsTable = "audit_logs"
+	// AuditLogsInverseTable is the table name for the AuditLog entity.
+	// It exists in this package in order to avoid circular dependency with the "auditlog" package.
+	AuditLogsInverseTable = "audit_logs"
+	// AuditLogsColumn is the table column denoting the audit_logs relation/edge.
+	AuditLogsColumn = "team_id"
 )
 
 // Columns holds all SQL columns for team fields.
@@ -96,6 +105,20 @@ func ByOwnerField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newOwnerStep(), sql.OrderByField(field, opts...))
 	}
 }
+
+// ByAuditLogsCount orders the results by audit_logs count.
+func ByAuditLogsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAuditLogsStep(), opts...)
+	}
+}
+
+// ByAuditLogs orders the results by audit_logs terms.
+func ByAuditLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAuditLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newMembersStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -108,5 +131,12 @@ func newOwnerStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OwnerInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, false, OwnerTable, OwnerColumn),
+	)
+}
+func newAuditLogsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AuditLogsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, AuditLogsTable, AuditLogsColumn),
 	)
 }
