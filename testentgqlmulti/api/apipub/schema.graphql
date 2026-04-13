@@ -1,0 +1,306 @@
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+"""
+Define a Relay Cursor type:
+https://relay.dev/graphql/connections.htm#sec-Cursor
+"""
+scalar Cursor
+"""
+An object with an ID.
+Follows the [Relay Global Object Identification Specification](https://relay.dev/graphql/objectidentification.htm)
+"""
+interface Node @goModel(model: "github.com/khanakia/entx/testentgqlmulti/ent.Noder") {
+  """
+  The id of the object.
+  """
+  id: ID!
+}
+"""
+Possible directions in which to order a list of items when provided an `orderBy` argument.
+"""
+enum OrderDirection {
+  """
+  Specifies an ascending order for a given `orderBy` argument.
+  """
+  ASC
+  """
+  Specifies a descending order for a given `orderBy` argument.
+  """
+  DESC
+}
+"""
+Information about pagination in a connection.
+https://relay.dev/graphql/connections.htm#sec-undefined.PageInfo
+"""
+type PageInfo {
+  """
+  When paginating forwards, are there more items?
+  """
+  hasNextPage: Boolean!
+  """
+  When paginating backwards, are there more items?
+  """
+  hasPreviousPage: Boolean!
+  """
+  When paginating backwards, the cursor to continue.
+  """
+  startCursor: Cursor
+  """
+  When paginating forwards, the cursor to continue.
+  """
+  endCursor: Cursor
+}
+type PublicChatbot @goModel(model: "github.com/khanakia/entx/testentgqlmulti/ent.Chatbot") {
+  id: ID!
+  name: String!
+  avatar: String
+  description: String
+}
+"""
+A connection to a list of items.
+"""
+type PublicChatbotConnection {
+  """
+  A list of edges.
+  """
+  edges: [PublicChatbotEdge]
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+}
+"""
+An edge in a connection.
+"""
+type PublicChatbotEdge {
+  """
+  The item at the end of the edge.
+  """
+  node: PublicChatbot
+  """
+  A cursor for use in pagination.
+  """
+  cursor: Cursor!
+}
+type PublicUser @goModel(model: "github.com/khanakia/entx/testentgqlmulti/ent.User") {
+  id: ID!
+  firstName: String!
+  avatar: String
+  status: UserStatus!
+}
+"""
+A connection to a list of items.
+"""
+type PublicUserConnection {
+  """
+  A list of edges.
+  """
+  edges: [PublicUserEdge]
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+}
+"""
+An edge in a connection.
+"""
+type PublicUserEdge {
+  """
+  The item at the end of the edge.
+  """
+  node: PublicUser
+  """
+  A cursor for use in pagination.
+  """
+  cursor: Cursor!
+}
+type Query {
+  publicChatbots(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): PublicChatbotConnection!
+  tags(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+  ): TagConnection!
+  publicUsers(
+    """
+    Returns the elements in the list that come after the specified cursor.
+    """
+    after: Cursor
+
+    """
+    Returns the first _n_ elements from the list.
+    """
+    first: Int
+
+    """
+    Returns the elements in the list that come before the specified cursor.
+    """
+    before: Cursor
+
+    """
+    Returns the last _n_ elements from the list.
+    """
+    last: Int
+
+    """
+    Filtering options for PublicUsers returned from the connection.
+    """
+    where: UserWhereInput
+  ): PublicUserConnection!
+}
+type Tag {
+  id: ID!
+  name: String!
+  color: String
+}
+"""
+A connection to a list of items.
+"""
+type TagConnection {
+  """
+  A list of edges.
+  """
+  edges: [TagEdge]
+  """
+  Information to aid in pagination.
+  """
+  pageInfo: PageInfo!
+  """
+  Identifies the total count of items in the connection.
+  """
+  totalCount: Int!
+}
+"""
+An edge in a connection.
+"""
+type TagEdge {
+  """
+  The item at the end of the edge.
+  """
+  node: Tag
+  """
+  A cursor for use in pagination.
+  """
+  cursor: Cursor!
+}
+"""
+The builtin Time type
+"""
+scalar Time
+"""
+UserStatus is enum for the field status
+"""
+enum UserStatus @goModel(model: "github.com/khanakia/entx/testentgqlmulti/ent/user.Status") {
+  active
+  suspended
+  banned
+}
+"""
+UserWhereInput is used for filtering User objects.
+Input was generated by ent.
+"""
+input UserWhereInput {
+  not: UserWhereInput
+  and: [UserWhereInput!]
+  or: [UserWhereInput!]
+  """
+  id field predicates
+  """
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  """
+  first_name field predicates
+  """
+  firstName: String
+  firstNameNEQ: String
+  firstNameIn: [String!]
+  firstNameNotIn: [String!]
+  firstNameGT: String
+  firstNameGTE: String
+  firstNameLT: String
+  firstNameLTE: String
+  firstNameContains: String
+  firstNameHasPrefix: String
+  firstNameHasSuffix: String
+  firstNameEqualFold: String
+  firstNameContainsFold: String
+  """
+  avatar field predicates
+  """
+  avatar: String
+  avatarNEQ: String
+  avatarIn: [String!]
+  avatarNotIn: [String!]
+  avatarGT: String
+  avatarGTE: String
+  avatarLT: String
+  avatarLTE: String
+  avatarContains: String
+  avatarHasPrefix: String
+  avatarHasSuffix: String
+  avatarIsNil: Boolean
+  avatarNotNil: Boolean
+  avatarEqualFold: String
+  avatarContainsFold: String
+  """
+  status field predicates
+  """
+  status: UserStatus
+  statusNEQ: UserStatus
+  statusIn: [UserStatus!]
+  statusNotIn: [UserStatus!]
+  """
+  posts edge predicates
+  """
+  hasPosts: Boolean
+}

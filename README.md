@@ -62,21 +62,30 @@ See [entgqlmulti/README.md](./entgqlmulti/README.md) for full documentation.
 
 ## Development
 
-This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces):
+This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces) with four modules:
+
+| Module             | Purpose                                                                 |
+| ------------------ | ----------------------------------------------------------------------- |
+| `entcascade/`      | Cascade-delete generator (source)                                       |
+| `entgqlmulti/`     | Per-API GraphQL schema generator (source)                               |
+| `testent/`         | Integration harness for `entcascade` (ent + SQLite)                     |
+| `testentgqlmulti/` | End-to-end harness for `entgqlmulti` (ent + entgql + gqlgen + SQLite)   |
 
 ```bash
-# Run tests
-task test
+# entcascade tests
+task test                  # run the cascade integration suite
+task generate              # regenerate testent/ent
 
-# Regenerate ent code (testent)
-task generate
+# entgqlmulti end-to-end tests
+task gqlmulti:generate     # regenerate ent + gqlgen for all three APIs
+task gqlmulti:test         # run the 15-test entgqlmulti suite
 
-# Build all modules
-task build
-
-# Tidy all modules
-task tidy
+# Whole repo
+task build                 # compile all modules
+task tidy                  # go mod tidy everywhere
 ```
+
+See [`testentgqlmulti/README.md`](./testentgqlmulti/README.md) for the entgqlmulti harness and [`testentgqlmulti/TESTS.md`](./testentgqlmulti/TESTS.md) for the full test matrix.
 
 Requires [Task](https://taskfile.dev) and Go 1.22+.
 

@@ -1,0 +1,31 @@
+# gqlgen config for the read-only public API.
+schema:
+  - schema.graphql
+
+exec:
+  filename: generated.go
+  package: apipub
+
+model:
+  filename: models_gen.go
+  package: apipub
+
+resolver:
+  layout: follow-schema
+  dir: .
+  package: apipub
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - "github.com/khanakia/entx/testentgqlmulti/ent"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+  Node:
+    model:
+      - github.com/khanakia/entx/testentgqlmulti/ent.Noder
+  Cursor:
+    model: github.com/khanakia/entx/testentgqlmulti/ent.Cursor

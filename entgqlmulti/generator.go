@@ -204,10 +204,6 @@ func (g *Generator) buildApiSchema(fullSchema *ast.Schema, work []entityWork) (*
 						filteredWhere.Fields = filterWhereInputFields(filteredWhere.Fields, w.target.Fields)
 					}
 					s.AddTypes(filteredWhere)
-					// Track types referenced by WhereInput fields
-					for _, f := range filteredWhere.Fields {
-						trackReferencedType(f.Type, neededTypes)
-					}
 				}
 
 				qf.Arguments = append(qf.Arguments, &ast.ArgumentDefinition{
@@ -274,6 +270,21 @@ func (g *Generator) buildApiSchema(fullSchema *ast.Schema, work []entityWork) (*
 					Type: ast.NonNullNamedType(typeName, nil),
 				})
 			}
+		}
+	}
+
+	// Second pass: prune WhereInput fields that reference WhereInput types for
+	// entities not exported to this API. We do this *before* tracking needed
+	// scalars/enums so we don't pull phantom types into the output.
+	pruneOrphanWhereInputFields(s)
+
+	// Now that WhereInputs are pruned, collect the scalars/enums they still reference.
+	for _, def := range s.Types {
+		if def.Kind != ast.InputObject || !strings.HasSuffix(def.Name, "WhereInput") {
+			continue
+		}
+		for _, f := range def.Fields {
+			trackReferencedType(f.Type, neededTypes)
 		}
 	}
 
@@ -353,10 +364,14 @@ func addCommonTypes(s *ast.Schema, fullSchema *ast.Schema) {
 // normalizeFieldNames converts field names to camelCase for matching against GraphQL field names.
 // Accepts both snake_case (Ent constants like chatbot.FieldCreatedAt = "created_at")
 // and camelCase ("createdAt"). Returns a set of camelCase names.
+//
+// We pipe through snake first so that a camelCase input ("firstName") first becomes
+// snake_case ("first_name") and then the expected camelCase form ("firstName").
+// Without the snake pass, camel("firstName") lowercases the input to "firstname".
 func normalizeFieldNames(names []string) map[string]bool {
 	set := make(map[string]bool, len(names))
 	for _, name := range names {
-		set[camel(name)] = true
+		set[camel(snake(name))] = true
 	}
 	return set
 }
@@ -401,10 +416,11 @@ func filterEdgeFields(fields ast.FieldList, presentTypes map[string]bool, fullSc
 // and edge predicate fields (has*, hasWith).
 // Allowed names can be snake_case or camelCase.
 func filterWhereInputFields(fields ast.FieldList, allowedEntityFields []string) ast.FieldList {
-	// Normalize to camelCase for matching
+	// Normalize to camelCase for matching. Pipe through snake first so camelCase
+	// inputs survive the ent camel() function (see normalizeFieldNames).
 	normalizedNames := make([]string, len(allowedEntityFields))
 	for i, name := range allowedEntityFields {
-		normalizedNames[i] = camel(name)
+		normalizedNames[i] = camel(snake(name))
 	}
 	allowed := make(map[string]bool, len(normalizedNames))
 	for _, name := range normalizedNames {
@@ -444,6 +460,28 @@ func filterWhereInputFields(fields ast.FieldList, allowedEntityFields []string) 
 		}
 	}
 	return result
+}
+
+// pruneOrphanWhereInputFields walks every WhereInput type in the built schema
+// and drops fields whose resolved type is a *WhereInput that isn't present in
+// the same schema. This removes "hasPostsWith: [PostWhereInput!]" when Post was
+// not exported to this API, while leaving "hasPosts: Boolean" in place because
+// Boolean is a built-in scalar, not a WhereInput.
+func pruneOrphanWhereInputFields(s *ast.Schema) {
+	for _, def := range s.Types {
+		if def.Kind != ast.InputObject || !strings.HasSuffix(def.Name, "WhereInput") {
+			continue
+		}
+		var kept ast.FieldList
+		for _, f := range def.Fields {
+			refType := resolveTypeName(f.Type)
+			if strings.HasSuffix(refType, "WhereInput") && s.Types[refType] == nil {
+				continue
+			}
+			kept = append(kept, f)
+		}
+		def.Fields = kept
+	}
 }
 
 // filterMutationInputFields filters Create/Update input fields to match restricted entity fields.
@@ -558,14 +596,36 @@ func goModelDirective(model string) *ast.Directive {
 }
 
 // resolveTypeName extracts the base named type from an ast.Type (unwrapping lists and non-null).
+// Some ast.Type values produced by entgql carry the whole SDL representation
+// (e.g. "[ID!]") in NamedType rather than using a proper list wrapper. We strip
+// those surface-syntax markers so scalar/enum lookups use the real base name.
 func resolveTypeName(t *ast.Type) string {
 	if t == nil {
 		return ""
 	}
 	if t.NamedType != "" {
-		return t.NamedType
+		return stripTypeSyntax(t.NamedType)
 	}
 	return resolveTypeName(t.Elem)
+}
+
+// stripTypeSyntax removes list brackets and non-null markers from a type name
+// that accidentally carries SDL surface syntax. "[ID!]" -> "ID", "User!" -> "User".
+func stripTypeSyntax(name string) string {
+	for {
+		changed := false
+		if strings.HasPrefix(name, "[") && strings.HasSuffix(name, "]") {
+			name = name[1 : len(name)-1]
+			changed = true
+		}
+		if strings.HasSuffix(name, "!") {
+			name = name[:len(name)-1]
+			changed = true
+		}
+		if !changed {
+			return name
+		}
+	}
 }
 
 // trackReferencedType adds the base type name to the neededTypes set.

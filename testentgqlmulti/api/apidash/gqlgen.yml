@@ -1,0 +1,35 @@
+# gqlgen config for the dashboard (full CRUD) API.
+schema:
+  - schema.graphql
+
+exec:
+  filename: generated.go
+  package: apidash
+
+model:
+  filename: models_gen.go
+  package: apidash
+
+resolver:
+  layout: follow-schema
+  dir: .
+  package: apidash
+  filename_template: "{name}.resolvers.go"
+
+# Bind GraphQL types to the shared ent package so resolvers operate on
+# the same structs generated from our schema.
+autobind:
+  - "github.com/khanakia/entx/testentgqlmulti/ent"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Int32
+  Node:
+    model:
+      - github.com/khanakia/entx/testentgqlmulti/ent.Noder
+  Cursor:
+    model: github.com/khanakia/entx/testentgqlmulti/ent.Cursor

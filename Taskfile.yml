@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   TESTENT_DIR: ./testent
+  TESTENTGQLMULTI_DIR: ./testentgqlmulti
 
 tasks:
   default:
@@ -16,16 +17,28 @@ tasks:
       - go run entc.go
 
   test:
-    desc: Run all tests
+    desc: Run cascade tests
     dir: "{{.TESTENT_DIR}}"
     cmds:
       - go test ./... -v -count=1
 
   test:short:
-    desc: Run tests (short output)
+    desc: Run cascade tests (short output)
     dir: "{{.TESTENT_DIR}}"
     cmds:
       - go test ./... -count=1
+
+  gqlmulti:generate:
+    desc: Full entgqlmulti regeneration (ent + gqlgen)
+    dir: "{{.TESTENTGQLMULTI_DIR}}"
+    cmds:
+      - task: generate
+
+  gqlmulti:test:
+    desc: Run entgqlmulti integration tests
+    dir: "{{.TESTENTGQLMULTI_DIR}}"
+    cmds:
+      - task: test
 
   build:
     desc: Build all workspace modules
@@ -33,6 +46,7 @@ tasks:
       - go build ./entcascade/...
       - go build ./entgqlmulti/...
       - go build ./testent/...
+      - go build ./testentgqlmulti/...
 
   tidy:
     desc: Run go mod tidy on all modules
@@ -40,3 +54,4 @@ tasks:
       - cd entcascade && go mod tidy
       - cd entgqlmulti && go mod tidy
       - cd testent && go mod tidy
+      - cd testentgqlmulti && go mod tidy

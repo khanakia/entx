@@ -1,0 +1,60 @@
+version: "3"
+
+vars:
+  GQLGEN_BIN: "{{.TASKFILE_DIR}}/bin/gqlgen"
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list
+
+  install-gqlgen:
+    desc: Install gqlgen binary into ./bin (idempotent)
+    cmds:
+      - GOBIN={{.TASKFILE_DIR}}/bin GOWORK=off go install github.com/99designs/gqlgen
+    status:
+      - test -x {{.GQLGEN_BIN}}
+
+  ent:
+    desc: Run ent + entgqlmulti codegen (writes ent/ and api/*/schema.graphql)
+    cmds:
+      - GOWORK=off go run entc.go
+
+  gqlgen:
+    desc: Run gqlgen codegen for all three APIs
+    deps: [install-gqlgen]
+    cmds:
+      - cd api/apidash   && ../../bin/gqlgen generate
+      - cd api/apipub    && ../../bin/gqlgen generate
+      - cd api/apimobile && ../../bin/gqlgen generate
+      - GOWORK=off go mod tidy
+
+  generate:
+    desc: Full regeneration — ent + gqlgen + tidy
+    cmds:
+      - task: ent
+      - task: gqlgen
+
+  test:
+    desc: Run all tests
+    cmds:
+      - GOWORK=off go test -v -count=1 .
+
+  test:short:
+    desc: Run tests (short output)
+    cmds:
+      - GOWORK=off go test -count=1 .
+
+  build:
+    desc: Compile everything (ent, per-API gqlgen output, test harness)
+    cmds:
+      - GOWORK=off go build ./...
+
+  clean:
+    desc: Remove generated artifacts
+    cmds:
+      - rm -rf ent api/apidash/generated.go api/apidash/models_gen.go api/apidash/schema.resolvers.go
+      - rm -rf api/apipub/generated.go api/apipub/models_gen.go api/apipub/schema.resolvers.go
+      - rm -rf api/apimobile/generated.go api/apimobile/models_gen.go api/apimobile/schema.resolvers.go
+      - rm -f ent.graphql

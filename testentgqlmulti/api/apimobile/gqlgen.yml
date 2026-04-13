@@ -1,0 +1,31 @@
+# gqlgen config for the mobile API (me query, restricted fields).
+schema:
+  - schema.graphql
+
+exec:
+  filename: generated.go
+  package: apimobile
+
+model:
+  filename: models_gen.go
+  package: apimobile
+
+resolver:
+  layout: follow-schema
+  dir: .
+  package: apimobile
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - "github.com/khanakia/entx/testentgqlmulti/ent"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+  Node:
+    model:
+      - github.com/khanakia/entx/testentgqlmulti/ent.Noder
+  Cursor:
+    model: github.com/khanakia/entx/testentgqlmulti/ent.Cursor

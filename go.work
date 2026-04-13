@@ -4,4 +4,5 @@ use (
 	./entcascade
 	./entgqlmulti
 	./testent
+	./testentgqlmulti
 )
