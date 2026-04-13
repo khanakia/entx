@@ -302,7 +302,19 @@ Nested cascades: if a child type is also annotated with `Cascade()`, its childre
 
 - All operations run inside a single transaction
 - Any error triggers automatic rollback
-- If called with `tx.Client()`, uses a savepoint
+- **Nested transactions.** If called with a client obtained from `tx.Client()`, `CascadeDeleteX` reuses the existing transaction — no new transaction is started and the caller retains ownership of commit/rollback. This lets you compose multiple cascades (and arbitrary pre/post work) in a single atomic block:
+  ```go
+  tx, _ := client.Tx(ctx)
+  if err := ent.CascadeDeleteChannelBatch(ctx, tx.Client(), channelIDs); err != nil {
+      tx.Rollback()
+      return err
+  }
+  if err := ent.CascadeDeleteFolder(ctx, tx.Client(), folderID); err != nil {
+      tx.Rollback()
+      return err
+  }
+  tx.Commit()
+  ```
 - Delete operations use `WHERE id = ?` (not `DeleteOneID`), so deleting an already-deleted entity returns 0 rows instead of an error — making cascades idempotent
 
 ## Example: Full Schema

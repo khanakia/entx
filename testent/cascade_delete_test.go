@@ -962,3 +962,223 @@ func TestCascadeDeleteWorkspace_EmptyChildren(t *testing.T) {
 		t.Errorf("expected 0 workspaces, got %d", n)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Nested-tx composition tests (entcascade-nested-tx-plan.md)
+// ---------------------------------------------------------------------------
+
+// TestCascadeNestedTx_NoErrTxStarted covers the primary regression: calling
+// a cascade function with tx.Client() must NOT return ent.ErrTxStarted. The
+// generated code detects the transactional client and reuses it.
+func TestCascadeNestedTx_NoErrTxStarted(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	u := client.User.Create().SetName("nt1").SetEmail("nt1@test.com").SaveX(ctx)
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		t.Fatalf("start tx: %v", err)
+	}
+	if err := ent.CascadeDeleteUser(ctx, tx.Client(), u.ID); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, ent.ErrTxStarted) {
+			t.Fatalf("cascade returned ErrTxStarted; nested-tx path not engaged")
+		}
+		t.Fatalf("CascadeDeleteUser inside tx: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if n := client.User.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 users after committed nested cascade, got %d", n)
+	}
+}
+
+// TestCascadeNestedTx_ComposeMultiple covers the headline use case:
+// multiple cascade calls inside a single caller-owned transaction all share
+// one DB transaction and commit atomically.
+func TestCascadeNestedTx_ComposeMultiple(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	uA := client.User.Create().SetName("A").SetEmail("a@test.com").SaveX(ctx)
+	uB := client.User.Create().SetName("B").SetEmail("b@test.com").SaveX(ctx)
+	pA := client.Post.Create().SetTitle("pA").SetBody("b").SetAuthorID(uA.ID).SaveX(ctx)
+	pB := client.Post.Create().SetTitle("pB").SetBody("b").SetAuthorID(uB.ID).SaveX(ctx)
+	client.Comment.Create().SetBody("cA").SetPostID(pA.ID).SaveX(ctx)
+	client.Comment.Create().SetBody("cB").SetPostID(pB.ID).SaveX(ctx)
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		t.Fatalf("start tx: %v", err)
+	}
+	if err := ent.CascadeDeleteUser(ctx, tx.Client(), uA.ID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("cascade A: %v", err)
+	}
+	if err := ent.CascadeDeleteUserBatch(ctx, tx.Client(), []int{uB.ID}); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("cascade B batch: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if n := client.User.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 users after combined cascades, got %d", n)
+	}
+	if n := client.Post.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 posts, got %d", n)
+	}
+	if n := client.Comment.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 comments, got %d", n)
+	}
+}
+
+// TestCascadeNestedTx_WithHooks covers hook semantics under composition:
+// Pre/Post hooks still fire when the cascade is reusing an outer tx, and
+// they observe transactional state (pre sees the entity, post does not).
+func TestCascadeNestedTx_WithHooks(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	u := client.User.Create().SetName("hk").SetEmail("hk@test.com").SaveX(ctx)
+
+	var preRan, postRan bool
+	hooks := ent.CascadeDeleteUserHooks{
+		Pre: func(ctx context.Context, c *ent.Client, id int) error {
+			preRan = true
+			if n := c.User.Query().CountX(ctx); n != 1 {
+				t.Errorf("pre hook: expected 1 user in tx, got %d", n)
+			}
+			return nil
+		},
+		Post: func(ctx context.Context, c *ent.Client, id int) error {
+			postRan = true
+			if n := c.User.Query().CountX(ctx); n != 0 {
+				t.Errorf("post hook: expected 0 users in tx, got %d", n)
+			}
+			return nil
+		},
+	}
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		t.Fatalf("start tx: %v", err)
+	}
+	if err := ent.CascadeDeleteUserWithHooks(ctx, tx.Client(), u.ID, hooks); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("cascade with hooks inside tx: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if !preRan || !postRan {
+		t.Errorf("hooks did not both run: pre=%v post=%v", preRan, postRan)
+	}
+	if n := client.User.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 users after committed cascade, got %d", n)
+	}
+}
+
+// TestCascadeNestedTx_OuterRollbackUndoesCascade covers atomicity across
+// the outer boundary: after a cascade runs successfully inside a tx, the
+// caller rolling back must undo the cascaded deletes. Proves the cascade
+// truly reused the outer tx rather than quietly committing its own.
+func TestCascadeNestedTx_OuterRollbackUndoesCascade(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	u := client.User.Create().SetName("rb").SetEmail("rb@test.com").SaveX(ctx)
+	client.Post.Create().SetTitle("keep").SetBody("b").SetAuthorID(u.ID).SaveX(ctx)
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		t.Fatalf("start tx: %v", err)
+	}
+	if err := ent.CascadeDeleteUser(ctx, tx.Client(), u.ID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("cascade inside tx: %v", err)
+	}
+	// Caller decides to abort.
+	if err := tx.Rollback(); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+
+	if n := client.User.Query().CountX(ctx); n != 1 {
+		t.Errorf("expected user to survive outer rollback, got count=%d", n)
+	}
+	if n := client.Post.Query().CountX(ctx); n != 1 {
+		t.Errorf("expected post to survive outer rollback, got count=%d", n)
+	}
+}
+
+// TestCascadeNestedTx_HookErrorRollsBackOuter covers failure propagation
+// from a hook to the outer tx: when Pre returns an error inside a nested-
+// tx call, the cascade returns the error without committing, and the
+// caller's rollback undoes earlier steps in the same tx.
+func TestCascadeNestedTx_HookErrorRollsBackOuter(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	uA := client.User.Create().SetName("survive").SetEmail("s@test.com").SaveX(ctx)
+	uB := client.User.Create().SetName("abort").SetEmail("abort@test.com").SaveX(ctx)
+
+	tx, err := client.Tx(ctx)
+	if err != nil {
+		t.Fatalf("start tx: %v", err)
+	}
+
+	// Step 1: delete uA successfully inside the tx.
+	if err := ent.CascadeDeleteUser(ctx, tx.Client(), uA.ID); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("cascade A: %v", err)
+	}
+
+	// Step 2: uB cascade whose Pre hook aborts.
+	hooks := ent.CascadeDeleteUserHooks{
+		Pre: func(ctx context.Context, c *ent.Client, id int) error {
+			return errors.New("pre abort")
+		},
+	}
+	err = ent.CascadeDeleteUserWithHooks(ctx, tx.Client(), uB.ID, hooks)
+	if err == nil {
+		_ = tx.Rollback()
+		t.Fatal("expected Pre hook error, got nil")
+	}
+	// Caller observes the error and rolls back the outer tx.
+	if rerr := tx.Rollback(); rerr != nil {
+		t.Fatalf("rollback: %v", rerr)
+	}
+
+	// Both users must survive the rolled-back outer tx.
+	if n := client.User.Query().CountX(ctx); n != 2 {
+		t.Errorf("expected 2 users after outer rollback, got %d", n)
+	}
+}
+
+// TestCascadeNestedTx_StandaloneStillWorks covers the non-regression side:
+// calling a cascade without an outer tx must still create and commit its
+// own transaction (the existing contract is unchanged).
+func TestCascadeNestedTx_StandaloneStillWorks(t *testing.T) {
+	client := newClient(t)
+	defer client.Close()
+	ctx := context.Background()
+
+	u := client.User.Create().SetName("solo").SetEmail("solo@test.com").SaveX(ctx)
+
+	if err := ent.CascadeDeleteUser(ctx, client, u.ID); err != nil {
+		t.Fatalf("standalone cascade: %v", err)
+	}
+	if n := client.User.Query().CountX(ctx); n != 0 {
+		t.Errorf("expected 0 users, got %d", n)
+	}
+}

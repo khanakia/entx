@@ -62,6 +62,8 @@ const fileTmplStr = `{{define "file" -}}
 package {{.Package}}
 
 {{.ImportBlock}}
+
+{{template "txHelper"}}
 {{range .Nodes}}
 {{template "hooksStruct" .}}
 {{template "singleFunc" .}}
@@ -70,6 +72,17 @@ package {{.Package}}
 {{template "batchFunc" .}}
 {{template "batchOpsFunc" .}}
 {{end}}
+{{- end}}
+
+{{- define "txHelper"}}
+// inTransaction reports whether the given client is already backed by a
+// transaction driver. When true, cascade delete functions reuse the caller's
+// transaction instead of starting a new one — the caller retains ownership
+// of commit/rollback.
+func inTransaction(c *Client) bool {
+_, ok := c.driver.(*txDriver)
+return ok
+}
 {{- end}}
 
 {{- define "hooksStruct"}}
@@ -93,7 +106,30 @@ return CascadeDelete{{.Name}}WithHooks(ctx, client, id, CascadeDelete{{.Name}}Ho
 {{- define "singleWithHooksFunc"}}
 // CascadeDelete{{.Name}}WithHooks deletes a {{.Name}} and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDelete{{.Name}}WithHooks(ctx context.Context, client *Client, id {{.IDType}}, hooks CascadeDelete{{.Name}}Hooks) error {
+// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+if inTransaction(client) {
+if hooks.Pre != nil {
+if err := hooks.Pre(ctx, client, id); err != nil {
+return err
+}
+}
+if err := cascadeDelete{{.Name}}Ops(ctx, client, id); err != nil {
+return err
+}
+if hooks.Post != nil {
+if err := hooks.Post(ctx, client, id); err != nil {
+return err
+}
+}
+return nil
+}
+
+// Standalone path: own the transaction.
 tx, err := client.Tx(ctx)
 if err != nil {
 return fmt.Errorf("cascade delete {{.CamelName}}: start tx: %w", err)
@@ -142,10 +178,19 @@ return nil
 
 {{- define "batchFunc"}}
 // CascadeDelete{{.Name}}Batch deletes multiple {{.Name}} entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDelete{{.Name}}Batch(ctx context.Context, client *Client, ids []{{.IDType}}) error {
 if len(ids) == 0 {
 return nil
 }
+// Nested-tx path: reuse caller's transaction.
+if inTransaction(client) {
+return cascadeDelete{{.Name}}BatchOps(ctx, client, ids)
+}
+// Standalone path: own the transaction.
 tx, err := client.Tx(ctx)
 if err != nil {
 return fmt.Errorf("cascade delete {{.CamelName}} batch: start tx: %w", err)

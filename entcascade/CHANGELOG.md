@@ -7,8 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Nested-transaction composition.** Generated `CascadeDeleteX`,
+  `CascadeDeleteXWithHooks`, and `CascadeDeleteXBatch` now detect when
+  they are called with a transactional client (one obtained from
+  `tx.Client()`) and reuse the caller's transaction instead of starting
+  a new one. This means callers can compose multiple cascades and
+  arbitrary pre/post work in a single atomic block:
+  ```go
+  tx, _ := client.Tx(ctx)
+  ent.CascadeDeleteChannelBatch(ctx, tx.Client(), channelIDs)
+  ent.CascadeDeleteFolder(ctx, tx.Client(), folderID)
+  tx.Commit()
+  ```
+  Previously this returned `ent.ErrTxStarted` because the generated
+  code unconditionally called `client.Tx(ctx)`. Standalone use (without
+  an outer tx) is unchanged.
+- Integration tests for the nested-tx path:
+  `TestCascadeNestedTx_NoErrTxStarted`, `...ComposeMultiple`,
+  `...WithHooks`, `...OuterRollbackUndoesCascade`,
+  `...HookErrorRollsBackOuter`, `...StandaloneStillWorks`.
+
 ### Fixed
 
+- Correct the README claim that cascades "use a savepoint" when called
+  with `tx.Client()`. They don't — they now reuse the existing
+  transaction directly (simpler and correct).
 - Respect `Cascade()` annotations on intermediate types during nested
   cascades. Previously, `buildChildOps` walked a parent type's edges
   recursively but only read the root type's annotation — any

@@ -24,6 +24,15 @@ import (
 	"github.com/khanakia/entx/testent/ent/workspace"
 )
 
+// inTransaction reports whether the given client is already backed by a
+// transaction driver. When true, cascade delete functions reuse the caller's
+// transaction instead of starting a new one — the caller retains ownership
+// of commit/rollback.
+func inTransaction(c *Client) bool {
+	_, ok := c.driver.(*txDriver)
+	return ok
+}
+
 // CascadeDeleteArticleHooks allows injecting business logic around the cascade delete.
 // Both hooks run inside the transaction. Return an error to abort and rollback.
 type CascadeDeleteArticleHooks struct {
@@ -40,7 +49,30 @@ func CascadeDeleteArticle(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteArticleWithHooks deletes a Article and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteArticleWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteArticleHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteArticleOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete article: start tx: %w", err)
@@ -86,10 +118,19 @@ func cascadeDeleteArticleOps(ctx context.Context, client *Client, id int) error 
 }
 
 // CascadeDeleteArticleBatch deletes multiple Article entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteArticleBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteArticleBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete article batch: start tx: %w", err)
@@ -134,7 +175,30 @@ func CascadeDeleteCategory(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteCategoryWithHooks deletes a Category and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteCategoryWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteCategoryHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteCategoryOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete category: start tx: %w", err)
@@ -180,10 +244,19 @@ func cascadeDeleteCategoryOps(ctx context.Context, client *Client, id int) error
 }
 
 // CascadeDeleteCategoryBatch deletes multiple Category entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteCategoryBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteCategoryBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete category batch: start tx: %w", err)
@@ -228,7 +301,30 @@ func CascadeDeleteDoc(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteDocWithHooks deletes a Doc and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteDocWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteDocHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteDocOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete doc: start tx: %w", err)
@@ -274,10 +370,19 @@ func cascadeDeleteDocOps(ctx context.Context, client *Client, id int) error {
 }
 
 // CascadeDeleteDocBatch deletes multiple Doc entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteDocBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteDocBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete doc batch: start tx: %w", err)
@@ -322,7 +427,30 @@ func CascadeDeleteFolder(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteFolderWithHooks deletes a Folder and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteFolderWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteFolderHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteFolderOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete folder: start tx: %w", err)
@@ -368,10 +496,19 @@ func cascadeDeleteFolderOps(ctx context.Context, client *Client, id int) error {
 }
 
 // CascadeDeleteFolderBatch deletes multiple Folder entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteFolderBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteFolderBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete folder batch: start tx: %w", err)
@@ -416,7 +553,30 @@ func CascadeDeletePost(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeletePostWithHooks deletes a Post and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeletePostWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeletePostHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeletePostOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete post: start tx: %w", err)
@@ -466,10 +626,19 @@ func cascadeDeletePostOps(ctx context.Context, client *Client, id int) error {
 }
 
 // CascadeDeletePostBatch deletes multiple Post entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeletePostBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeletePostBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete post batch: start tx: %w", err)
@@ -518,7 +687,30 @@ func CascadeDeleteTeam(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteTeamWithHooks deletes a Team and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteTeamWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteTeamHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteTeamOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete team: start tx: %w", err)
@@ -564,10 +756,19 @@ func cascadeDeleteTeamOps(ctx context.Context, client *Client, id int) error {
 }
 
 // CascadeDeleteTeamBatch deletes multiple Team entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteTeamBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteTeamBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete team batch: start tx: %w", err)
@@ -612,7 +813,30 @@ func CascadeDeleteUser(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteUserWithHooks deletes a User and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteUserWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteUserHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteUserOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete user: start tx: %w", err)
@@ -676,10 +900,19 @@ func cascadeDeleteUserOps(ctx context.Context, client *Client, id int) error {
 }
 
 // CascadeDeleteUserBatch deletes multiple User entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteUserBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteUserBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete user batch: start tx: %w", err)
@@ -742,7 +975,30 @@ func CascadeDeleteWorkspace(ctx context.Context, client *Client, id int) error {
 
 // CascadeDeleteWorkspaceWithHooks deletes a Workspace and all its dependent entities in a transaction,
 // calling the provided hooks inside the transaction boundary.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteWorkspaceWithHooks(ctx context.Context, client *Client, id int, hooks CascadeDeleteWorkspaceHooks) error {
+	// Nested-tx path: reuse caller's transaction, no commit/rollback here.
+	if inTransaction(client) {
+		if hooks.Pre != nil {
+			if err := hooks.Pre(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		if err := cascadeDeleteWorkspaceOps(ctx, client, id); err != nil {
+			return err
+		}
+		if hooks.Post != nil {
+			if err := hooks.Post(ctx, client, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete workspace: start tx: %w", err)
@@ -812,10 +1068,19 @@ func cascadeDeleteWorkspaceOps(ctx context.Context, client *Client, id int) erro
 }
 
 // CascadeDeleteWorkspaceBatch deletes multiple Workspace entities and all their dependents in a single transaction.
+//
+// If client is already a transactional client (obtained via tx.Client()),
+// the existing transaction is reused — no new transaction is started and
+// the caller retains ownership of commit/rollback.
 func CascadeDeleteWorkspaceBatch(ctx context.Context, client *Client, ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// Nested-tx path: reuse caller's transaction.
+	if inTransaction(client) {
+		return cascadeDeleteWorkspaceBatchOps(ctx, client, ids)
+	}
+	// Standalone path: own the transaction.
 	tx, err := client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("cascade delete workspace batch: start tx: %w", err)

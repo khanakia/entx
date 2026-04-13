@@ -34,6 +34,12 @@ quick index.
 | 25 | `...Workspace_NestedUnlink`             | **Regression: nested `WithUnlink` on intermediate type**                               |
 | 26 | `...Workspace_NestedSoftDelete`         | **Regression: nested `WithSoftDelete` (non-default field) on intermediate**            |
 | 27 | `...Workspace_EmptyChildren`            | Nested-annotation path with empty children                                             |
+| 28 | `NestedTx_NoErrTxStarted`               | **Regression: cascade under `tx.Client()` must not return `ErrTxStarted`**             |
+| 29 | `NestedTx_ComposeMultiple`              | Multiple cascade calls inside one outer tx commit atomically                            |
+| 30 | `NestedTx_WithHooks`                    | Pre/Post hooks fire under a caller-owned tx                                            |
+| 31 | `NestedTx_OuterRollbackUndoesCascade`   | Outer rollback after cascade undoes cascaded deletes (proves tx reuse)                 |
+| 32 | `NestedTx_HookErrorRollsBackOuter`      | Hook error propagates; caller rollback undoes prior cascade steps in same tx           |
+| 33 | `NestedTx_StandaloneStillWorks`         | Non-regression: cascade without outer tx still creates+commits its own                 |
 
 ## Running
 
