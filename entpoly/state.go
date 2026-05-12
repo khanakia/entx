@@ -123,12 +123,13 @@ type parentInfo struct {
 // holderInfo describes one MorphedByMany declaration on the holder side
 // (e.g. Tag's "posts" back-ref).
 type holderInfo struct {
-	HolderName  string // The holder schema name (e.g. "Tag").
-	FieldName   string // The back-ref method name (e.g. "posts").
-	Target      string // The concrete parent schema name (e.g. "Post").
-	Pivot       string // The pivot schema name (e.g. "Taggable").
-	ThroughName string // The pivot SQL table name (cosmetic).
-	MorphName   string // The relation name on the pivot.
-	IDColumn    string // Custom id column override on the pivot.
-	TypeColumn  string // Custom type column override on the pivot.
+	HolderName     string // The holder schema name (e.g. "Tag").
+	FieldName      string // The back-ref method name (e.g. "posts").
+	Target         string // The concrete parent schema name (e.g. "Post").
+	Pivot          string // The pivot schema name (e.g. "Taggable").
+	ThroughName    string // The pivot SQL table name (cosmetic).
+	MorphName      string // The relation name on the pivot.
+	IDColumn       string // Custom id column override on the pivot.
+	TypeColumn     string // Custom type column override on the pivot.
+	TargetIDGoType string // Go type of Target's ID field ("int" / "int64" / "string").
 }

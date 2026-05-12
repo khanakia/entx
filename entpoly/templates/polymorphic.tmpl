@@ -306,6 +306,67 @@ func (c *{{ .Type }}) Query{{ .RelationCap }}(ctx context.Context) ({{ .Type }}{
 }
 {{ end }}
 
+{{- /* ─── Holder-side typed M2M back-refs ────────────────────────── */ -}}
+{{ range .Holders }}
+
+// Query{{ .FieldCap }} returns all {{ .Target }} rows polymorphically
+// attached to this {{ .HolderName }} via the {{ .Pivot }} pivot. Reads
+// the pivot rows that match (holder, target-morph-key), parses the
+// stringified ids, and loads the corresponding {{ .Target }} rows in a
+// single follow-up query.
+//
+// Laravel:    $posts = $tag->posts;
+// entpoly:    posts, err := tag.Query{{ .FieldCap }}(ctx)
+func (h *{{ .HolderName }}) Query{{ .FieldCap }}(ctx context.Context) ([]*{{ .Target }}, error) {
+	pivots, err := New{{ .Pivot }}Client(h.config).Query().
+		Where(
+			{{ .PivotIDent }}.{{ .HolderFKField }}EQ(h.ID),
+			{{ .PivotIDent }}.{{ .PivotTypeField }}EQ({{ .PivotIDent }}.{{ .PivotTypeField }}(string({{ .TargetMorph }}))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*{{ .Target }}{}, nil
+	}
+	{{- if eq .TargetIDGoType "int" }}
+	ids := make([]int, 0, len(pivots))
+	for _, p := range pivots {
+		if p.{{ .PivotIDField }} == nil {
+			continue
+		}
+		id, perr := strconv.Atoi(*p.{{ .PivotIDField }})
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: parse {{ .Target }} id %q in {{ .Pivot }} pivot: %w", *p.{{ .PivotIDField }}, perr)
+		}
+		ids = append(ids, id)
+	}
+	{{- else if eq .TargetIDGoType "int64" }}
+	ids := make([]int64, 0, len(pivots))
+	for _, p := range pivots {
+		if p.{{ .PivotIDField }} == nil {
+			continue
+		}
+		id, perr := strconv.ParseInt(*p.{{ .PivotIDField }}, 10, 64)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: parse {{ .Target }} id %q in {{ .Pivot }} pivot: %w", *p.{{ .PivotIDField }}, perr)
+		}
+		ids = append(ids, id)
+	}
+	{{- else }}
+	ids := make([]string, 0, len(pivots))
+	for _, p := range pivots {
+		if p.{{ .PivotIDField }} == nil {
+			continue
+		}
+		ids = append(ids, *p.{{ .PivotIDField }})
+	}
+	{{- end }}
+	return New{{ .Target }}Client(h.config).Query().Where({{ .TargetIDent }}.IDIn(ids...)).All(ctx)
+}
+{{ end }}
+
 {{- /* ─── Parent-side typed back-refs (Laravel-style accessors) ──── */ -}}
 {{ range .Parents }}
 {{ if eq .Kind "morphOne" }}

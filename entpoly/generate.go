@@ -184,6 +184,48 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 			Kind:        p.Kind,
 		})
 	}
+	// Holders: precompute pivot column-method names so the template can
+	// emit typed M2M back-ref methods without string manipulation.
+	sortedHolders := append([]holderInfo(nil), s.Holders...)
+	sort.Slice(sortedHolders, func(i, j int) bool {
+		if sortedHolders[i].HolderName != sortedHolders[j].HolderName {
+			return sortedHolders[i].HolderName < sortedHolders[j].HolderName
+		}
+		return sortedHolders[i].FieldName < sortedHolders[j].FieldName
+	})
+	for _, h := range sortedHolders {
+		idCol := h.IDColumn
+		if idCol == "" {
+			idCol = h.MorphName + "_id"
+		}
+		typeCol := h.TypeColumn
+		if typeCol == "" {
+			typeCol = h.MorphName + "_type"
+		}
+		targetIDent := lower(h.Target)
+		pivotIDent := lower(h.Pivot)
+		// Convention: the pivot's FK to the holder is "<holder>_id" in
+		// snake_case (e.g. Tag holder → "tag_id" column). Could be
+		// configurable in a future option.
+		holderFK := lower(h.HolderName) + "_id"
+		imports[targetIDent] = struct{}{}
+		imports[pivotIDent] = struct{}{}
+		d.Holders = append(d.Holders, holderData{
+			HolderName:     h.HolderName,
+			FieldName:      h.FieldName,
+			FieldCap:       pascalCase(h.FieldName),
+			Target:         h.Target,
+			TargetIDent:    targetIDent,
+			TargetIDGoType: h.TargetIDGoType,
+			TargetMorph:    h.Target + "MorphKey",
+			Pivot:          h.Pivot,
+			PivotIDent:     pivotIDent,
+			HolderFKField:  pascalGoFieldName(holderFK),
+			PivotIDField:   pascalGoFieldName(idCol),
+			PivotTypeField: pascalGoFieldName(typeCol),
+		})
+	}
+
 	d.SubpackageImports = make([]string, 0, len(imports))
 	for k := range imports {
 		d.SubpackageImports = append(d.SubpackageImports, k)
@@ -240,6 +282,11 @@ type tmplData struct {
 	// (e.g. post.QueryFeaturedImage(ctx) → *Image).
 	Parents []parentData
 
+	// Holders carries one entry per MorphedByMany declaration. Drives
+	// the typed M2M back-ref method emission on the holder entity
+	// (e.g. tag.QueryPosts(ctx) → []*Post via the Taggable pivot).
+	Holders []holderData
+
 	// SubpackageImports is the deduplicated set of `<ident>` strings
 	// referenced by the typed back-ref methods. Used by the template
 	// to emit the right import lines.
@@ -250,6 +297,25 @@ type tmplData struct {
 type morphMapEntry struct {
 	Key  string
 	Type string
+}
+
+// holderData drives the typed M2M back-ref method emission on a holder
+// entity (e.g. tag.QueryPosts(ctx) []*Post). The method emits a two-step
+// query under the hood: first read pivot rows that match holder.ID +
+// target morph-key, then load the target rows by id.
+type holderData struct {
+	HolderName     string // Holder schema name (e.g. "Tag").
+	FieldName      string // Back-ref method name (e.g. "posts").
+	FieldCap       string // PascalCase of FieldName (e.g. "Posts").
+	Target         string // Concrete parent schema name (e.g. "Post").
+	TargetIDent    string // Target's lowercase predicate-package name.
+	TargetIDGoType string // Target's ID Go type ("int", "int64", "string").
+	TargetMorph    string // Morph-key constant for the target (e.g. "PostMorphKey").
+	Pivot          string // Pivot schema name (e.g. "Taggable").
+	PivotIDent     string // Pivot's lowercase predicate-package name.
+	HolderFKField  string // Pivot's column-method name for the holder FK (e.g. "TagID").
+	PivotIDField   string // Pivot's morph-id column method name (e.g. "TaggableID").
+	PivotTypeField string // Pivot's morph-type column method name (e.g. "TaggableType").
 }
 
 // parentData drives the typed back-ref method emission on a parent entity

@@ -20,6 +20,13 @@ var (
 		Name:       "comments",
 		Columns:    CommentsColumns,
 		PrimaryKey: []*schema.Column{CommentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "comment_commentable_type_commentable_id",
+				Unique:  false,
+				Columns: []*schema.Column{CommentsColumns[2], CommentsColumns[1]},
+			},
+		},
 	}
 	// ImagesColumns holds the columns for the "images" table.
 	ImagesColumns = []*schema.Column{
@@ -35,6 +42,13 @@ var (
 		Name:       "images",
 		Columns:    ImagesColumns,
 		PrimaryKey: []*schema.Column{ImagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "image_imageable_type_imageable_id",
+				Unique:  false,
+				Columns: []*schema.Column{ImagesColumns[2], ImagesColumns[1]},
+			},
+		},
 	}
 	// PostsColumns holds the columns for the "posts" table.
 	PostsColumns = []*schema.Column{
@@ -73,6 +87,13 @@ var (
 		Name:       "taggables",
 		Columns:    TaggablesColumns,
 		PrimaryKey: []*schema.Column{TaggablesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "taggable_taggable_type_taggable_id",
+				Unique:  false,
+				Columns: []*schema.Column{TaggablesColumns[2], TaggablesColumns[1]},
+			},
+		},
 	}
 	// VideosColumns holds the columns for the "videos" table.
 	VideosColumns = []*schema.Column{

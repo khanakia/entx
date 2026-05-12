@@ -261,6 +261,60 @@ func TestPolymorphicM2MPivotRoundTrip(t *testing.T) {
 	}
 }
 
+// TestMorphedByManyHolderBackRef verifies the v2-shipped tag.QueryPosts
+// /QueryVideos pattern — Laravel's $tag->posts. The method does the pivot
+// query + parent load under the hood; the caller gets a typed []*Post.
+func TestMorphedByManyHolderBackRef(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post1 := client.Post.Create().SetTitle("P1").SaveX(ctx)
+	post2 := client.Post.Create().SetTitle("P2").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+	tagA := client.Tag.Create().SetName("a").SaveX(ctx)
+	tagB := client.Tag.Create().SetName("b").SaveX(ctx)
+
+	// tagA → post1, post2, video
+	_ = client.Taggable.Create().SetTagID(tagA.ID).SetTaggable(post1).SaveX(ctx)
+	_ = client.Taggable.Create().SetTagID(tagA.ID).SetTaggable(post2).SaveX(ctx)
+	_ = client.Taggable.Create().SetTagID(tagA.ID).SetTaggable(video).SaveX(ctx)
+	// tagB → post1 only
+	_ = client.Taggable.Create().SetTagID(tagB.ID).SetTaggable(post1).SaveX(ctx)
+
+	// Laravel: $tagA->posts;
+	posts, err := tagA.QueryPosts(ctx)
+	if err != nil {
+		t.Fatalf("QueryPosts: %v", err)
+	}
+	if len(posts) != 2 {
+		t.Errorf("tagA.QueryPosts = %d, want 2", len(posts))
+	}
+
+	videos, err := tagA.QueryVideos(ctx)
+	if err != nil {
+		t.Fatalf("QueryVideos: %v", err)
+	}
+	if len(videos) != 1 {
+		t.Errorf("tagA.QueryVideos = %d, want 1", len(videos))
+	}
+
+	// Cross-tag isolation: tagB only has post1.
+	bPosts, _ := tagB.QueryPosts(ctx)
+	if len(bPosts) != 1 || bPosts[0].ID != post1.ID {
+		t.Errorf("tagB.QueryPosts = %+v, want exactly post1", bPosts)
+	}
+
+	// Empty case — a tag with no pivots → empty slice, nil error.
+	tagC := client.Tag.Create().SetName("c").SaveX(ctx)
+	got, err := tagC.QueryPosts(ctx)
+	if err != nil {
+		t.Fatalf("QueryPosts on empty tag: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty tag.QueryPosts = %v, want empty", got)
+	}
+}
+
 // TestQueryCommentableTypedReverseResolve is the v2 typed reverse
 // resolver — Laravel's `$comment->commentable`. The result type is the
 // sealed CommentCommentableParent interface, so the caller can ONLY

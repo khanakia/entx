@@ -127,7 +127,7 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 			case "morphOne":
 				e.handleParent(t, m)
 			case "morphedByMany":
-				if err := e.handleHolder(t, m); err != nil {
+				if err := e.handleHolder(g, t, m); err != nil {
 					return err
 				}
 			default:
@@ -223,6 +223,50 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		)
 	}
 
+	// AllowedTypes drift linter — when the type column was emitted as a
+	// field.Enum (via MixinAllowed), the enum values land on the column
+	// as gen.Field.Enums. Cross-check that set against the edge's
+	// AllowedTypes list. A mismatch (extra/missing parent on one side)
+	// produces a clear error pointing at the side that needs updating,
+	// rather than a confusing downstream validator failure at runtime.
+	for _, f := range t.Fields {
+		if f.Name != typeCol || len(f.Enums) == 0 {
+			continue
+		}
+		// The mixin stores values in snake_case morph-key form (e.g.
+		// "post", "video"). The edge stores AllowedTypes in schema-name
+		// form (e.g. "Post", "Video"). Compare snake_case ↔ snake_case.
+		mixinSet := map[string]struct{}{}
+		for _, e := range f.Enums {
+			mixinSet[e.Value] = struct{}{}
+		}
+		edgeSet := map[string]struct{}{}
+		for _, name := range m.AllowedTypes {
+			edgeSet[snake(name)] = struct{}{}
+		}
+		// Find the asymmetric differences and report both.
+		var missingFromMixin, missingFromEdge []string
+		for k := range edgeSet {
+			if _, ok := mixinSet[k]; !ok {
+				missingFromMixin = append(missingFromMixin, k)
+			}
+		}
+		for k := range mixinSet {
+			if _, ok := edgeSet[k]; !ok {
+				missingFromEdge = append(missingFromEdge, k)
+			}
+		}
+		if len(missingFromMixin) > 0 || len(missingFromEdge) > 0 {
+			return fmt.Errorf(
+				"entpoly: schema %s MorphMixin(%q) allowed list and MorphTo edge AllowedTypes have drifted apart — "+
+					"missing from MixinAllowed: %v; missing from MorphTo: %v "+
+					"(update both sides to declare the same parent set)",
+				t.Name, m.MorphName, missingFromMixin, missingFromEdge,
+			)
+		}
+		break
+	}
+
 	// Resolve each allowed parent's ID Go type by looking it up in the
 	// loaded graph. This lets the typed resolver (QueryCommentable)
 	// emit the right strconv conversion for each branch without having
@@ -278,7 +322,7 @@ func (e *Extension) handleParent(t *gen.Type, m *markerAnnotation) {
 // (e.g. Tag). The concrete parent (e.g. Post) participates in the morph
 // map. Validates that .Through(...) was actually called — without a
 // pivot, the M2M relation has nothing to route through.
-func (e *Extension) handleHolder(t *gen.Type, m *markerAnnotation) error {
+func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation) error {
 	if m.Through == "" {
 		return fmt.Errorf(
 			"entpoly: schema %s declares MorphedByMany(%q, ...) but missing .Through(...) — "+
@@ -293,15 +337,24 @@ func (e *Extension) handleHolder(t *gen.Type, m *markerAnnotation) error {
 			t.Name,
 		)
 	}
+	// Look up the target's ID Go type so the holder back-ref method can
+	// emit the right strconv conversion (parsing the stringified pivot
+	// taggable_id back to the parent's real PK type).
+	targetIDType := "string"
+	if tt := e.findTypeByName(g, m.Target); tt != nil && tt.ID != nil && tt.ID.Type != nil {
+		targetIDType = tt.ID.Type.String()
+	}
+
 	e.state.Holders = append(e.state.Holders, holderInfo{
-		HolderName:  t.Name,
-		FieldName:   m.FieldName,
-		Target:      m.Target,
-		Pivot:       m.Through,
-		ThroughName: m.ThroughName,
-		MorphName:   m.MorphName,
-		IDColumn:    m.IDColumn,
-		TypeColumn:  m.TypeColumn,
+		HolderName:     t.Name,
+		FieldName:      m.FieldName,
+		Target:         m.Target,
+		Pivot:          m.Through,
+		ThroughName:    m.ThroughName,
+		MorphName:      m.MorphName,
+		IDColumn:       m.IDColumn,
+		TypeColumn:     m.TypeColumn,
+		TargetIDGoType: targetIDType,
 	})
 	e.state.parents = append(e.state.parents, m.Target)
 	return nil

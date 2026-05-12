@@ -37,6 +37,7 @@ package entpoly
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 	"entgo.io/ent/schema/mixin"
 )
 
@@ -109,6 +110,17 @@ func MixinTypeColumn(name string) MixinOption {
 	return func(m *morphMixin) { m.typeColumn = name }
 }
 
+// MixinNoIndex disables the composite index on (<type>, <id>) that the
+// mixin emits by default. The composite index is essentially mandatory
+// for the read path — every back-ref query (post.QueryComments(),
+// QueryCommentable, the typed predicates) filters on both columns
+// together — so the index is on by default. Disable it only when you
+// know a different access pattern dominates and you want to save the
+// write overhead.
+func MixinNoIndex() MixinOption {
+	return func(m *morphMixin) { m.noIndex = true }
+}
+
 // MixinAllowed enumerates the parent ent schema types this child may
 // reference. When non-empty, the mixin emits the type column as
 // field.Enum(allowed_keys...) — so the database (and entgql, and ent's
@@ -151,6 +163,38 @@ type morphMixin struct {
 	idColumn   string
 	typeColumn string
 	allowed    []string // morph-key values for field.Enum; empty → field.String
+	noIndex    bool     // true → skip the composite (type, id) index emission
+}
+
+// Indexes returns the composite index that makes the back-ref read path
+// scale. Every back-ref query — post.QueryComments(), QueryCommentable,
+// the typed predicates emitted in polymorphic.go — filters on both the
+// type column AND the id column together, so a multi-column index over
+// the pair is the natural shape.
+//
+// Index column order is (type, id) rather than (id, type) because:
+//   - The type column has lower cardinality (one value per allowed
+//     parent), so it makes a better leading column for prefix scans.
+//   - Counts and "all rows of type X" queries (the common case in
+//     polymorphic dashboards) prefix-match on type alone.
+//
+// Disable via MixinNoIndex() if a different access pattern dominates
+// and the write overhead matters.
+func (m *morphMixin) Indexes() []ent.Index {
+	if m.noIndex {
+		return nil
+	}
+	idCol := m.idColumn
+	if idCol == "" {
+		idCol = m.relation + "_id"
+	}
+	typeCol := m.typeColumn
+	if typeCol == "" {
+		typeCol = m.relation + "_type"
+	}
+	return []ent.Index{
+		index.Fields(typeCol, idCol),
+	}
 }
 
 // snakeForMixin is a local copy of the snake helper that lives on

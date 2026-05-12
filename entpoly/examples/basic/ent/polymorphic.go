@@ -9,8 +9,10 @@ import (
 
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/post"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/predicate"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/video"
 )
 
 // Compile-time silence in case strconv is never referenced (rare — only
@@ -495,6 +497,76 @@ func (c *Taggable) QueryTaggable(ctx context.Context) (TaggableTaggableParent, e
 	default:
 		return nil, fmt.Errorf("entpoly: unknown morph type %q for Taggable.taggable", *c.TaggableType)
 	}
+}
+
+// QueryPosts returns all Post rows polymorphically
+// attached to this Tag via the Taggable pivot. Reads
+// the pivot rows that match (holder, target-morph-key), parses the
+// stringified ids, and loads the corresponding Post rows in a
+// single follow-up query.
+//
+// Laravel:    $posts = $tag->posts;
+// entpoly:    posts, err := tag.QueryPosts(ctx)
+func (h *Tag) QueryPosts(ctx context.Context) ([]*Post, error) {
+	pivots, err := NewTaggableClient(h.config).Query().
+		Where(
+			taggable.TagIDEQ(h.ID),
+			taggable.TaggableTypeEQ(taggable.TaggableType(string(PostMorphKey))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*Post{}, nil
+	}
+	ids := make([]int, 0, len(pivots))
+	for _, p := range pivots {
+		if p.TaggableID == nil {
+			continue
+		}
+		id, perr := strconv.Atoi(*p.TaggableID)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: parse Post id %q in Taggable pivot: %w", *p.TaggableID, perr)
+		}
+		ids = append(ids, id)
+	}
+	return NewPostClient(h.config).Query().Where(post.IDIn(ids...)).All(ctx)
+}
+
+// QueryVideos returns all Video rows polymorphically
+// attached to this Tag via the Taggable pivot. Reads
+// the pivot rows that match (holder, target-morph-key), parses the
+// stringified ids, and loads the corresponding Video rows in a
+// single follow-up query.
+//
+// Laravel:    $posts = $tag->posts;
+// entpoly:    posts, err := tag.QueryVideos(ctx)
+func (h *Tag) QueryVideos(ctx context.Context) ([]*Video, error) {
+	pivots, err := NewTaggableClient(h.config).Query().
+		Where(
+			taggable.TagIDEQ(h.ID),
+			taggable.TaggableTypeEQ(taggable.TaggableType(string(VideoMorphKey))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*Video{}, nil
+	}
+	ids := make([]int, 0, len(pivots))
+	for _, p := range pivots {
+		if p.TaggableID == nil {
+			continue
+		}
+		id, perr := strconv.Atoi(*p.TaggableID)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: parse Video id %q in Taggable pivot: %w", *p.TaggableID, perr)
+		}
+		ids = append(ids, id)
+	}
+	return NewVideoClient(h.config).Query().Where(video.IDIn(ids...)).All(ctx)
 }
 
 // QueryComments returns a query builder for all Comment rows

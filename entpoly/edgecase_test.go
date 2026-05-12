@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"entgo.io/ent"
 	"entgo.io/ent/entc/gen"
 )
 
@@ -305,6 +306,122 @@ func TestMorphMixin_FieldsAreNullable(t *testing.T) {
 		if !d.Nillable {
 			t.Errorf("field %q not Nillable", d.Name)
 		}
+	}
+}
+
+// MorphMixin emits a composite index over (type, id) so the back-ref read
+// path scales. The index is essentially mandatory — every typed back-ref
+// query in polymorphic.go filters on both columns together. Verifies the
+// shape (column order: type first, id second) and the opt-out.
+func TestMorphMixin_DefaultEmitsCompositeIndex(t *testing.T) {
+	m, ok := MorphMixin("commentable").(interface{ Indexes() []ent.Index })
+	if !ok {
+		t.Fatal("mixin does not implement Indexes()")
+	}
+	idx := m.Indexes()
+	if len(idx) != 1 {
+		t.Fatalf("Indexes len = %d, want 1", len(idx))
+	}
+	cols := idx[0].Descriptor().Fields
+	if len(cols) != 2 {
+		t.Fatalf("index columns = %d, want 2", len(cols))
+	}
+	if cols[0] != "commentable_type" || cols[1] != "commentable_id" {
+		t.Errorf("index columns = %v, want [commentable_type commentable_id]", cols)
+	}
+}
+
+func TestMorphMixin_NoIndexOpt(t *testing.T) {
+	m := MorphMixin("commentable", MixinNoIndex())
+	idx := m.(interface{ Indexes() []ent.Index }).Indexes()
+	if len(idx) != 0 {
+		t.Errorf("MixinNoIndex() Indexes = %v, want empty", idx)
+	}
+}
+
+func TestMorphMixin_CompositeIndexUsesCustomColumnNames(t *testing.T) {
+	m := MorphMixin("commentable",
+		MixinIDColumn("parent_id"),
+		MixinTypeColumn("parent_type"),
+	)
+	idx := m.(interface{ Indexes() []ent.Index }).Indexes()
+	cols := idx[0].Descriptor().Fields
+	if cols[0] != "parent_type" || cols[1] != "parent_id" {
+		t.Errorf("custom-cols index = %v, want [parent_type parent_id]", cols)
+	}
+}
+
+// Drift linter — when the mixin emits the type column as field.Enum (via
+// MixinAllowed), the set of enum values must match the edge's
+// AllowedTypes set. Mismatches surface as a clear diff at codegen time.
+func TestPreprocess_DriftBetweenMixinAndEdgeErrors(t *testing.T) {
+	// Mixin contributed columns for "post" and "video", but the edge's
+	// AllowedTypes only mention "post" — Video is in MixinAllowed but
+	// NOT in MorphTo.
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"}, // only Post here
+		IDType:       "string",
+	})
+	comment := &gen.Type{
+		Name: "Comment",
+		Fields: []*gen.Field{
+			{Name: "commentable_id"},
+			{
+				Name: "commentable_type",
+				Enums: []gen.Enum{
+					{Name: "Post", Value: "post"},
+					{Name: "Video", Value: "video"}, // mixin has Video too
+				},
+			},
+		},
+		Edges: []*gen.Edge{commentEdge},
+	}
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}, {Name: "Video"}},
+	}
+	err := NewExtension().preprocess(g)
+	if err == nil {
+		t.Fatal("expected drift error, got nil")
+	}
+	if !strings.Contains(err.Error(), "drifted apart") {
+		t.Errorf("error should mention drift; got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "video") {
+		t.Errorf("error should name the missing edge entry %q; got %q", "video", err.Error())
+	}
+}
+
+func TestPreprocess_AgreementBetweenMixinAndEdgePasses(t *testing.T) {
+	// Mixin enum values match edge AllowedTypes exactly — no error.
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post", "Video"},
+		IDType:       "string",
+	})
+	comment := &gen.Type{
+		Name: "Comment",
+		Fields: []*gen.Field{
+			{Name: "commentable_id"},
+			{
+				Name: "commentable_type",
+				Enums: []gen.Enum{
+					{Name: "Post", Value: "post"},
+					{Name: "Video", Value: "video"},
+				},
+			},
+		},
+		Edges: []*gen.Edge{commentEdge},
+	}
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}, {Name: "Video"}},
+	}
+	if err := NewExtension().preprocess(g); err != nil {
+		t.Errorf("agreement should pass without error, got %v", err)
 	}
 }
 
