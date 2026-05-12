@@ -1,0 +1,31 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the entpoly module
+    cmds:
+      - go build ./...
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  tidy:
+    desc: Tidy go.mod
+    cmds:
+      - go mod tidy
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run staticcheck
+    cmds:
+      - staticcheck ./...
+
+  ci:
+    desc: Run the full CI check (build + vet + test)
+    deps: [build, vet, test]
