@@ -33,9 +33,9 @@ If you register **no** morph map at all, every parent type's morph key defaults 
 
 For small projects this is fine, but it ties your column data to your Go-side type names. Renaming `Post` → `Article` in Go means every existing `commentable_type='post'` row is now orphaned — the morph key changed but the data did not.
 
-## Stable aliases via `WithMorphMap`
+## Stable aliases via `WithMorphMap` (optional)
 
-Register an explicit alias to decouple the persisted column value from the Go identifier:
+`WithMorphMap` is **optional**. Every parent type that appears in a `MorphTo` edge is auto-registered with its snake_case alias at preprocess time — for most projects you do not need this option at all. Register an explicit alias only when you want to decouple the persisted column value from the Go identifier (typically before a rename):
 
 ```go
 // ent/entc.go

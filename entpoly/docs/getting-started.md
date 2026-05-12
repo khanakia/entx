@@ -122,10 +122,12 @@ import (
 func main() {
     opts := []entc.Option{
         entc.Extensions(entpoly.NewExtension(
-            // Register stable string aliases for every ent type that
-            // participates as a polymorphic parent. The map keys land
-            // in the "*_type" column verbatim — keep them stable across
-            // Go-side renames.
+            // WithMorphMap is OPTIONAL. Every parent type referenced
+            // from a MorphTo edge auto-registers with its snake_case
+            // alias (Post → "post", Video → "video"). Pass an explicit
+            // map only when you want non-default aliases — typically
+            // to keep persisted "*_type" values stable across a
+            // Go-side rename. See docs/morph-map.md.
             entpoly.WithMorphMap(map[string]string{
                 "post":  "Post",
                 "video": "Video",
@@ -135,6 +137,14 @@ func main() {
     if err := entc.Generate("./schema", &gen.Config{}, opts...); err != nil {
         log.Fatalf("ent codegen: %v", err)
     }
+}
+```
+
+The simpler form is also valid when you are happy with snake_case defaults:
+
+```go
+opts := []entc.Option{
+    entc.Extensions(entpoly.NewExtension()),
 }
 ```
 

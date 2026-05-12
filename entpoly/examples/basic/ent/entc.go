@@ -12,6 +12,12 @@ import (
 )
 
 func main() {
+	// WithMorphMap is optional — every parent type referenced from a
+	// MorphTo edge auto-registers with its snake_case alias (Post →
+	// "post", Video → "video"). Pass an explicit map only to override
+	// the default, e.g. to keep a persisted alias stable across a Go
+	// rename. We demonstrate it here so the example surfaces the
+	// override mechanism.
 	opts := []entc.Option{
 		entc.FeatureNames("sql/modifier"),
 		entc.Extensions(entpoly.NewExtension(

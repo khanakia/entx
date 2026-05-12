@@ -115,6 +115,11 @@ import (
 
 func main() {
     opts := []entc.Option{
+        // WithMorphMap is optional — every parent type referenced
+        // from a MorphTo edge auto-registers with a snake_case alias
+        // ("Post" → "post"). Pass an explicit map only to override
+        // the default (e.g. to keep "post" stable across a Go-side
+        // rename to Article). See docs/morph-map.md.
         entc.Extensions(entpoly.NewExtension(
             entpoly.WithMorphMap(map[string]string{
                 "post":  "Post",
