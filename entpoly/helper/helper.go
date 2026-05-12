@@ -5,6 +5,25 @@
 // These helpers are intentionally small and reflection-free; they operate
 // over slices of IDs, leaving query/attach mechanics to the typed builders
 // emitted by entpoly's codegen.
+//
+// Notes:
+//
+//   - These functions are PURE. They never touch the database, never see
+//     an ent client. Inputs and outputs are plain slices of comparable
+//     IDs. This isolation is deliberate — it keeps the helper package
+//     free of any ent-shape dependency, so users can vendor it without
+//     pulling in the rest of entpoly's codegen surface.
+//
+//   - The set-diff functions treat duplicate IDs in the input as the
+//     same logical element. Tests in helper_test.go document this
+//     contract; do not change it without updating the corresponding
+//     tests AND adding a CHANGELOG note (it's a behaviour change for
+//     any caller relying on multiset semantics).
+//
+//   - When adding a new helper here, keep it allocation-light and
+//     comparable-generic. Pattern: take two slices, return one or two
+//     slices, never a map. If you need a map, return one separately —
+//     do not embed inside another return value.
 package helper
 
 // Toggle returns (toAttach, toDetach) given the currently-attached set and

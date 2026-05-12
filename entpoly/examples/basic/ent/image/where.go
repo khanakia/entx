@@ -57,11 +57,6 @@ func ImageableID(v string) predicate.Image {
 	return predicate.Image(sql.FieldEQ(FieldImageableID, v))
 }
 
-// ImageableType applies equality check predicate on the "imageable_type" field. It's identical to ImageableTypeEQ.
-func ImageableType(v string) predicate.Image {
-	return predicate.Image(sql.FieldEQ(FieldImageableType, v))
-}
-
 // URL applies equality check predicate on the "url" field. It's identical to URLEQ.
 func URL(v string) predicate.Image {
 	return predicate.Image(sql.FieldEQ(FieldURL, v))
@@ -153,58 +148,23 @@ func ImageableIDContainsFold(v string) predicate.Image {
 }
 
 // ImageableTypeEQ applies the EQ predicate on the "imageable_type" field.
-func ImageableTypeEQ(v string) predicate.Image {
+func ImageableTypeEQ(v ImageableType) predicate.Image {
 	return predicate.Image(sql.FieldEQ(FieldImageableType, v))
 }
 
 // ImageableTypeNEQ applies the NEQ predicate on the "imageable_type" field.
-func ImageableTypeNEQ(v string) predicate.Image {
+func ImageableTypeNEQ(v ImageableType) predicate.Image {
 	return predicate.Image(sql.FieldNEQ(FieldImageableType, v))
 }
 
 // ImageableTypeIn applies the In predicate on the "imageable_type" field.
-func ImageableTypeIn(vs ...string) predicate.Image {
+func ImageableTypeIn(vs ...ImageableType) predicate.Image {
 	return predicate.Image(sql.FieldIn(FieldImageableType, vs...))
 }
 
 // ImageableTypeNotIn applies the NotIn predicate on the "imageable_type" field.
-func ImageableTypeNotIn(vs ...string) predicate.Image {
+func ImageableTypeNotIn(vs ...ImageableType) predicate.Image {
 	return predicate.Image(sql.FieldNotIn(FieldImageableType, vs...))
-}
-
-// ImageableTypeGT applies the GT predicate on the "imageable_type" field.
-func ImageableTypeGT(v string) predicate.Image {
-	return predicate.Image(sql.FieldGT(FieldImageableType, v))
-}
-
-// ImageableTypeGTE applies the GTE predicate on the "imageable_type" field.
-func ImageableTypeGTE(v string) predicate.Image {
-	return predicate.Image(sql.FieldGTE(FieldImageableType, v))
-}
-
-// ImageableTypeLT applies the LT predicate on the "imageable_type" field.
-func ImageableTypeLT(v string) predicate.Image {
-	return predicate.Image(sql.FieldLT(FieldImageableType, v))
-}
-
-// ImageableTypeLTE applies the LTE predicate on the "imageable_type" field.
-func ImageableTypeLTE(v string) predicate.Image {
-	return predicate.Image(sql.FieldLTE(FieldImageableType, v))
-}
-
-// ImageableTypeContains applies the Contains predicate on the "imageable_type" field.
-func ImageableTypeContains(v string) predicate.Image {
-	return predicate.Image(sql.FieldContains(FieldImageableType, v))
-}
-
-// ImageableTypeHasPrefix applies the HasPrefix predicate on the "imageable_type" field.
-func ImageableTypeHasPrefix(v string) predicate.Image {
-	return predicate.Image(sql.FieldHasPrefix(FieldImageableType, v))
-}
-
-// ImageableTypeHasSuffix applies the HasSuffix predicate on the "imageable_type" field.
-func ImageableTypeHasSuffix(v string) predicate.Image {
-	return predicate.Image(sql.FieldHasSuffix(FieldImageableType, v))
 }
 
 // ImageableTypeIsNil applies the IsNil predicate on the "imageable_type" field.
@@ -215,16 +175,6 @@ func ImageableTypeIsNil() predicate.Image {
 // ImageableTypeNotNil applies the NotNil predicate on the "imageable_type" field.
 func ImageableTypeNotNil() predicate.Image {
 	return predicate.Image(sql.FieldNotNull(FieldImageableType))
-}
-
-// ImageableTypeEqualFold applies the EqualFold predicate on the "imageable_type" field.
-func ImageableTypeEqualFold(v string) predicate.Image {
-	return predicate.Image(sql.FieldEqualFold(FieldImageableType, v))
-}
-
-// ImageableTypeContainsFold applies the ContainsFold predicate on the "imageable_type" field.
-func ImageableTypeContainsFold(v string) predicate.Image {
-	return predicate.Image(sql.FieldContainsFold(FieldImageableType, v))
 }
 
 // URLEQ applies the EQ predicate on the "url" field.

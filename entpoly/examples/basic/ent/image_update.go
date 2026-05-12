@@ -49,13 +49,13 @@ func (_u *ImageUpdate) ClearImageableID() *ImageUpdate {
 }
 
 // SetImageableType sets the "imageable_type" field.
-func (_u *ImageUpdate) SetImageableType(v string) *ImageUpdate {
+func (_u *ImageUpdate) SetImageableType(v image.ImageableType) *ImageUpdate {
 	_u.mutation.SetImageableType(v)
 	return _u
 }
 
 // SetNillableImageableType sets the "imageable_type" field if the given value is not nil.
-func (_u *ImageUpdate) SetNillableImageableType(v *string) *ImageUpdate {
+func (_u *ImageUpdate) SetNillableImageableType(v *image.ImageableType) *ImageUpdate {
 	if v != nil {
 		_u.SetImageableType(*v)
 	}
@@ -168,6 +168,16 @@ func (_u *ImageUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *ImageUpdate) check() error {
+	if v, ok := _u.mutation.ImageableType(); ok {
+		if err := image.ImageableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "imageable_type", err: fmt.Errorf(`ent: validator failed for field "Image.imageable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *ImageUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ImageUpdate {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -175,6 +185,9 @@ func (_u *ImageUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ImageUpd
 }
 
 func (_u *ImageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(image.Table, image.Columns, sqlgraph.NewFieldSpec(image.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -190,10 +203,10 @@ func (_u *ImageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		_spec.ClearField(image.FieldImageableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.ImageableType(); ok {
-		_spec.SetField(image.FieldImageableType, field.TypeString, value)
+		_spec.SetField(image.FieldImageableType, field.TypeEnum, value)
 	}
 	if _u.mutation.ImageableTypeCleared() {
-		_spec.ClearField(image.FieldImageableType, field.TypeString)
+		_spec.ClearField(image.FieldImageableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.URL(); ok {
 		_spec.SetField(image.FieldURL, field.TypeString, value)
@@ -259,13 +272,13 @@ func (_u *ImageUpdateOne) ClearImageableID() *ImageUpdateOne {
 }
 
 // SetImageableType sets the "imageable_type" field.
-func (_u *ImageUpdateOne) SetImageableType(v string) *ImageUpdateOne {
+func (_u *ImageUpdateOne) SetImageableType(v image.ImageableType) *ImageUpdateOne {
 	_u.mutation.SetImageableType(v)
 	return _u
 }
 
 // SetNillableImageableType sets the "imageable_type" field if the given value is not nil.
-func (_u *ImageUpdateOne) SetNillableImageableType(v *string) *ImageUpdateOne {
+func (_u *ImageUpdateOne) SetNillableImageableType(v *image.ImageableType) *ImageUpdateOne {
 	if v != nil {
 		_u.SetImageableType(*v)
 	}
@@ -391,6 +404,16 @@ func (_u *ImageUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *ImageUpdateOne) check() error {
+	if v, ok := _u.mutation.ImageableType(); ok {
+		if err := image.ImageableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "imageable_type", err: fmt.Errorf(`ent: validator failed for field "Image.imageable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *ImageUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *ImageUpdateOne {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -398,6 +421,9 @@ func (_u *ImageUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *Image
 }
 
 func (_u *ImageUpdateOne) sqlSave(ctx context.Context) (_node *Image, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(image.Table, image.Columns, sqlgraph.NewFieldSpec(image.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -430,10 +456,10 @@ func (_u *ImageUpdateOne) sqlSave(ctx context.Context) (_node *Image, err error)
 		_spec.ClearField(image.FieldImageableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.ImageableType(); ok {
-		_spec.SetField(image.FieldImageableType, field.TypeString, value)
+		_spec.SetField(image.FieldImageableType, field.TypeEnum, value)
 	}
 	if _u.mutation.ImageableTypeCleared() {
-		_spec.ClearField(image.FieldImageableType, field.TypeString)
+		_spec.ClearField(image.FieldImageableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.URL(); ok {
 		_spec.SetField(image.FieldURL, field.TypeString, value)

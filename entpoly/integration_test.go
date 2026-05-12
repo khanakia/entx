@@ -303,7 +303,7 @@ func TestGenerate_EndToEnd(t *testing.T) {
 		"morphTypeMap",
 		`"post"`, `"Post"`,
 		"func (e *Post) MorphID() string",
-		"func (*Post) MorphKey() string",
+		"func (*Post) MorphKey() MorphKey",
 		"func (c *CommentCreate) SetCommentable",
 	} {
 		if !strings.Contains(src, want) {

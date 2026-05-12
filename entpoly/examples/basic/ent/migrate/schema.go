@@ -12,7 +12,7 @@ var (
 	CommentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "commentable_id", Type: field.TypeString, Nullable: true},
-		{Name: "commentable_type", Type: field.TypeString, Nullable: true},
+		{Name: "commentable_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"post", "video"}},
 		{Name: "body", Type: field.TypeString, Size: 2147483647},
 	}
 	// CommentsTable holds the schema information for the "comments" table.
@@ -25,7 +25,7 @@ var (
 	ImagesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "imageable_id", Type: field.TypeString, Nullable: true},
-		{Name: "imageable_type", Type: field.TypeString, Nullable: true},
+		{Name: "imageable_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"post"}},
 		{Name: "url", Type: field.TypeString},
 		{Name: "width", Type: field.TypeInt, Nullable: true},
 		{Name: "height", Type: field.TypeInt, Nullable: true},
@@ -63,7 +63,7 @@ var (
 	TaggablesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "taggable_id", Type: field.TypeString, Nullable: true},
-		{Name: "taggable_type", Type: field.TypeString, Nullable: true},
+		{Name: "taggable_type", Type: field.TypeEnum, Nullable: true, Enums: []string{"post", "video"}},
 		{Name: "tag_id", Type: field.TypeInt},
 		{Name: "added_by", Type: field.TypeString, Nullable: true},
 		{Name: "sort_order", Type: field.TypeInt, Default: 0},

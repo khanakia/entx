@@ -19,7 +19,7 @@ type Image struct {
 	// ImageableID holds the value of the "imageable_id" field.
 	ImageableID *string `json:"imageable_id,omitempty"`
 	// ImageableType holds the value of the "imageable_type" field.
-	ImageableType *string `json:"imageable_type,omitempty"`
+	ImageableType *image.ImageableType `json:"imageable_type,omitempty"`
 	// URL holds the value of the "url" field.
 	URL string `json:"url,omitempty"`
 	// Width holds the value of the "width" field.
@@ -73,8 +73,8 @@ func (_m *Image) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field imageable_type", values[i])
 			} else if value.Valid {
-				_m.ImageableType = new(string)
-				*_m.ImageableType = value.String
+				_m.ImageableType = new(image.ImageableType)
+				*_m.ImageableType = image.ImageableType(value.String)
 			}
 		case image.FieldURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -144,7 +144,7 @@ func (_m *Image) String() string {
 	builder.WriteString(", ")
 	if v := _m.ImageableType; v != nil {
 		builder.WriteString("imageable_type=")
-		builder.WriteString(*v)
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("url=")

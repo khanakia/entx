@@ -198,19 +198,89 @@ Polymorphic columns reference multiple tables, so SQL cannot enforce a FK constr
 
 A composite index on `(<name>_type, <name>_id)` is recommended for read performance; declare it via standard `Indexes()` until v2 emits it automatically.
 
-## Mutation parity (Laravel → ent)
+## Laravel parity — full reference
 
-| Laravel | ent (with entpoly) |
+Every Laravel polymorphic relationship operation maps to a typed ent equivalent. **No `any`, no manual SQL, no string-typed predicates.**
+
+### Read
+
+| Laravel | entpoly | Return type |
+|---|---|---|
+| `$post->image` (MorphOne) | `post.QueryFeaturedImage(ctx)` | `(*Image, error)` — `(nil, nil)` if not set |
+| `$post->comments` (MorphMany) | `post.QueryComments()` | `*CommentQuery` (composable: `.Where`/`.Order`/`.Limit`/`.All`) |
+| `$comment->commentable` (MorphTo reverse) | `comment.QueryCommentable(ctx)` | **sealed `CommentCommentableParent` interface** — type-switch over Post/Video only |
+| `$comment->commentable_id`, `$comment->commentable_type` | `*c.CommentableID`, `*c.CommentableType` | `*string`, `*comment.CommentableType` (typed enum) |
+| `$tag->posts` (MorphedByMany) | manual pivot query | `[]*Post` via `client.Taggable.Query().Where(...).All(ctx)` (v1) |
+
+### Write
+
+| Laravel | entpoly |
 |---|---|
-| `$comment->commentable()->associate($post)` | `client.Comment.UpdateOneID(cID).SetCommentable(post).Save(ctx)` |
-| `$comment->commentable()->dissociate()` | `client.Comment.UpdateOneID(cID).ClearCommentable().Save(ctx)` |
-| `$post->comments()->save($c)` | `client.Comment.UpdateOneID(cID).SetCommentable(post).Save(ctx)` |
+| `$comment->commentable()->associate($post)` | `c.Update().SetCommentable(post).Save(ctx)` |
+| `$comment->commentable()->dissociate()` | `c.Update().ClearCommentable().Save(ctx)` |
+| `$post->comments()->save($c)` | `c.Update().SetCommentable(post).Save(ctx)` |
 | `$post->comments()->create([...])` | `client.Comment.Create().SetBody(...).SetCommentable(post).Save(ctx)` |
+| `$post->comments()->saveMany([$a,$b])` | `client.Comment.MapCreateBulk(rows, func(c, i){...}).Save(ctx)` |
+
+### M2M (MorphedByMany via pivot)
+
+| Laravel | entpoly |
+|---|---|
 | `$post->tags()->attach($tag)` | `client.Taggable.Create().SetTagID(tag.ID).SetTaggable(post).Save(ctx)` |
+| `$post->tags()->attach($tag, ['by'=>1])` | same + `.SetAddedBy("aman")` (pivot extras are real ent fields) |
 | `$post->tags()->detach($tag)` | `client.Taggable.Delete().Where(...).Exec(ctx)` |
-| `$post->tags()->sync([1,2,3])` | `helper.Sync(attached, target)` → apply diff with Create/Delete |
+| `$post->tags()->sync([1,2,3])` | `helper.Sync(attached, target)` → apply diff w/ Create/Delete |
 | `$post->tags()->syncWithoutDetaching([1,2])` | `helper.SyncWithoutDetach(attached, target)` |
 | `$post->tags()->toggle([1,2])` | `helper.Toggle(attached, target)` |
+| `$post->tags()->updateExistingPivot($tagID, [...])` | `client.Taggable.Update().Where(...).SetSortOrder(5).Save(ctx)` |
+
+### Query / predicate
+
+| Laravel | entpoly |
+|---|---|
+| `Comment::whereHasMorph('commentable', [Post::class], $q)` | `client.Comment.Query().Where(ent.CommentCommentableIs(post)).All(ctx)` |
+| `Comment::where('commentable_type', Post::class)` | `client.Comment.Query().Where(ent.CommentCommentableIsType(ent.PostMorphKey)).All(ctx)` |
+| Manual SQL: `WHERE commentable_type = 'post'` | typed predicate (see above) |
+
+### Morph map (alias control)
+
+| Laravel | entpoly |
+|---|---|
+| `Relation::enforceMorphMap(['post'=>'App\Models\Post'])` | `entpoly.WithMorphMap(map[string]string{"post":"Post"})` in `entc.go` (optional — snake_case default) |
+| `$post->getMorphClass()` | `post.MorphKey()` → typed `MorphKey` constant |
+
+## Reverse resolve — `$comment->commentable` in Go terms
+
+The most-asked-about feature. Laravel returns "Post | Video | null"; we return a sealed interface that the compiler validates:
+
+```go
+parent, err := comment.QueryCommentable(ctx)
+if err != nil { return err }
+
+switch p := parent.(type) {
+case *ent.Post:
+    fmt.Println(p.Title)        // typed *Post — IDE completes, compiler checks
+case *ent.Video:
+    fmt.Println(p.URL)          // typed *Video
+case nil:
+    // discriminator pair was NULL
+}
+// `case *ent.Article:` would NOT compile — Article is not in AllowedTypes
+```
+
+The sealed interface (`CommentCommentableParent`) accepts only types listed in `MorphTo(name, Post.Type, Video.Type)`. Any other type fails at compile time with `cannot use *ent.X as CommentCommentableParent value (missing method isCommentCommentableParent)`.
+
+## Type-safety summary
+
+Three layers, all compile- or DB-enforced:
+
+| Layer | Catches |
+|---|---|
+| **Sealed interface** (Go compile time) | `SetCommentable(article)` — wrong parent type |
+| **ent enum runtime validator** | `SetCommentableType("psot")` — typo'd morph key |
+| **DB CHECK / native ENUM** | `INSERT ... commentable_type='random'` — raw SQL bypass |
+
+See [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) for the full design rationale, alternative approaches considered, and tradeoffs.
 
 ## Documentation
 
@@ -222,6 +292,8 @@ A composite index on `(<name>_type, <name>_id)` is recommended for read performa
 | [Morph map](./docs/morph-map.md) | Discriminator strings + the rename workflow |
 | [Architecture](./docs/architecture.md) | How the extension is built; how to contribute |
 | [FAQ](./docs/faq.md) | Common questions about FKs, cascades, dialects, GraphQL |
+| [Laravel parity](./docs/laravel-parity.md) | Every Laravel polymorphic operation → entpoly equivalent (read, write, M2M, queries, morph map) |
+| [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) | Why we use sealed interface + enum column (Approach C) — diagrams, tradeoffs, alternatives we rejected |
 
 ## License
 

@@ -14,7 +14,7 @@ type Image struct{ ent.Schema }
 
 func (Image) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		entpoly.MorphMixin("imageable"),
+		entpoly.MorphMixin("imageable", entpoly.MixinAllowed(Post.Type)),
 	}
 }
 

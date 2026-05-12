@@ -34,13 +34,13 @@ func (_c *CommentCreate) SetNillableCommentableID(v *string) *CommentCreate {
 }
 
 // SetCommentableType sets the "commentable_type" field.
-func (_c *CommentCreate) SetCommentableType(v string) *CommentCreate {
+func (_c *CommentCreate) SetCommentableType(v comment.CommentableType) *CommentCreate {
 	_c.mutation.SetCommentableType(v)
 	return _c
 }
 
 // SetNillableCommentableType sets the "commentable_type" field if the given value is not nil.
-func (_c *CommentCreate) SetNillableCommentableType(v *string) *CommentCreate {
+func (_c *CommentCreate) SetNillableCommentableType(v *comment.CommentableType) *CommentCreate {
 	if v != nil {
 		_c.SetCommentableType(*v)
 	}
@@ -87,6 +87,11 @@ func (_c *CommentCreate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *CommentCreate) check() error {
+	if v, ok := _c.mutation.CommentableType(); ok {
+		if err := comment.CommentableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "commentable_type", err: fmt.Errorf(`ent: validator failed for field "Comment.commentable_type": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Body(); !ok {
 		return &ValidationError{Name: "body", err: errors.New(`ent: missing required field "Comment.body"`)}
 	}
@@ -121,7 +126,7 @@ func (_c *CommentCreate) createSpec() (*Comment, *sqlgraph.CreateSpec) {
 		_node.CommentableID = &value
 	}
 	if value, ok := _c.mutation.CommentableType(); ok {
-		_spec.SetField(comment.FieldCommentableType, field.TypeString, value)
+		_spec.SetField(comment.FieldCommentableType, field.TypeEnum, value)
 		_node.CommentableType = &value
 	}
 	if value, ok := _c.mutation.Body(); ok {

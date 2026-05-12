@@ -98,7 +98,13 @@ The `schemaName(t any) string` helper extracts the schema name from a method val
 
 ### `mixin.go`
 
-`MorphMixin(relation, opts...)` returns an `ent.Mixin` whose `Fields()` produces the two discriminator columns. Options (`MixinIDColumn`, `MixinTypeColumn`, `MixinIDType`) mirror the corresponding edge-builder methods — keeping the mixin and edge in agreement is the user's responsibility, but `preprocess` validates the agreement and emits a precise error on mismatch.
+`MorphMixin(relation, opts...)` returns an `ent.Mixin` whose `Fields()` produces the two discriminator columns. Options:
+
+- `MixinIDColumn` / `MixinTypeColumn` — override the default `<relation>_id` / `<relation>_type` names.
+- `MixinIDType("int")` / `MixinIDType("string")` — pick the Go type of the id column.
+- `MixinAllowed(Post.Type, Video.Type)` — promote the type column from `field.String` to `field.Enum(...)`. When set, the database (CHECK constraint or native ENUM) enforces the closed set, ent generates a typed `<TypeColumn>` Go type and a runtime validator, and entgql consumers get a typed enum field. Use this to layer DB-level safety on top of the sealed-interface setter — see [ADR-001](./adr-001-type-safety.md) for the full design.
+
+Keeping the mixin and edge in agreement is the user's responsibility; `preprocess` validates by checking that the columns the edge expects exist on the type, and emits a precise error pointing at the right `MixinIDColumn` / `MixinTypeColumn` / `MixinAllowed` call on mismatch.
 
 ### `morphmap.go`
 
@@ -134,6 +140,8 @@ Auto-registration of parent participants in the morph map ensures that types ref
 
 `childInfo`, `parentInfo`, and `holderInfo` precompute the strings the template iterates over — case-converted, resolved-from-overrides — so the template stays free of string manipulation.
 
+`childInfo.ResolveTargets` is the additional table needed by the typed forward resolver. Each entry carries a parent schema name + that parent's Go ID type (`int`, `int64`, `string`, etc.) — populated by `preprocess.handleMorphTo` from the loaded gen.Graph. The template uses this to emit the per-case conversion (`strconv.Atoi` for int, `strconv.ParseInt` for int64, pass-through for strings) before calling the right ent client's `Get`.
+
 ### `generate.go`
 
 Phase 3 of the pipeline. Transforms `polyState` into the template-ready `tmplData` shape, executes the embedded template, runs `go/format.Source` over the result, and writes to `<target>/polymorphic.go`. If `go/format` fails (almost always a template bug), the unformatted bytes are still written so the developer can inspect what went wrong.
@@ -149,7 +157,15 @@ The template uses Go's `text/template` package (not `html/template` — we are e
 3. Per-parent `MorphID()` + `MorphKey()` methods.
 4. Per-child `Set<Morph>` / `Clear<Morph>` builder methods on `Create`, `Update`, `UpdateOne`, and `Mutation`.
 
-Typed back-reference methods (`post.QueryComments()`, `tag.QueryPosts()`) are intentionally not emitted in v1. They require importing the predicate sub-package for the target type, and resolving the import path from `gen.Config` is not yet stable. v2 will land them.
+The template now emits **typed back-reference methods**:
+
+- `MorphMany` → `post.QueryComments() *CommentQuery` — composable ent query builder.
+- `MorphOne` → `post.QueryFeaturedImage(ctx) (*Image, error)` — `(nil, nil)` when unset, typed error on driver/context failure.
+- `MorphTo` (forward, child → parent) → `comment.QueryCommentable(ctx) (CommentCommentableParent, error)` — sealed-interface return; the caller type-switches over the AllowedTypes only.
+
+The forward resolver dispatches over `*c.<TypeField>` (an ent-generated enum value), converts the stringified morph id back to the parent's real PK type (`strconv.Atoi`, `strconv.ParseInt`, or pass-through for string IDs), and calls the right `New<Parent>Client(c.config).Get(ctx, id)`.
+
+The only typed back-ref still pending is the M2M holder side (`tag.QueryPosts(ctx) []*Post`); see the v2 roadmap below.
 
 ### `helper/helper.go`
 
@@ -167,12 +183,13 @@ The helpers do not touch the database. They compute set diffs; applying them is 
 
 These are the rules the codegen relies on. Break them and the generated code will not compile.
 
-1. **Mixin + edge agree on column names and id type.** If you override on one, override on the other to match.
+1. **Mixin + edge agree on column names, id type, and allowed parents.** If you override on one, override on the other to match. `MixinAllowed`'s parent list must equal the list passed to `MorphTo`.
 2. **`MorphTo` requires at least one allowed parent type.** Builder-time validation catches the typical empty case; preprocess re-validates for safety.
 3. **`MorphedByMany` requires `.Through(...)`.** preprocess errors with a remediation hint.
 4. **Schema names are stable identifiers.** The morph map's right-hand side must match the ent type name exactly (case-sensitive).
 5. **Deterministic codegen output.** Slices are sorted before iteration. Maps are emitted via sorted-key iteration. Two `go generate` runs against the same schema must produce byte-identical output.
 6. **One MorphMixin per relation, one MorphTo edge per relation.** Multiple polymorphic relations on the same schema are supported — declare one of each per relation.
+7. **Parent ID types are inspected at codegen time.** The forward resolver picks the right `strconv` flavour based on each allowed parent's `gen.Type.ID.Type.String()`. If you add a new ID shape (e.g. UUID via `field.UUID`), check that the generated polymorphic.go uses the right conversion; only `int`, `int64`, and string-ish IDs are exercised by the test suite today.
 
 ## Extension points (for contributors)
 
@@ -181,16 +198,38 @@ These are the rules the codegen relies on. Break them and the generated code wil
 - **New runtime helper** — add to `helper/helper.go` with full tests. Helpers must stay reflection-free, allocation-light, and database-agnostic.
 - **New `Extension` option** — add an `Option` constructor (returns `func(*Extension)`). Make it idempotent — registering the same option twice must produce the same final state.
 
+## What v1 ships (vs. earlier drafts of this document)
+
+The v1 codegen has expanded since the first design sketch. Everything listed below is now generated end-to-end and verified by the runtime test suite (`examples/basic/runtime_test.go`).
+
+| Surface | Status |
+|---|---|
+| Discriminator columns (`<rel>_id`, `<rel>_type`) | ✅ via `MorphMixin` |
+| Optional DB-level enum (CHECK / native ENUM) for the type column | ✅ via `MorphMixin(name, MixinAllowed(...))` |
+| ent enum runtime validator + typed `<TypeColumn>` Go type | ✅ ent generates from `field.Enum` |
+| Per-parent typed `MorphKey` constants (`PostMorphKey`, ...) | ✅ |
+| Named `MorphKey` type — rejects raw string literals | ✅ |
+| Sealed parent interface per relation (`CommentCommentableParent`) | ✅ — `Set<Morph>(p sealed)` |
+| Per-parent `MorphID() string` + `MorphKey() MorphKey` | ✅ |
+| `Set<Morph>` / `Clear<Morph>` on Create / Update / UpdateOne / Mutation builders | ✅ |
+| Typed predicate constructors: `<Child><Rel>Is(parent)`, `<Child><Rel>IsType(MorphKey)` | ✅ |
+| **Typed forward resolver** `comment.QueryCommentable(ctx) → sealed iface, error` | ✅ — switch over allowed parents only, no `any` |
+| **Typed reverse back-refs** `post.QueryComments() *CommentQuery` (MorphMany) | ✅ |
+| **Typed reverse back-ref** `post.QueryFeaturedImage(ctx) (*Image, error)` (MorphOne) | ✅ — `(nil, nil)` for unset |
+| ID conversion in resolver — `int`, `int64`, `string` (UUIDs) | ✅ per-parent at codegen time |
+| Set-diff helpers `Toggle` / `Sync` / `SyncWithoutDetach` for M2M | ✅ in `helper/` |
+
 ## v2 roadmap
+
+What is still ahead:
 
 | Deferred | Reason |
 |---|---|
-| Typed back-ref methods on parent (`post.QueryComments() *CommentQuery`) | Needs stable import resolution for predicate sub-packages. |
-| Typed parent resolver on child (`comment.QueryCommentable(ctx) (any, error)`) | Same predicate-package problem. |
-| `HasMorph` query predicate helper | Same predicate-package problem. |
-| Eager-load batching (`WithCommentable`) | Builds on the typed resolver; lands together. |
-| Allowed-types enforcement hook | Runtime hook registration via the extension. |
-| Composite index emission (`idx(<name>_type, <name>_id)`) | Atlas annotation injection at codegen time. |
-| Auto-touch on parent update (Laravel `$touches`) | Runtime hook registration. |
+| Typed M2M holder back-refs (`tag.QueryPosts(ctx) []*Post`) | Currently the user reads the pivot manually then queries the target. Codegen for both ends of the M2M is mechanical — not blocked, just not landed. |
+| Eager-load batching (`client.Comment.Query().WithCommentable(ctx)`) | Builds on the existing typed resolver: emit a method that groups child rows by `<rel>_type`, then fires one batch query per parent type. |
+| Auto-touch on parent update (Laravel `$touches`) | Runtime hook registration via the extension — bump `parent.updated_at` whenever a child saves. |
+| Composite index emission on `(<rel>_type, <rel>_id)` | Atlas annotation injection at codegen time so the read path scales without a manual `Indexes()` declaration. |
+| GraphQL union resolver helper for entgql consumers | Optional emit — wires the `<rel>_type` discriminator to a GraphQL union type. |
+| Validation hook for `AllowedTypes` mismatch between mixin and edge | Today preprocess catches the column-name mismatch via "missing column" error; an explicit cross-check between `MixinAllowed` and `MorphTo`'s parent list would surface drift earlier with a clearer message. |
 
-None of these are blocked by upstream ent — they are implementation work inside `entpoly`. The v1 line was drawn at "build clean, ships typed write surface, ships set-diff helpers". v2 will draw it at "feature-complete read surface, runtime enforcement".
+None of these are blocked by upstream ent — they are implementation work inside `entpoly`. The v1 line was drawn at "feature-complete typed read + write surface across all four shapes, DB-level enforcement opt-in, full Laravel parity on the canonical operations". v2 will fill in batching, M2M-side typing, and the platform-level integrations.

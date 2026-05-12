@@ -2,28 +2,52 @@
 
 package ent
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/predicate"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
+)
+
+// Compile-time silence in case strconv is never referenced (rare — only
+// when no child resolver branch needs numeric ID parsing).
+var _ = strconv.Atoi
+
+// Compile-time silence in case context is never referenced (rare — only
+// when no MorphOne back-refs are present in the entire graph).
+var _ = context.Background
+
+// MorphKey is a named string type for the persisted "*_type" alias of
+// every parent type in a polymorphic relation. Using a named type instead
+// of a raw string lets callers pass only one of the codegen-emitted
+// constants (PostMorphKey, VideoMorphKey, ...), which the Go compiler
+// validates — preventing typos like CommentableTypeEQ("psot").
+type MorphKey string
 
 // Morphable is implemented by every entity that may sit on the parent side
 // of a polymorphic relation. Generated MorphID()/MorphKey() satisfy this.
 type Morphable interface {
 	MorphID() string
-	MorphKey() string
+	MorphKey() MorphKey
 }
 
 // ─── Morph map ─────────────────────────────────────────────────────────────
 
 // morphTypeMap maps the persisted "*_type" string to the ent type name.
 // Configure aliases via entpoly.WithMorphMap(...) at codegen time.
-var morphTypeMap = map[string]string{
-	"image": "Image",
-	"post":  "Post",
-	"video": "Video",
+var morphTypeMap = map[MorphKey]string{
+	ImageMorphKey: "Image",
+	PostMorphKey:  "Post",
+	VideoMorphKey: "Video",
 }
 
 // MorphTypeFor returns the morph key registered for an ent type name, or
 // an empty string when no alias is registered.
-func MorphTypeFor(typeName string) string {
+func MorphTypeFor(typeName string) MorphKey {
 	for k, v := range morphTypeMap {
 		if v == typeName {
 			return k
@@ -34,39 +58,124 @@ func MorphTypeFor(typeName string) string {
 
 // MorphTypeName returns the ent type name registered for a morph key, or
 // an empty string when the key is unknown.
-func MorphTypeName(morphKey string) string {
+func MorphTypeName(morphKey MorphKey) string {
 	return morphTypeMap[morphKey]
-}
+} // Per-type morph-key constants. Use these instead of hard-coding the
+// persisted string — the named MorphKey type prevents arbitrary string
+// literals from being passed where a polymorphic alias is expected.
+//
+//	client.Comment.Query().Where(
+//	    CommentCommentableIsType(PostMorphKey),  // typed: only known constants compile
+//	).All(ctx)
+const (
+	// ImageMorphKey is the persisted "*_type" alias for Image.
+	ImageMorphKey MorphKey = "image"
+	// PostMorphKey is the persisted "*_type" alias for Post.
+	PostMorphKey MorphKey = "post"
+	// VideoMorphKey is the persisted "*_type" alias for Video.
+	VideoMorphKey MorphKey = "video"
+)
 
 // MorphID returns the string id for Image. Non-string ids are stringified
 // via fmt.Sprint to fit the polymorphic id column.
 func (e *Image) MorphID() string { return fmt.Sprint(e.ID) }
 
 // MorphKey returns the persisted "*_type" alias for Image.
-func (*Image) MorphKey() string { return "image" }
+func (*Image) MorphKey() MorphKey { return ImageMorphKey }
 
 // MorphID returns the string id for Post. Non-string ids are stringified
 // via fmt.Sprint to fit the polymorphic id column.
 func (e *Post) MorphID() string { return fmt.Sprint(e.ID) }
 
 // MorphKey returns the persisted "*_type" alias for Post.
-func (*Post) MorphKey() string { return "post" }
+func (*Post) MorphKey() MorphKey { return PostMorphKey }
 
 // MorphID returns the string id for Video. Non-string ids are stringified
 // via fmt.Sprint to fit the polymorphic id column.
 func (e *Video) MorphID() string { return fmt.Sprint(e.ID) }
 
 // MorphKey returns the persisted "*_type" alias for Video.
-func (*Video) MorphKey() string { return "video" }
+func (*Video) MorphKey() MorphKey { return VideoMorphKey }
+
+// CommentCommentableParent is the sealed interface restricting
+// which types may be passed as the polymorphic parent of a Comment on
+// its "commentable" relation. Only types listed in the schema's
+// AllowedTypes (passed to MorphTo) carry the marker method, so passing
+// any other type to SetCommentable is a compile error.
+//
+// This is the Go-equivalent of a sum type / discriminated union; it mirrors
+// the way ent's typed enum fields restrict assignable values.
+type CommentCommentableParent interface {
+	Morphable
+	isCommentCommentableParent()
+}
+
+// isCommentCommentableParent marks *Post as an
+// allowed parent of Comment on the "commentable" relation.
+// Generated only for types listed in the schema's AllowedTypes; this is
+// the entire mechanism behind the compile-time restriction.
+func (*Post) isCommentCommentableParent() {}
+
+// isCommentCommentableParent marks *Video as an
+// allowed parent of Comment on the "commentable" relation.
+// Generated only for types listed in the schema's AllowedTypes; this is
+// the entire mechanism behind the compile-time restriction.
+func (*Video) isCommentCommentableParent() {}
+
+// ImageImageableParent is the sealed interface restricting
+// which types may be passed as the polymorphic parent of a Image on
+// its "imageable" relation. Only types listed in the schema's
+// AllowedTypes (passed to MorphTo) carry the marker method, so passing
+// any other type to SetImageable is a compile error.
+//
+// This is the Go-equivalent of a sum type / discriminated union; it mirrors
+// the way ent's typed enum fields restrict assignable values.
+type ImageImageableParent interface {
+	Morphable
+	isImageImageableParent()
+}
+
+// isImageImageableParent marks *Post as an
+// allowed parent of Image on the "imageable" relation.
+// Generated only for types listed in the schema's AllowedTypes; this is
+// the entire mechanism behind the compile-time restriction.
+func (*Post) isImageImageableParent() {}
+
+// TaggableTaggableParent is the sealed interface restricting
+// which types may be passed as the polymorphic parent of a Taggable on
+// its "taggable" relation. Only types listed in the schema's
+// AllowedTypes (passed to MorphTo) carry the marker method, so passing
+// any other type to SetTaggable is a compile error.
+//
+// This is the Go-equivalent of a sum type / discriminated union; it mirrors
+// the way ent's typed enum fields restrict assignable values.
+type TaggableTaggableParent interface {
+	Morphable
+	isTaggableTaggableParent()
+}
+
+// isTaggableTaggableParent marks *Post as an
+// allowed parent of Taggable on the "taggable" relation.
+// Generated only for types listed in the schema's AllowedTypes; this is
+// the entire mechanism behind the compile-time restriction.
+func (*Post) isTaggableTaggableParent() {}
+
+// isTaggableTaggableParent marks *Video as an
+// allowed parent of Taggable on the "taggable" relation.
+// Generated only for types listed in the schema's AllowedTypes; this is
+// the entire mechanism behind the compile-time restriction.
+func (*Video) isTaggableTaggableParent() {}
 
 // SetCommentable sets the polymorphic parent on the Create builder.
-func (c *CommentCreate) SetCommentable(p Morphable) *CommentCreate {
-	return c.SetCommentableID(p.MorphID()).SetCommentableType(p.MorphKey())
+// Accepts only types declared in the schema's AllowedTypes — see
+// CommentCommentableParent.
+func (c *CommentCreate) SetCommentable(p CommentCommentableParent) *CommentCreate {
+	return c.SetCommentableID(p.MorphID()).SetCommentableType(comment.CommentableType(string(p.MorphKey())))
 }
 
 // SetCommentable sets the polymorphic parent on the Update builder.
-func (u *CommentUpdate) SetCommentable(p Morphable) *CommentUpdate {
-	return u.SetCommentableID(p.MorphID()).SetCommentableType(p.MorphKey())
+func (u *CommentUpdate) SetCommentable(p CommentCommentableParent) *CommentUpdate {
+	return u.SetCommentableID(p.MorphID()).SetCommentableType(comment.CommentableType(string(p.MorphKey())))
 }
 
 // ClearCommentable clears the polymorphic parent on the Update builder.
@@ -75,8 +184,8 @@ func (u *CommentUpdate) ClearCommentable() *CommentUpdate {
 }
 
 // SetCommentable sets the polymorphic parent on the single-row UpdateOne.
-func (u *CommentUpdateOne) SetCommentable(p Morphable) *CommentUpdateOne {
-	return u.SetCommentableID(p.MorphID()).SetCommentableType(p.MorphKey())
+func (u *CommentUpdateOne) SetCommentable(p CommentCommentableParent) *CommentUpdateOne {
+	return u.SetCommentableID(p.MorphID()).SetCommentableType(comment.CommentableType(string(p.MorphKey())))
 }
 
 // ClearCommentable clears the polymorphic parent on the single-row UpdateOne.
@@ -85,9 +194,9 @@ func (u *CommentUpdateOne) ClearCommentable() *CommentUpdateOne {
 }
 
 // SetCommentable sets the polymorphic parent on the Mutation.
-func (m *CommentMutation) SetCommentable(p Morphable) *CommentMutation {
+func (m *CommentMutation) SetCommentable(p CommentCommentableParent) *CommentMutation {
 	m.SetCommentableID(p.MorphID())
-	m.SetCommentableType(p.MorphKey())
+	m.SetCommentableType(comment.CommentableType(string(p.MorphKey())))
 	return m
 }
 
@@ -98,14 +207,88 @@ func (m *CommentMutation) ClearCommentable() *CommentMutation {
 	return m
 }
 
+// CommentCommentableIs returns a predicate that matches Comment
+// rows pointing at the given parent — both the id and the morph type must
+// match. The parent is restricted to the AllowedTypes via the sealed
+// CommentCommentableParent interface.
+//
+//	client.Comment.Query().Where(CommentCommentableIs(post)).All(ctx)
+func CommentCommentableIs(p CommentCommentableParent) predicate.Comment {
+	return comment.And(
+		comment.CommentableIDEQ(p.MorphID()),
+		comment.CommentableTypeEQ(comment.CommentableType(string(p.MorphKey()))),
+	)
+}
+
+// CommentCommentableIsType returns a predicate that matches
+// Comment rows whose polymorphic parent is *any instance* of the given
+// morph type. Accepts only the codegen-emitted MorphKey constants.
+//
+//	client.Comment.Query().
+//	    Where(CommentCommentableIsType(PostMorphKey)).
+//	    All(ctx)
+func CommentCommentableIsType(k MorphKey) predicate.Comment {
+	return comment.CommentableTypeEQ(comment.CommentableType(string(k)))
+}
+
+// QueryCommentable resolves the polymorphic parent of this Comment
+// and returns it through the sealed-interface return type. The caller
+// type-switches on the result to recover the concrete parent — only the
+// types listed in MorphTo's AllowedTypes are possible branches.
+//
+// Laravel equivalent:
+//
+//	$commentable = $comment->commentable;  // Post | Video | null
+//
+// entpoly:
+//
+//	parent, err := comment.QueryCommentable(ctx)
+//	if err != nil { return err }
+//	switch p := parent.(type) {
+//	case *Post:
+//	    // use p as *Post
+//	case *Video:
+//	    // use p as *Video
+//	case nil:
+//	    // no parent set
+//	}
+//
+// Returns (nil, nil) when the discriminator pair is unset. Returns a
+// typed error when the persisted morph type is not in the allowed set
+// (e.g. data written by a different schema version or a bypass via raw
+// SQL despite the DB enum constraint).
+func (c *Comment) QueryCommentable(ctx context.Context) (CommentCommentableParent, error) {
+	if c.CommentableID == nil || c.CommentableType == nil {
+		return nil, nil
+	}
+	switch *c.CommentableType {
+	case comment.CommentableType(string(PostMorphKey)):
+		id, err := strconv.Atoi(*c.CommentableID)
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse Post id %q: %w", *c.CommentableID, err)
+		}
+		return NewPostClient(c.config).Get(ctx, id)
+	case comment.CommentableType(string(VideoMorphKey)):
+		id, err := strconv.Atoi(*c.CommentableID)
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse Video id %q: %w", *c.CommentableID, err)
+		}
+		return NewVideoClient(c.config).Get(ctx, id)
+	default:
+		return nil, fmt.Errorf("entpoly: unknown morph type %q for Comment.commentable", *c.CommentableType)
+	}
+}
+
 // SetImageable sets the polymorphic parent on the Create builder.
-func (c *ImageCreate) SetImageable(p Morphable) *ImageCreate {
-	return c.SetImageableID(p.MorphID()).SetImageableType(p.MorphKey())
+// Accepts only types declared in the schema's AllowedTypes — see
+// ImageImageableParent.
+func (c *ImageCreate) SetImageable(p ImageImageableParent) *ImageCreate {
+	return c.SetImageableID(p.MorphID()).SetImageableType(image.ImageableType(string(p.MorphKey())))
 }
 
 // SetImageable sets the polymorphic parent on the Update builder.
-func (u *ImageUpdate) SetImageable(p Morphable) *ImageUpdate {
-	return u.SetImageableID(p.MorphID()).SetImageableType(p.MorphKey())
+func (u *ImageUpdate) SetImageable(p ImageImageableParent) *ImageUpdate {
+	return u.SetImageableID(p.MorphID()).SetImageableType(image.ImageableType(string(p.MorphKey())))
 }
 
 // ClearImageable clears the polymorphic parent on the Update builder.
@@ -114,8 +297,8 @@ func (u *ImageUpdate) ClearImageable() *ImageUpdate {
 }
 
 // SetImageable sets the polymorphic parent on the single-row UpdateOne.
-func (u *ImageUpdateOne) SetImageable(p Morphable) *ImageUpdateOne {
-	return u.SetImageableID(p.MorphID()).SetImageableType(p.MorphKey())
+func (u *ImageUpdateOne) SetImageable(p ImageImageableParent) *ImageUpdateOne {
+	return u.SetImageableID(p.MorphID()).SetImageableType(image.ImageableType(string(p.MorphKey())))
 }
 
 // ClearImageable clears the polymorphic parent on the single-row UpdateOne.
@@ -124,9 +307,9 @@ func (u *ImageUpdateOne) ClearImageable() *ImageUpdateOne {
 }
 
 // SetImageable sets the polymorphic parent on the Mutation.
-func (m *ImageMutation) SetImageable(p Morphable) *ImageMutation {
+func (m *ImageMutation) SetImageable(p ImageImageableParent) *ImageMutation {
 	m.SetImageableID(p.MorphID())
-	m.SetImageableType(p.MorphKey())
+	m.SetImageableType(image.ImageableType(string(p.MorphKey())))
 	return m
 }
 
@@ -137,14 +320,80 @@ func (m *ImageMutation) ClearImageable() *ImageMutation {
 	return m
 }
 
+// ImageImageableIs returns a predicate that matches Image
+// rows pointing at the given parent — both the id and the morph type must
+// match. The parent is restricted to the AllowedTypes via the sealed
+// ImageImageableParent interface.
+//
+//	client.Image.Query().Where(ImageImageableIs(post)).All(ctx)
+func ImageImageableIs(p ImageImageableParent) predicate.Image {
+	return image.And(
+		image.ImageableIDEQ(p.MorphID()),
+		image.ImageableTypeEQ(image.ImageableType(string(p.MorphKey()))),
+	)
+}
+
+// ImageImageableIsType returns a predicate that matches
+// Image rows whose polymorphic parent is *any instance* of the given
+// morph type. Accepts only the codegen-emitted MorphKey constants.
+//
+//	client.Image.Query().
+//	    Where(ImageImageableIsType(PostMorphKey)).
+//	    All(ctx)
+func ImageImageableIsType(k MorphKey) predicate.Image {
+	return image.ImageableTypeEQ(image.ImageableType(string(k)))
+}
+
+// QueryImageable resolves the polymorphic parent of this Image
+// and returns it through the sealed-interface return type. The caller
+// type-switches on the result to recover the concrete parent — only the
+// types listed in MorphTo's AllowedTypes are possible branches.
+//
+// Laravel equivalent:
+//
+//	$commentable = $comment->commentable;  // Post | Video | null
+//
+// entpoly:
+//
+//	parent, err := comment.QueryImageable(ctx)
+//	if err != nil { return err }
+//	switch p := parent.(type) {
+//	case *Post:
+//	    // use p as *Post
+//	case nil:
+//	    // no parent set
+//	}
+//
+// Returns (nil, nil) when the discriminator pair is unset. Returns a
+// typed error when the persisted morph type is not in the allowed set
+// (e.g. data written by a different schema version or a bypass via raw
+// SQL despite the DB enum constraint).
+func (c *Image) QueryImageable(ctx context.Context) (ImageImageableParent, error) {
+	if c.ImageableID == nil || c.ImageableType == nil {
+		return nil, nil
+	}
+	switch *c.ImageableType {
+	case image.ImageableType(string(PostMorphKey)):
+		id, err := strconv.Atoi(*c.ImageableID)
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse Post id %q: %w", *c.ImageableID, err)
+		}
+		return NewPostClient(c.config).Get(ctx, id)
+	default:
+		return nil, fmt.Errorf("entpoly: unknown morph type %q for Image.imageable", *c.ImageableType)
+	}
+}
+
 // SetTaggable sets the polymorphic parent on the Create builder.
-func (c *TaggableCreate) SetTaggable(p Morphable) *TaggableCreate {
-	return c.SetTaggableID(p.MorphID()).SetTaggableType(p.MorphKey())
+// Accepts only types declared in the schema's AllowedTypes — see
+// TaggableTaggableParent.
+func (c *TaggableCreate) SetTaggable(p TaggableTaggableParent) *TaggableCreate {
+	return c.SetTaggableID(p.MorphID()).SetTaggableType(taggable.TaggableType(string(p.MorphKey())))
 }
 
 // SetTaggable sets the polymorphic parent on the Update builder.
-func (u *TaggableUpdate) SetTaggable(p Morphable) *TaggableUpdate {
-	return u.SetTaggableID(p.MorphID()).SetTaggableType(p.MorphKey())
+func (u *TaggableUpdate) SetTaggable(p TaggableTaggableParent) *TaggableUpdate {
+	return u.SetTaggableID(p.MorphID()).SetTaggableType(taggable.TaggableType(string(p.MorphKey())))
 }
 
 // ClearTaggable clears the polymorphic parent on the Update builder.
@@ -153,8 +402,8 @@ func (u *TaggableUpdate) ClearTaggable() *TaggableUpdate {
 }
 
 // SetTaggable sets the polymorphic parent on the single-row UpdateOne.
-func (u *TaggableUpdateOne) SetTaggable(p Morphable) *TaggableUpdateOne {
-	return u.SetTaggableID(p.MorphID()).SetTaggableType(p.MorphKey())
+func (u *TaggableUpdateOne) SetTaggable(p TaggableTaggableParent) *TaggableUpdateOne {
+	return u.SetTaggableID(p.MorphID()).SetTaggableType(taggable.TaggableType(string(p.MorphKey())))
 }
 
 // ClearTaggable clears the polymorphic parent on the single-row UpdateOne.
@@ -163,9 +412,9 @@ func (u *TaggableUpdateOne) ClearTaggable() *TaggableUpdateOne {
 }
 
 // SetTaggable sets the polymorphic parent on the Mutation.
-func (m *TaggableMutation) SetTaggable(p Morphable) *TaggableMutation {
+func (m *TaggableMutation) SetTaggable(p TaggableTaggableParent) *TaggableMutation {
 	m.SetTaggableID(p.MorphID())
-	m.SetTaggableType(p.MorphKey())
+	m.SetTaggableType(taggable.TaggableType(string(p.MorphKey())))
 	return m
 }
 
@@ -174,4 +423,134 @@ func (m *TaggableMutation) ClearTaggable() *TaggableMutation {
 	m.ClearTaggableID()
 	m.ClearTaggableType()
 	return m
+}
+
+// TaggableTaggableIs returns a predicate that matches Taggable
+// rows pointing at the given parent — both the id and the morph type must
+// match. The parent is restricted to the AllowedTypes via the sealed
+// TaggableTaggableParent interface.
+//
+//	client.Taggable.Query().Where(TaggableTaggableIs(post)).All(ctx)
+func TaggableTaggableIs(p TaggableTaggableParent) predicate.Taggable {
+	return taggable.And(
+		taggable.TaggableIDEQ(p.MorphID()),
+		taggable.TaggableTypeEQ(taggable.TaggableType(string(p.MorphKey()))),
+	)
+}
+
+// TaggableTaggableIsType returns a predicate that matches
+// Taggable rows whose polymorphic parent is *any instance* of the given
+// morph type. Accepts only the codegen-emitted MorphKey constants.
+//
+//	client.Taggable.Query().
+//	    Where(TaggableTaggableIsType(PostMorphKey)).
+//	    All(ctx)
+func TaggableTaggableIsType(k MorphKey) predicate.Taggable {
+	return taggable.TaggableTypeEQ(taggable.TaggableType(string(k)))
+}
+
+// QueryTaggable resolves the polymorphic parent of this Taggable
+// and returns it through the sealed-interface return type. The caller
+// type-switches on the result to recover the concrete parent — only the
+// types listed in MorphTo's AllowedTypes are possible branches.
+//
+// Laravel equivalent:
+//
+//	$commentable = $comment->commentable;  // Post | Video | null
+//
+// entpoly:
+//
+//	parent, err := comment.QueryTaggable(ctx)
+//	if err != nil { return err }
+//	switch p := parent.(type) {
+//	case *Post:
+//	    // use p as *Post
+//	case *Video:
+//	    // use p as *Video
+//	case nil:
+//	    // no parent set
+//	}
+//
+// Returns (nil, nil) when the discriminator pair is unset. Returns a
+// typed error when the persisted morph type is not in the allowed set
+// (e.g. data written by a different schema version or a bypass via raw
+// SQL despite the DB enum constraint).
+func (c *Taggable) QueryTaggable(ctx context.Context) (TaggableTaggableParent, error) {
+	if c.TaggableID == nil || c.TaggableType == nil {
+		return nil, nil
+	}
+	switch *c.TaggableType {
+	case taggable.TaggableType(string(PostMorphKey)):
+		id, err := strconv.Atoi(*c.TaggableID)
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse Post id %q: %w", *c.TaggableID, err)
+		}
+		return NewPostClient(c.config).Get(ctx, id)
+	case taggable.TaggableType(string(VideoMorphKey)):
+		id, err := strconv.Atoi(*c.TaggableID)
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse Video id %q: %w", *c.TaggableID, err)
+		}
+		return NewVideoClient(c.config).Get(ctx, id)
+	default:
+		return nil, fmt.Errorf("entpoly: unknown morph type %q for Taggable.taggable", *c.TaggableType)
+	}
+}
+
+// QueryComments returns a query builder for all Comment rows
+// polymorphically attached to this Post via the
+// "commentable" relation. The query is composable — chain .Where(),
+// .Order(), .Limit(), .All(ctx), .First(ctx), etc.
+//
+//	// Laravel:    $comments = $post->comments;
+//	// entpoly:    comments, _ := post.QueryComments().All(ctx)
+//	//             page, _    := post.QueryComments().Limit(10).All(ctx)
+func (p *Post) QueryComments() *CommentQuery {
+	return NewCommentClient(p.config).Query().
+		Where(
+			comment.CommentableIDEQ(p.MorphID()),
+			comment.CommentableTypeEQ(comment.CommentableType(string(p.MorphKey()))),
+		)
+}
+
+// QueryFeaturedImage returns the single Image polymorphically
+// attached to this Post via the "imageable" relation,
+// or (nil, nil) when no row matches. Laravel-style accessor — equivalent
+// to PHP's:
+//
+//	$image = $post->image;  // ← Laravel
+//	img, err := post.QueryFeaturedImage(ctx)  // ← entpoly
+func (p *Post) QueryFeaturedImage(ctx context.Context) (*Image, error) {
+	res, err := NewImageClient(p.config).Query().
+		Where(
+			image.ImageableIDEQ(p.MorphID()),
+			image.ImageableTypeEQ(image.ImageableType(string(p.MorphKey()))),
+		).
+		First(ctx)
+	if err != nil {
+		// IsNotFound is the "no row" case — return (nil, nil) so the
+		// caller can null-check without unwrapping the error type. Any
+		// other error (driver, context cancel, ...) is propagated.
+		if IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return res, nil
+}
+
+// QueryComments returns a query builder for all Comment rows
+// polymorphically attached to this Video via the
+// "commentable" relation. The query is composable — chain .Where(),
+// .Order(), .Limit(), .All(ctx), .First(ctx), etc.
+//
+//	// Laravel:    $comments = $post->comments;
+//	// entpoly:    comments, _ := post.QueryComments().All(ctx)
+//	//             page, _    := post.QueryComments().Limit(10).All(ctx)
+func (p *Video) QueryComments() *CommentQuery {
+	return NewCommentClient(p.config).Query().
+		Where(
+			comment.CommentableIDEQ(p.MorphID()),
+			comment.CommentableTypeEQ(comment.CommentableType(string(p.MorphKey()))),
+		)
 }

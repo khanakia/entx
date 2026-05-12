@@ -19,7 +19,7 @@ type Comment struct {
 	// CommentableID holds the value of the "commentable_id" field.
 	CommentableID *string `json:"commentable_id,omitempty"`
 	// CommentableType holds the value of the "commentable_type" field.
-	CommentableType *string `json:"commentable_type,omitempty"`
+	CommentableType *comment.CommentableType `json:"commentable_type,omitempty"`
 	// Body holds the value of the "body" field.
 	Body           string `json:"body,omitempty"`
 	post_comments  *int
@@ -72,8 +72,8 @@ func (_m *Comment) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field commentable_type", values[i])
 			} else if value.Valid {
-				_m.CommentableType = new(string)
-				*_m.CommentableType = value.String
+				_m.CommentableType = new(comment.CommentableType)
+				*_m.CommentableType = comment.CommentableType(value.String)
 			}
 		case comment.FieldBody:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -138,7 +138,7 @@ func (_m *Comment) String() string {
 	builder.WriteString(", ")
 	if v := _m.CommentableType; v != nil {
 		builder.WriteString("commentable_type=")
-		builder.WriteString(*v)
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("body=")

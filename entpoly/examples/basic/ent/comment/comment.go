@@ -3,6 +3,8 @@
 package comment
 
 import (
+	"fmt"
+
 	"entgo.io/ent/dialect/sql"
 )
 
@@ -49,6 +51,29 @@ func ValidColumn(column string) bool {
 		}
 	}
 	return false
+}
+
+// CommentableType defines the type for the "commentable_type" enum field.
+type CommentableType string
+
+// CommentableType values.
+const (
+	CommentableTypePost  CommentableType = "post"
+	CommentableTypeVideo CommentableType = "video"
+)
+
+func (ct CommentableType) String() string {
+	return string(ct)
+}
+
+// CommentableTypeValidator is a validator for the "commentable_type" field enum values. It is called by the builders before save.
+func CommentableTypeValidator(ct CommentableType) error {
+	switch ct {
+	case CommentableTypePost, CommentableTypeVideo:
+		return nil
+	default:
+		return fmt.Errorf("comment: invalid enum value for commentable_type field: %q", ct)
+	}
 }
 
 // OrderOption defines the ordering options for the Comment queries.

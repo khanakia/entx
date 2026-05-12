@@ -1,3 +1,47 @@
+// edge.go — public schema-time API for declaring polymorphic edges. Every
+// type users invoke from inside their schema's Edges() return method is
+// defined here. The four shapes are:
+//
+//	MorphTo         child  →  one-of-N parents     (declares the relation)
+//	MorphMany       parent →  many children        (back-ref, one-to-many)
+//	MorphOne        parent →  one child            (back-ref, one-to-one)
+//	MorphedByMany   holder →  one-of-N parents     (M2M back-ref via pivot)
+//
+// Each builder type implements ent.Edge by exposing Descriptor() and carries
+// a markerAnnotation that flags it for the preprocess pass. The marker is
+// the ONLY mechanism by which our codegen recognises polymorphic edges in
+// the loaded gen.Graph — renaming MarkerName breaks every caller.
+//
+// Notes:
+//
+//   - The edge.Descriptor.Type field MUST resolve to a real schema name
+//     for ent's graph builder to accept the edge. For MorphTo (which has
+//     no concrete target — that's the whole point of polymorphism) we
+//     use the first allowed parent as a placeholder Type. preprocess
+//     strips the edge from gen.Type.Edges before ent's templates run, so
+//     the placeholder never escapes into generated code.
+//
+//   - schemaName() is the reflection helper that turns Post.Type (a
+//     method value of type func(Post)) into the schema name string
+//     "Post". ent uses the same trick internally for edge.To. If a
+//     caller passes something other than a method value (e.g. a nil or
+//     an int), schemaName returns "" and the edge is silently filtered
+//     out — be careful when extending the API to validate this.
+//
+//   - The builder methods (.IDColumn, .TypeColumn, .IDType, etc.) mutate
+//     the marker annotation in place, then re-sync it into the
+//     descriptor's Annotations slice via syncAnnotation(). The sync is
+//     needed because the marker lives in two places: the builder field
+//     (for chaining) and the descriptor (for ent's annotation pipeline).
+//     Forgetting to sync after mutation produces silent stale data at
+//     codegen time.
+//
+//   - When adding a new builder type:
+//     (1) define a struct with a *edge.Descriptor + *markerAnnotation.
+//     (2) implement Descriptor() and add a `var _ ent.Edge = ...` check.
+//     (3) add a constructor that sets Kind to a new string constant.
+//     (4) update preprocess.go's dispatch switch to handle the new Kind.
+//     (5) update state.go + buildTmplData + the template + tests.
 package entpoly
 
 import (

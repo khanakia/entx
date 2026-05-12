@@ -61,15 +61,17 @@ func (Post) Edges() []ent.Edge {
 img, _ := client.Image.Create().SetURL("https://...").SetImageable(post).Save(ctx)
 _ = img // img.ImageableID / img.ImageableType are now populated.
 
-// Manual back-ref (v1):
-import "your/ent/image"
+// Laravel: $post->image → entpoly: post.QueryFeaturedImage(ctx)
+featured, err := post.QueryFeaturedImage(ctx)
+// (nil, nil) when the post has no featured image; typed (*Image, nil) otherwise.
 
-featured, _ := client.Image.Query().
-    Where(
-        image.ImageableIDEQ(post.MorphID()),
-        image.ImageableTypeEQ("post"),
-    ).
-    Only(ctx)
+// And the reverse — img.QueryImageable(ctx) returns the sealed
+// interface ImageImageableParent (only *Post here, since Image's
+// AllowedTypes is just Post).
+parent, _ := img.QueryImageable(ctx)
+if p, ok := parent.(*ent.Post); ok {
+    fmt.Println(p.Title)
+}
 ```
 
 For DB-enforced 1:1, add a unique index on the child:
@@ -127,19 +129,25 @@ func (Video) Edges() []ent.Edge {
 ### Usage
 
 ```go
+// Attach a comment to a post.
 c, _ := client.Comment.Create().
     SetBody("Nice!").
-    SetCommentable(post).
+    SetCommentable(post).   // sealed-interface param — Article fails to compile
     Save(ctx)
 
-// All comments on a post (manual back-ref, v1):
-comments, _ := client.Comment.Query().
-    Where(
-        comment.CommentableIDEQ(post.MorphID()),
-        comment.CommentableTypeEQ("post"),
-    ).
+// Laravel: $post->comments  → entpoly: post.QueryComments()
+comments, _ := post.QueryComments().
     Order(ent.Desc(comment.FieldCreatedAt)).
     All(ctx)
+
+// Laravel: $comment->commentable → entpoly: c.QueryCommentable(ctx)
+parent, _ := c.QueryCommentable(ctx)
+switch p := parent.(type) {
+case *ent.Post:  /* typed *Post  */
+case *ent.Video: /* typed *Video */
+case nil:        /* unset        */
+}
+// case *ent.Article: → compile error (not in AllowedTypes)
 ```
 
 ## Shape 3 — many-to-many polymorphic (`MorphedByMany` + polymorphic pivot)

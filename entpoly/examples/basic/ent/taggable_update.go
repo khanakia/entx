@@ -49,13 +49,13 @@ func (_u *TaggableUpdate) ClearTaggableID() *TaggableUpdate {
 }
 
 // SetTaggableType sets the "taggable_type" field.
-func (_u *TaggableUpdate) SetTaggableType(v string) *TaggableUpdate {
+func (_u *TaggableUpdate) SetTaggableType(v taggable.TaggableType) *TaggableUpdate {
 	_u.mutation.SetTaggableType(v)
 	return _u
 }
 
 // SetNillableTaggableType sets the "taggable_type" field if the given value is not nil.
-func (_u *TaggableUpdate) SetNillableTaggableType(v *string) *TaggableUpdate {
+func (_u *TaggableUpdate) SetNillableTaggableType(v *taggable.TaggableType) *TaggableUpdate {
 	if v != nil {
 		_u.SetTaggableType(*v)
 	}
@@ -162,6 +162,16 @@ func (_u *TaggableUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *TaggableUpdate) check() error {
+	if v, ok := _u.mutation.TaggableType(); ok {
+		if err := taggable.TaggableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "taggable_type", err: fmt.Errorf(`ent: validator failed for field "Taggable.taggable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *TaggableUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaggableUpdate {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -169,6 +179,9 @@ func (_u *TaggableUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *Tagga
 }
 
 func (_u *TaggableUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(taggable.Table, taggable.Columns, sqlgraph.NewFieldSpec(taggable.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -184,10 +197,10 @@ func (_u *TaggableUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		_spec.ClearField(taggable.FieldTaggableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.TaggableType(); ok {
-		_spec.SetField(taggable.FieldTaggableType, field.TypeString, value)
+		_spec.SetField(taggable.FieldTaggableType, field.TypeEnum, value)
 	}
 	if _u.mutation.TaggableTypeCleared() {
-		_spec.ClearField(taggable.FieldTaggableType, field.TypeString)
+		_spec.ClearField(taggable.FieldTaggableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.TagID(); ok {
 		_spec.SetField(taggable.FieldTagID, field.TypeInt, value)
@@ -250,13 +263,13 @@ func (_u *TaggableUpdateOne) ClearTaggableID() *TaggableUpdateOne {
 }
 
 // SetTaggableType sets the "taggable_type" field.
-func (_u *TaggableUpdateOne) SetTaggableType(v string) *TaggableUpdateOne {
+func (_u *TaggableUpdateOne) SetTaggableType(v taggable.TaggableType) *TaggableUpdateOne {
 	_u.mutation.SetTaggableType(v)
 	return _u
 }
 
 // SetNillableTaggableType sets the "taggable_type" field if the given value is not nil.
-func (_u *TaggableUpdateOne) SetNillableTaggableType(v *string) *TaggableUpdateOne {
+func (_u *TaggableUpdateOne) SetNillableTaggableType(v *taggable.TaggableType) *TaggableUpdateOne {
 	if v != nil {
 		_u.SetTaggableType(*v)
 	}
@@ -376,6 +389,16 @@ func (_u *TaggableUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *TaggableUpdateOne) check() error {
+	if v, ok := _u.mutation.TaggableType(); ok {
+		if err := taggable.TaggableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "taggable_type", err: fmt.Errorf(`ent: validator failed for field "Taggable.taggable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *TaggableUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaggableUpdateOne {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -383,6 +406,9 @@ func (_u *TaggableUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *Ta
 }
 
 func (_u *TaggableUpdateOne) sqlSave(ctx context.Context) (_node *Taggable, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(taggable.Table, taggable.Columns, sqlgraph.NewFieldSpec(taggable.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -415,10 +441,10 @@ func (_u *TaggableUpdateOne) sqlSave(ctx context.Context) (_node *Taggable, err 
 		_spec.ClearField(taggable.FieldTaggableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.TaggableType(); ok {
-		_spec.SetField(taggable.FieldTaggableType, field.TypeString, value)
+		_spec.SetField(taggable.FieldTaggableType, field.TypeEnum, value)
 	}
 	if _u.mutation.TaggableTypeCleared() {
-		_spec.ClearField(taggable.FieldTaggableType, field.TypeString)
+		_spec.ClearField(taggable.FieldTaggableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.TagID(); ok {
 		_spec.SetField(taggable.FieldTagID, field.TypeInt, value)

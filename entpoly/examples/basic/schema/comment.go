@@ -19,7 +19,14 @@ type Comment struct{ ent.Schema }
 // diagnostic.
 func (Comment) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		entpoly.MorphMixin("commentable"),
+		// MixinAllowed promotes the type column to a real enum so the
+		// database (CHECK constraint / native ENUM type) and ent's
+		// predicate package both enforce the closed set. Values must
+		// agree with the AllowedTypes passed to the MorphTo edge below
+		// — preprocess catches drift at codegen time.
+		entpoly.MorphMixin("commentable",
+			entpoly.MixinAllowed(Post.Type, Video.Type),
+		),
 	}
 }
 

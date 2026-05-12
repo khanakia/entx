@@ -57,11 +57,6 @@ func CommentableID(v string) predicate.Comment {
 	return predicate.Comment(sql.FieldEQ(FieldCommentableID, v))
 }
 
-// CommentableType applies equality check predicate on the "commentable_type" field. It's identical to CommentableTypeEQ.
-func CommentableType(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldEQ(FieldCommentableType, v))
-}
-
 // Body applies equality check predicate on the "body" field. It's identical to BodyEQ.
 func Body(v string) predicate.Comment {
 	return predicate.Comment(sql.FieldEQ(FieldBody, v))
@@ -143,58 +138,23 @@ func CommentableIDContainsFold(v string) predicate.Comment {
 }
 
 // CommentableTypeEQ applies the EQ predicate on the "commentable_type" field.
-func CommentableTypeEQ(v string) predicate.Comment {
+func CommentableTypeEQ(v CommentableType) predicate.Comment {
 	return predicate.Comment(sql.FieldEQ(FieldCommentableType, v))
 }
 
 // CommentableTypeNEQ applies the NEQ predicate on the "commentable_type" field.
-func CommentableTypeNEQ(v string) predicate.Comment {
+func CommentableTypeNEQ(v CommentableType) predicate.Comment {
 	return predicate.Comment(sql.FieldNEQ(FieldCommentableType, v))
 }
 
 // CommentableTypeIn applies the In predicate on the "commentable_type" field.
-func CommentableTypeIn(vs ...string) predicate.Comment {
+func CommentableTypeIn(vs ...CommentableType) predicate.Comment {
 	return predicate.Comment(sql.FieldIn(FieldCommentableType, vs...))
 }
 
 // CommentableTypeNotIn applies the NotIn predicate on the "commentable_type" field.
-func CommentableTypeNotIn(vs ...string) predicate.Comment {
+func CommentableTypeNotIn(vs ...CommentableType) predicate.Comment {
 	return predicate.Comment(sql.FieldNotIn(FieldCommentableType, vs...))
-}
-
-// CommentableTypeGT applies the GT predicate on the "commentable_type" field.
-func CommentableTypeGT(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldGT(FieldCommentableType, v))
-}
-
-// CommentableTypeGTE applies the GTE predicate on the "commentable_type" field.
-func CommentableTypeGTE(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldGTE(FieldCommentableType, v))
-}
-
-// CommentableTypeLT applies the LT predicate on the "commentable_type" field.
-func CommentableTypeLT(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldLT(FieldCommentableType, v))
-}
-
-// CommentableTypeLTE applies the LTE predicate on the "commentable_type" field.
-func CommentableTypeLTE(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldLTE(FieldCommentableType, v))
-}
-
-// CommentableTypeContains applies the Contains predicate on the "commentable_type" field.
-func CommentableTypeContains(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldContains(FieldCommentableType, v))
-}
-
-// CommentableTypeHasPrefix applies the HasPrefix predicate on the "commentable_type" field.
-func CommentableTypeHasPrefix(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldHasPrefix(FieldCommentableType, v))
-}
-
-// CommentableTypeHasSuffix applies the HasSuffix predicate on the "commentable_type" field.
-func CommentableTypeHasSuffix(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldHasSuffix(FieldCommentableType, v))
 }
 
 // CommentableTypeIsNil applies the IsNil predicate on the "commentable_type" field.
@@ -205,16 +165,6 @@ func CommentableTypeIsNil() predicate.Comment {
 // CommentableTypeNotNil applies the NotNil predicate on the "commentable_type" field.
 func CommentableTypeNotNil() predicate.Comment {
 	return predicate.Comment(sql.FieldNotNull(FieldCommentableType))
-}
-
-// CommentableTypeEqualFold applies the EqualFold predicate on the "commentable_type" field.
-func CommentableTypeEqualFold(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldEqualFold(FieldCommentableType, v))
-}
-
-// CommentableTypeContainsFold applies the ContainsFold predicate on the "commentable_type" field.
-func CommentableTypeContainsFold(v string) predicate.Comment {
-	return predicate.Comment(sql.FieldContainsFold(FieldCommentableType, v))
 }
 
 // BodyEQ applies the EQ predicate on the "body" field.

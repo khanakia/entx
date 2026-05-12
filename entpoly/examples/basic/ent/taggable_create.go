@@ -34,13 +34,13 @@ func (_c *TaggableCreate) SetNillableTaggableID(v *string) *TaggableCreate {
 }
 
 // SetTaggableType sets the "taggable_type" field.
-func (_c *TaggableCreate) SetTaggableType(v string) *TaggableCreate {
+func (_c *TaggableCreate) SetTaggableType(v taggable.TaggableType) *TaggableCreate {
 	_c.mutation.SetTaggableType(v)
 	return _c
 }
 
 // SetNillableTaggableType sets the "taggable_type" field if the given value is not nil.
-func (_c *TaggableCreate) SetNillableTaggableType(v *string) *TaggableCreate {
+func (_c *TaggableCreate) SetNillableTaggableType(v *taggable.TaggableType) *TaggableCreate {
 	if v != nil {
 		_c.SetTaggableType(*v)
 	}
@@ -124,6 +124,11 @@ func (_c *TaggableCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *TaggableCreate) check() error {
+	if v, ok := _c.mutation.TaggableType(); ok {
+		if err := taggable.TaggableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "taggable_type", err: fmt.Errorf(`ent: validator failed for field "Taggable.taggable_type": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.TagID(); !ok {
 		return &ValidationError{Name: "tag_id", err: errors.New(`ent: missing required field "Taggable.tag_id"`)}
 	}
@@ -161,7 +166,7 @@ func (_c *TaggableCreate) createSpec() (*Taggable, *sqlgraph.CreateSpec) {
 		_node.TaggableID = &value
 	}
 	if value, ok := _c.mutation.TaggableType(); ok {
-		_spec.SetField(taggable.FieldTaggableType, field.TypeString, value)
+		_spec.SetField(taggable.FieldTaggableType, field.TypeEnum, value)
 		_node.TaggableType = &value
 	}
 	if value, ok := _c.mutation.TagID(); ok {

@@ -1,0 +1,418 @@
+// Runtime tests for the entpoly basic example. These exercise the
+// generated client end-to-end against an in-memory SQLite database
+// (pure-Go via modernc.org/sqlite — no cgo).
+//
+// What is verified here, that the codegen-pipeline tests in the entpoly
+// core package cannot verify:
+//
+//   - SetCommentable(post) actually writes both discriminator columns.
+//   - The persisted "*_type" value matches the morph-key constant emitted
+//     by codegen (PostMorphKey / VideoMorphKey / ImageMorphKey).
+//   - Reassigning the polymorphic parent across types works.
+//   - ClearCommentable() resets both columns to NULL.
+//   - The M2M pivot flow (Tag ↔ Post via Taggable) round-trips.
+//   - Back-ref predicates (CommentableTypeEQ + CommentableIDEQ) read
+//     back the same rows we wrote.
+package basic_test
+
+import (
+	"context"
+	"database/sql"
+	"testing"
+
+	entsql "entgo.io/ent/dialect/sql"
+	_ "modernc.org/sqlite"
+
+	"github.com/khanakia/entx/entpoly/examples/basic/ent"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
+)
+
+// openTestClient spins up an in-memory SQLite database via the pure-Go
+// modernc.org/sqlite driver and runs the auto-migration to create
+// every table. The returned client is fresh per test and cleaned up
+// via t.Cleanup so tests stay isolated.
+func openTestClient(t *testing.T) *ent.Client {
+	t.Helper()
+
+	// Foreign-key enforcement is off because polymorphic columns
+	// cannot carry FKs. We open with file::memory: to get a fresh
+	// in-memory database per test.
+	db, err := sql.Open("sqlite", "file:ent?mode=memory&cache=shared&_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	drv := entsql.OpenDB("sqlite3", db)
+	client := ent.NewClient(ent.Driver(drv))
+
+	if err := client.Schema.Create(context.Background()); err != nil {
+		t.Fatalf("schema migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	return client
+}
+
+// TestSetCommentableWritesBothColumns verifies the core Set<Morph>
+// behaviour: a single call writes the id and type discriminator pair
+// to the persisted columns.
+func TestSetCommentableWritesBothColumns(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("Hello").SaveX(ctx)
+
+	c := client.Comment.Create().
+		SetBody("Nice post!").
+		SetCommentable(post).
+		SaveX(ctx)
+
+	if c.CommentableID == nil {
+		t.Fatal("CommentableID is nil — Set did not write the id column")
+	}
+	if *c.CommentableID != post.MorphID() {
+		t.Errorf("CommentableID = %q, want %q", *c.CommentableID, post.MorphID())
+	}
+	if c.CommentableType == nil {
+		t.Fatal("CommentableType is nil — Set did not write the type column")
+	}
+	if *c.CommentableType != comment.CommentableType(string(ent.PostMorphKey)) {
+		t.Errorf("CommentableType = %q, want %q", *c.CommentableType, ent.PostMorphKey)
+	}
+}
+
+// TestMorphKeyConstantsMatchRuntimeMethod cross-checks that the per-type
+// constants (ent.PostMorphKey) match what the parent's MorphKey() method
+// returns at runtime. If these ever diverge, every back-ref query using
+// the constant would silently fail.
+func TestMorphKeyConstantsMatchRuntimeMethod(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("X").SaveX(ctx)
+	if post.MorphKey() != ent.PostMorphKey {
+		t.Errorf("Post.MorphKey() = %q, ent.PostMorphKey = %q", post.MorphKey(), ent.PostMorphKey)
+	}
+
+	video := client.Video.Create().SetTitle("Y").SetURL("u").SaveX(ctx)
+	if video.MorphKey() != ent.VideoMorphKey {
+		t.Errorf("Video.MorphKey() = %q, ent.VideoMorphKey = %q", video.MorphKey(), ent.VideoMorphKey)
+	}
+
+	img := client.Image.Create().SetURL("u").SetImageable(post).SaveX(ctx)
+	if img.MorphKey() != ent.ImageMorphKey {
+		t.Errorf("Image.MorphKey() = %q, ent.ImageMorphKey = %q", img.MorphKey(), ent.ImageMorphKey)
+	}
+}
+
+// TestReassignAcrossParentTypes verifies that the discriminator pair
+// correctly reroutes a child from one parent type to another. This is
+// the polymorphism payoff — a Comment that was attached to a Post can
+// be moved to a Video without schema changes.
+func TestReassignAcrossParentTypes(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	c := client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
+
+	// Sanity: starts on Post.
+	if *c.CommentableType != comment.CommentableType(string(ent.PostMorphKey)) {
+		t.Fatalf("initial type = %q, want %q", *c.CommentableType, ent.PostMorphKey)
+	}
+
+	// Reassign to Video.
+	c = c.Update().SetCommentable(video).SaveX(ctx)
+	if *c.CommentableType != comment.CommentableType(string(ent.VideoMorphKey)) {
+		t.Errorf("after reassign type = %q, want %q", *c.CommentableType, ent.VideoMorphKey)
+	}
+	if *c.CommentableID != video.MorphID() {
+		t.Errorf("after reassign id = %q, want %q", *c.CommentableID, video.MorphID())
+	}
+}
+
+// TestClearCommentableNullsBothColumns verifies the Clear<Morph> path:
+// both discriminator columns return to NULL so a downstream nil check
+// can detect "no parent" cleanly.
+func TestClearCommentableNullsBothColumns(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	c := client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
+
+	// Sanity: parent set before clear.
+	if c.CommentableID == nil {
+		t.Fatal("precondition failed — id should be set before Clear")
+	}
+
+	c = c.Update().ClearCommentable().SaveX(ctx)
+
+	if c.CommentableID != nil {
+		t.Errorf("CommentableID = %v, want nil after Clear", c.CommentableID)
+	}
+	if c.CommentableType != nil {
+		t.Errorf("CommentableType = %v, want nil after Clear", c.CommentableType)
+	}
+}
+
+// TestQueryBackRefByMorphKeyConstant uses the typed predicate package
+// together with the generated morph-key constant. This is the v1 read
+// path for back-references — typed-back-ref methods on parents land in
+// v2 codegen.
+func TestQueryBackRefByMorphKeyConstant(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	// Two comments on the post, one on the video.
+	_ = client.Comment.Create().SetBody("a").SetCommentable(post).SaveX(ctx)
+	_ = client.Comment.Create().SetBody("b").SetCommentable(post).SaveX(ctx)
+	_ = client.Comment.Create().SetBody("c").SetCommentable(video).SaveX(ctx)
+
+	// Typed predicate — id + type both match in a single helper. Pass
+	// the parent entity directly; no string literals anywhere.
+	postComments := client.Comment.Query().
+		Where(ent.CommentCommentableIs(post)).
+		AllX(ctx)
+	if len(postComments) != 2 {
+		t.Errorf("post comments = %d, want 2", len(postComments))
+	}
+
+	// Typed by-type predicate — accepts only the codegen-emitted
+	// MorphKey constants. Passing a string literal would fail to
+	// compile.
+	allPostChildren := client.Comment.Query().
+		Where(ent.CommentCommentableIsType(ent.PostMorphKey)).
+		AllX(ctx)
+	if len(allPostChildren) != 2 {
+		t.Errorf("by-type post comments = %d, want 2", len(allPostChildren))
+	}
+
+	videoComments := client.Comment.Query().
+		Where(ent.CommentCommentableIs(video)).
+		AllX(ctx)
+	if len(videoComments) != 1 {
+		t.Errorf("video comments = %d, want 1", len(videoComments))
+	}
+}
+
+// TestPolymorphicM2MPivotRoundTrip exercises the MorphedByMany flow
+// end-to-end: tag a post via the polymorphic pivot, then query back
+// the tags attached to that post using the same morph-key constants.
+func TestPolymorphicM2MPivotRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	golang := client.Tag.Create().SetName("golang").SaveX(ctx)
+	db := client.Tag.Create().SetName("database").SaveX(ctx)
+
+	// Attach two tags to the post via the polymorphic pivot.
+	_ = client.Taggable.Create().
+		SetTagID(golang.ID).
+		SetTaggable(post).
+		SetAddedBy("aman").
+		SaveX(ctx)
+	_ = client.Taggable.Create().
+		SetTagID(db.ID).
+		SetTaggable(post).
+		SaveX(ctx)
+
+	// And one tag on the video.
+	_ = client.Taggable.Create().
+		SetTagID(golang.ID).
+		SetTaggable(video).
+		SaveX(ctx)
+
+	// Typed pivot predicate — same shape as the comment one, just on
+	// the Taggable child instead.
+	postPivots := client.Taggable.Query().
+		Where(ent.TaggableTaggableIs(post)).
+		AllX(ctx)
+	if len(postPivots) != 2 {
+		t.Errorf("post pivots = %d, want 2", len(postPivots))
+	}
+	videoPivots := client.Taggable.Query().
+		Where(ent.TaggableTaggableIs(video)).
+		AllX(ctx)
+	if len(videoPivots) != 1 {
+		t.Errorf("video pivots = %d, want 1", len(videoPivots))
+	}
+
+	// Pivot extras (AddedBy) survive the round-trip.
+	var found bool
+	for _, p := range postPivots {
+		if p.AddedBy == "aman" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("pivot AddedBy=aman not found — pivot extras did not round-trip")
+	}
+}
+
+// TestQueryCommentableTypedReverseResolve is the v2 typed reverse
+// resolver — Laravel's `$comment->commentable`. The result type is the
+// sealed CommentCommentableParent interface, so the caller can ONLY
+// type-switch on Post or Video (the AllowedTypes). Article wouldn't
+// even be a syntactically valid case arm.
+func TestQueryCommentableTypedReverseResolve(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	// Attach a comment to a Post and resolve back to the typed parent.
+	c1 := client.Comment.Create().SetBody("a").SetCommentable(post).SaveX(ctx)
+	parent, err := c1.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable: %v", err)
+	}
+	switch p := parent.(type) {
+	case *ent.Post:
+		if p.ID != post.ID {
+			t.Errorf("resolved Post id = %d, want %d", p.ID, post.ID)
+		}
+	case *ent.Video:
+		t.Errorf("expected Post, got Video: %+v", p)
+	case nil:
+		t.Fatal("parent is nil")
+	}
+
+	// Reassign to a Video and re-resolve.
+	c1 = c1.Update().SetCommentable(video).SaveX(ctx)
+	parent, err = c1.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable after reassign: %v", err)
+	}
+	v, ok := parent.(*ent.Video)
+	if !ok {
+		t.Fatalf("expected *ent.Video after reassign, got %T", parent)
+	}
+	if v.ID != video.ID {
+		t.Errorf("resolved Video id = %d, want %d", v.ID, video.ID)
+	}
+
+	// Cleared parent → (nil, nil), no error.
+	c1 = c1.Update().ClearCommentable().SaveX(ctx)
+	parent, err = c1.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable after Clear: %v", err)
+	}
+	if parent != nil {
+		t.Errorf("expected nil parent after Clear, got %+v", parent)
+	}
+}
+
+// TestLaravelStyleAccessors mirrors Laravel's polymorphic relationship
+// accessors — $post->image (MorphOne) and $post->comments (MorphMany).
+// The generated entpoly methods are direct ent equivalents that
+// compose with ent's regular query builder for filtering and ordering.
+func TestLaravelStyleAccessors(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("Hello").SaveX(ctx)
+
+	// MorphMany — empty before any comments exist.
+	if got := post.QueryComments().CountX(ctx); got != 0 {
+		t.Errorf("empty post comments = %d, want 0", got)
+	}
+
+	// MorphOne — (nil, nil) when no row matches.
+	img, err := post.QueryFeaturedImage(ctx)
+	if err != nil {
+		t.Fatalf("QueryFeaturedImage with no row: %v", err)
+	}
+	if img != nil {
+		t.Errorf("QueryFeaturedImage = %+v, want nil", img)
+	}
+
+	// Attach two comments to the post via the typed setter.
+	_ = client.Comment.Create().SetBody("a").SetCommentable(post).SaveX(ctx)
+	_ = client.Comment.Create().SetBody("b").SetCommentable(post).SaveX(ctx)
+
+	// MorphMany — Laravel: $post->comments;
+	comments := post.QueryComments().AllX(ctx)
+	if len(comments) != 2 {
+		t.Errorf("post.QueryComments() = %d, want 2", len(comments))
+	}
+
+	// MorphMany composes with normal ent builders.
+	one := post.QueryComments().Limit(1).AllX(ctx)
+	if len(one) != 1 {
+		t.Errorf("post.QueryComments().Limit(1) = %d, want 1", len(one))
+	}
+
+	// MorphOne — Laravel: $post->image;
+	created := client.Image.Create().SetURL("hero.png").SetImageable(post).SaveX(ctx)
+	got, err := post.QueryFeaturedImage(ctx)
+	if err != nil {
+		t.Fatalf("QueryFeaturedImage: %v", err)
+	}
+	if got == nil || got.ID != created.ID {
+		t.Errorf("QueryFeaturedImage = %+v, want id=%d", got, created.ID)
+	}
+
+	// MorphMany on a different parent type — Video also has back-ref.
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+	_ = client.Comment.Create().SetBody("c").SetCommentable(video).SaveX(ctx)
+	if got := video.QueryComments().CountX(ctx); got != 1 {
+		t.Errorf("video.QueryComments() = %d, want 1", got)
+	}
+	// And the post's count is unchanged (back-refs are correctly scoped).
+	if got := post.QueryComments().CountX(ctx); got != 2 {
+		t.Errorf("post.QueryComments() after video comment = %d, want 2", got)
+	}
+}
+
+// TestInvalidEnumValueRejected verifies the database (via ent's
+// generated CommentableTypeValidator from field.Enum) refuses a write
+// with a morph type that is not in the AllowedTypes list. This is the
+// payoff of MixinAllowed — even raw bypass of the typed Set<Morph>
+// path is caught at the validator layer.
+func TestInvalidEnumValueRejected(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	// Use the raw setters to bypass the sealed-interface Set<Morph>;
+	// this is the closest a caller can get to "invalid write" through
+	// the typed builder API. The Create() call must fail before the
+	// row hits the database.
+	_, err := client.Comment.Create().
+		SetBody("hi").
+		SetCommentableID("999").
+		SetCommentableType(comment.CommentableType("article")).
+		Save(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid enum value, got nil — DB/validator did not reject 'article'")
+	}
+}
+
+// TestMorphOneFeaturedImage exercises the one-to-one shape using
+// SetImageable on the Image child and a manual back-ref read.
+func TestMorphOneFeaturedImage(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	img := client.Image.Create().SetURL("hero.png").SetImageable(post).SaveX(ctx)
+
+	if img.ImageableID == nil || *img.ImageableID != post.MorphID() {
+		t.Errorf("ImageableID = %v, want %q", img.ImageableID, post.MorphID())
+	}
+	if img.ImageableType == nil || *img.ImageableType != image.ImageableType(string(ent.PostMorphKey)) {
+		t.Errorf("ImageableType = %v, want %q", img.ImageableType, ent.PostMorphKey)
+	}
+}

@@ -3,6 +3,8 @@
 package image
 
 import (
+	"fmt"
+
 	"entgo.io/ent/dialect/sql"
 )
 
@@ -54,6 +56,28 @@ func ValidColumn(column string) bool {
 		}
 	}
 	return false
+}
+
+// ImageableType defines the type for the "imageable_type" enum field.
+type ImageableType string
+
+// ImageableType values.
+const (
+	ImageableTypePost ImageableType = "post"
+)
+
+func (it ImageableType) String() string {
+	return string(it)
+}
+
+// ImageableTypeValidator is a validator for the "imageable_type" field enum values. It is called by the builders before save.
+func ImageableTypeValidator(it ImageableType) error {
+	switch it {
+	case ImageableTypePost:
+		return nil
+	default:
+		return fmt.Errorf("image: invalid enum value for imageable_type field: %q", it)
+	}
 }
 
 // OrderOption defines the ordering options for the Image queries.

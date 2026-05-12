@@ -3,6 +3,8 @@
 package taggable
 
 import (
+	"fmt"
+
 	"entgo.io/ent/dialect/sql"
 )
 
@@ -49,6 +51,29 @@ var (
 	// DefaultSortOrder holds the default value on creation for the "sort_order" field.
 	DefaultSortOrder int
 )
+
+// TaggableType defines the type for the "taggable_type" enum field.
+type TaggableType string
+
+// TaggableType values.
+const (
+	TaggableTypePost  TaggableType = "post"
+	TaggableTypeVideo TaggableType = "video"
+)
+
+func (tt TaggableType) String() string {
+	return string(tt)
+}
+
+// TaggableTypeValidator is a validator for the "taggable_type" field enum values. It is called by the builders before save.
+func TaggableTypeValidator(tt TaggableType) error {
+	switch tt {
+	case TaggableTypePost, TaggableTypeVideo:
+		return nil
+	default:
+		return fmt.Errorf("taggable: invalid enum value for taggable_type field: %q", tt)
+	}
+}
 
 // OrderOption defines the ordering options for the Taggable queries.
 type OrderOption func(*sql.Selector)

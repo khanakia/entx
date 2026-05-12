@@ -43,7 +43,7 @@ type CommentMutation struct {
 	typ              string
 	id               *int
 	commentable_id   *string
-	commentable_type *string
+	commentable_type *comment.CommentableType
 	body             *string
 	clearedFields    map[string]struct{}
 	done             bool
@@ -199,12 +199,12 @@ func (m *CommentMutation) ResetCommentableID() {
 }
 
 // SetCommentableType sets the "commentable_type" field.
-func (m *CommentMutation) SetCommentableType(s string) {
-	m.commentable_type = &s
+func (m *CommentMutation) SetCommentableType(ct comment.CommentableType) {
+	m.commentable_type = &ct
 }
 
 // CommentableType returns the value of the "commentable_type" field in the mutation.
-func (m *CommentMutation) CommentableType() (r string, exists bool) {
+func (m *CommentMutation) CommentableType() (r comment.CommentableType, exists bool) {
 	v := m.commentable_type
 	if v == nil {
 		return
@@ -215,7 +215,7 @@ func (m *CommentMutation) CommentableType() (r string, exists bool) {
 // OldCommentableType returns the old "commentable_type" field's value of the Comment entity.
 // If the Comment object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *CommentMutation) OldCommentableType(ctx context.Context) (v *string, err error) {
+func (m *CommentMutation) OldCommentableType(ctx context.Context) (v *comment.CommentableType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldCommentableType is only allowed on UpdateOne operations")
 	}
@@ -373,7 +373,7 @@ func (m *CommentMutation) SetField(name string, value ent.Value) error {
 		m.SetCommentableID(v)
 		return nil
 	case comment.FieldCommentableType:
-		v, ok := value.(string)
+		v, ok := value.(comment.CommentableType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -518,7 +518,7 @@ type ImageMutation struct {
 	typ            string
 	id             *int
 	imageable_id   *string
-	imageable_type *string
+	imageable_type *image.ImageableType
 	url            *string
 	width          *int
 	addwidth       *int
@@ -678,12 +678,12 @@ func (m *ImageMutation) ResetImageableID() {
 }
 
 // SetImageableType sets the "imageable_type" field.
-func (m *ImageMutation) SetImageableType(s string) {
-	m.imageable_type = &s
+func (m *ImageMutation) SetImageableType(it image.ImageableType) {
+	m.imageable_type = &it
 }
 
 // ImageableType returns the value of the "imageable_type" field in the mutation.
-func (m *ImageMutation) ImageableType() (r string, exists bool) {
+func (m *ImageMutation) ImageableType() (r image.ImageableType, exists bool) {
 	v := m.imageable_type
 	if v == nil {
 		return
@@ -694,7 +694,7 @@ func (m *ImageMutation) ImageableType() (r string, exists bool) {
 // OldImageableType returns the old "imageable_type" field's value of the Image entity.
 // If the Image object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ImageMutation) OldImageableType(ctx context.Context) (v *string, err error) {
+func (m *ImageMutation) OldImageableType(ctx context.Context) (v *image.ImageableType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldImageableType is only allowed on UpdateOne operations")
 	}
@@ -1006,7 +1006,7 @@ func (m *ImageMutation) SetField(name string, value ent.Value) error {
 		m.SetImageableID(v)
 		return nil
 	case image.FieldImageableType:
-		v, ok := value.(string)
+		v, ok := value.(image.ImageableType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -1938,7 +1938,7 @@ type TaggableMutation struct {
 	typ           string
 	id            *int
 	taggable_id   *string
-	taggable_type *string
+	taggable_type *taggable.TaggableType
 	tag_id        *int
 	addtag_id     *int
 	added_by      *string
@@ -2098,12 +2098,12 @@ func (m *TaggableMutation) ResetTaggableID() {
 }
 
 // SetTaggableType sets the "taggable_type" field.
-func (m *TaggableMutation) SetTaggableType(s string) {
-	m.taggable_type = &s
+func (m *TaggableMutation) SetTaggableType(tt taggable.TaggableType) {
+	m.taggable_type = &tt
 }
 
 // TaggableType returns the value of the "taggable_type" field in the mutation.
-func (m *TaggableMutation) TaggableType() (r string, exists bool) {
+func (m *TaggableMutation) TaggableType() (r taggable.TaggableType, exists bool) {
 	v := m.taggable_type
 	if v == nil {
 		return
@@ -2114,7 +2114,7 @@ func (m *TaggableMutation) TaggableType() (r string, exists bool) {
 // OldTaggableType returns the old "taggable_type" field's value of the Taggable entity.
 // If the Taggable object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TaggableMutation) OldTaggableType(ctx context.Context) (v *string, err error) {
+func (m *TaggableMutation) OldTaggableType(ctx context.Context) (v *taggable.TaggableType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldTaggableType is only allowed on UpdateOne operations")
 	}
@@ -2411,7 +2411,7 @@ func (m *TaggableMutation) SetField(name string, value ent.Value) error {
 		m.SetTaggableID(v)
 		return nil
 	case taggable.FieldTaggableType:
-		v, ok := value.(string)
+		v, ok := value.(taggable.TaggableType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

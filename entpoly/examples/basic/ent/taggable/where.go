@@ -57,11 +57,6 @@ func TaggableID(v string) predicate.Taggable {
 	return predicate.Taggable(sql.FieldEQ(FieldTaggableID, v))
 }
 
-// TaggableType applies equality check predicate on the "taggable_type" field. It's identical to TaggableTypeEQ.
-func TaggableType(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldEQ(FieldTaggableType, v))
-}
-
 // TagID applies equality check predicate on the "tag_id" field. It's identical to TagIDEQ.
 func TagID(v int) predicate.Taggable {
 	return predicate.Taggable(sql.FieldEQ(FieldTagID, v))
@@ -153,58 +148,23 @@ func TaggableIDContainsFold(v string) predicate.Taggable {
 }
 
 // TaggableTypeEQ applies the EQ predicate on the "taggable_type" field.
-func TaggableTypeEQ(v string) predicate.Taggable {
+func TaggableTypeEQ(v TaggableType) predicate.Taggable {
 	return predicate.Taggable(sql.FieldEQ(FieldTaggableType, v))
 }
 
 // TaggableTypeNEQ applies the NEQ predicate on the "taggable_type" field.
-func TaggableTypeNEQ(v string) predicate.Taggable {
+func TaggableTypeNEQ(v TaggableType) predicate.Taggable {
 	return predicate.Taggable(sql.FieldNEQ(FieldTaggableType, v))
 }
 
 // TaggableTypeIn applies the In predicate on the "taggable_type" field.
-func TaggableTypeIn(vs ...string) predicate.Taggable {
+func TaggableTypeIn(vs ...TaggableType) predicate.Taggable {
 	return predicate.Taggable(sql.FieldIn(FieldTaggableType, vs...))
 }
 
 // TaggableTypeNotIn applies the NotIn predicate on the "taggable_type" field.
-func TaggableTypeNotIn(vs ...string) predicate.Taggable {
+func TaggableTypeNotIn(vs ...TaggableType) predicate.Taggable {
 	return predicate.Taggable(sql.FieldNotIn(FieldTaggableType, vs...))
-}
-
-// TaggableTypeGT applies the GT predicate on the "taggable_type" field.
-func TaggableTypeGT(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldGT(FieldTaggableType, v))
-}
-
-// TaggableTypeGTE applies the GTE predicate on the "taggable_type" field.
-func TaggableTypeGTE(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldGTE(FieldTaggableType, v))
-}
-
-// TaggableTypeLT applies the LT predicate on the "taggable_type" field.
-func TaggableTypeLT(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldLT(FieldTaggableType, v))
-}
-
-// TaggableTypeLTE applies the LTE predicate on the "taggable_type" field.
-func TaggableTypeLTE(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldLTE(FieldTaggableType, v))
-}
-
-// TaggableTypeContains applies the Contains predicate on the "taggable_type" field.
-func TaggableTypeContains(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldContains(FieldTaggableType, v))
-}
-
-// TaggableTypeHasPrefix applies the HasPrefix predicate on the "taggable_type" field.
-func TaggableTypeHasPrefix(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldHasPrefix(FieldTaggableType, v))
-}
-
-// TaggableTypeHasSuffix applies the HasSuffix predicate on the "taggable_type" field.
-func TaggableTypeHasSuffix(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldHasSuffix(FieldTaggableType, v))
 }
 
 // TaggableTypeIsNil applies the IsNil predicate on the "taggable_type" field.
@@ -215,16 +175,6 @@ func TaggableTypeIsNil() predicate.Taggable {
 // TaggableTypeNotNil applies the NotNil predicate on the "taggable_type" field.
 func TaggableTypeNotNil() predicate.Taggable {
 	return predicate.Taggable(sql.FieldNotNull(FieldTaggableType))
-}
-
-// TaggableTypeEqualFold applies the EqualFold predicate on the "taggable_type" field.
-func TaggableTypeEqualFold(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldEqualFold(FieldTaggableType, v))
-}
-
-// TaggableTypeContainsFold applies the ContainsFold predicate on the "taggable_type" field.
-func TaggableTypeContainsFold(v string) predicate.Taggable {
-	return predicate.Taggable(sql.FieldContainsFold(FieldTaggableType, v))
 }
 
 // TagIDEQ applies the EQ predicate on the "tag_id" field.

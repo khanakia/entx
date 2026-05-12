@@ -16,7 +16,7 @@ type Taggable struct{ ent.Schema }
 
 func (Taggable) Mixin() []ent.Mixin {
 	return []ent.Mixin{
-		entpoly.MorphMixin("taggable"),
+		entpoly.MorphMixin("taggable", entpoly.MixinAllowed(Post.Type, Video.Type)),
 	}
 }
 

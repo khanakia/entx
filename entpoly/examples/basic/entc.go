@@ -29,6 +29,8 @@ func main() {
 		)),
 	}
 	if err := entc.Generate("./schema", &gen.Config{
+		Target:   "./ent",
+		Package:  "github.com/khanakia/entx/entpoly/examples/basic/ent",
 		Features: []gen.Feature{gen.FeatureModifier},
 	}, opts...); err != nil {
 		log.Fatalf("running ent codegen: %v", err)

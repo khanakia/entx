@@ -34,13 +34,13 @@ func (_c *ImageCreate) SetNillableImageableID(v *string) *ImageCreate {
 }
 
 // SetImageableType sets the "imageable_type" field.
-func (_c *ImageCreate) SetImageableType(v string) *ImageCreate {
+func (_c *ImageCreate) SetImageableType(v image.ImageableType) *ImageCreate {
 	_c.mutation.SetImageableType(v)
 	return _c
 }
 
 // SetNillableImageableType sets the "imageable_type" field if the given value is not nil.
-func (_c *ImageCreate) SetNillableImageableType(v *string) *ImageCreate {
+func (_c *ImageCreate) SetNillableImageableType(v *image.ImageableType) *ImageCreate {
 	if v != nil {
 		_c.SetImageableType(*v)
 	}
@@ -115,6 +115,11 @@ func (_c *ImageCreate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *ImageCreate) check() error {
+	if v, ok := _c.mutation.ImageableType(); ok {
+		if err := image.ImageableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "imageable_type", err: fmt.Errorf(`ent: validator failed for field "Image.imageable_type": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.URL(); !ok {
 		return &ValidationError{Name: "url", err: errors.New(`ent: missing required field "Image.url"`)}
 	}
@@ -149,7 +154,7 @@ func (_c *ImageCreate) createSpec() (*Image, *sqlgraph.CreateSpec) {
 		_node.ImageableID = &value
 	}
 	if value, ok := _c.mutation.ImageableType(); ok {
-		_spec.SetField(image.FieldImageableType, field.TypeString, value)
+		_spec.SetField(image.FieldImageableType, field.TypeEnum, value)
 		_node.ImageableType = &value
 	}
 	if value, ok := _c.mutation.URL(); ok {

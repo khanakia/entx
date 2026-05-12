@@ -1,3 +1,26 @@
+// morphmap.go — pure helpers for the morph-key ↔ schema-name mapping plus
+// the snake_case fallback used when no explicit alias is registered. No IO,
+// no graph mutation; functions here are safe to call from any phase.
+//
+// Notes:
+//
+//   - keyForType is a LINEAR SCAN over a typically small map. Building a
+//     reverse index would be marginally faster but would require wrapping
+//     MorphMap in a struct, which hurts JSON serialisation and test
+//     ergonomics. The map is small (< 50 entries in any real project);
+//     do not optimise unless a profile says so.
+//
+//   - snake() deliberately does NOT collapse acronym runs ("HTTPRequest"
+//     becomes "h_t_t_p_request", not "http_request"). The rule for when
+//     to collapse and when not is heuristic and locale-fragile; users
+//     wanting different aliases should register them explicitly via
+//     WithMorphMap. Changing this behaviour breaks the back-compat
+//     contract — every existing schema relies on the current rule.
+//
+//   - resolveTarget is reserved for future use cases that need to look
+//     up a target type by string name; preprocess uses a slightly
+//     different lookup (findTypeByName) that lives on Extension because
+//     it captures the graph pointer for the duration of the pass.
 package entpoly
 
 import (

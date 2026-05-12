@@ -19,7 +19,7 @@ type Taggable struct {
 	// TaggableID holds the value of the "taggable_id" field.
 	TaggableID *string `json:"taggable_id,omitempty"`
 	// TaggableType holds the value of the "taggable_type" field.
-	TaggableType *string `json:"taggable_type,omitempty"`
+	TaggableType *taggable.TaggableType `json:"taggable_type,omitempty"`
 	// TagID holds the value of the "tag_id" field.
 	TagID int `json:"tag_id,omitempty"`
 	// AddedBy holds the value of the "added_by" field.
@@ -70,8 +70,8 @@ func (_m *Taggable) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field taggable_type", values[i])
 			} else if value.Valid {
-				_m.TaggableType = new(string)
-				*_m.TaggableType = value.String
+				_m.TaggableType = new(taggable.TaggableType)
+				*_m.TaggableType = taggable.TaggableType(value.String)
 			}
 		case taggable.FieldTagID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -134,7 +134,7 @@ func (_m *Taggable) String() string {
 	builder.WriteString(", ")
 	if v := _m.TaggableType; v != nil {
 		builder.WriteString("taggable_type=")
-		builder.WriteString(*v)
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("tag_id=")

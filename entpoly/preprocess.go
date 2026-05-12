@@ -119,7 +119,7 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 			// kept, effectively stripping it from the graph.
 			switch m.Kind {
 			case "morphTo":
-				if err := e.handleMorphTo(t, m); err != nil {
+				if err := e.handleMorphTo(g, t, m); err != nil {
 					return err
 				}
 			case "morphMany":
@@ -157,7 +157,20 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 // Validating that the mixin was registered is the early-warning path —
 // without it, the generated Set<Morph>/Clear<Morph> methods would
 // reference field setters that ent never generated.
-func (e *Extension) handleMorphTo(t *gen.Type, m *markerAnnotation) error {
+// findTypeByName locates a *gen.Type by its schema name. Linear scan;
+// the graph is small. Returns nil when no matching type exists — the
+// caller treats that as "unknown target" and falls back to a string ID
+// for the resolver branch.
+func (e *Extension) findTypeByName(g *gen.Graph, name string) *gen.Type {
+	for _, t := range g.Nodes {
+		if t.Name == name {
+			return t
+		}
+	}
+	return nil
+}
+
+func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation) error {
 	// Builder-time validation that should have caught this — the edge
 	// must declare at least one allowed parent type. Without parents
 	// the relation is meaningless and the edge's placeholder Type
@@ -210,13 +223,27 @@ func (e *Extension) handleMorphTo(t *gen.Type, m *markerAnnotation) error {
 		)
 	}
 
+	// Resolve each allowed parent's ID Go type by looking it up in the
+	// loaded graph. This lets the typed resolver (QueryCommentable)
+	// emit the right strconv conversion for each branch without having
+	// to encode the parent's ID shape in the schema declaration.
+	targets := make([]resolveTargetRef, 0, len(m.AllowedTypes))
+	for _, name := range m.AllowedTypes {
+		ref := resolveTargetRef{SchemaName: name, IDGoType: "string"}
+		if tt := e.findTypeByName(g, name); tt != nil && tt.ID != nil && tt.ID.Type != nil {
+			ref.IDGoType = tt.ID.Type.String()
+		}
+		targets = append(targets, ref)
+	}
+
 	e.state.Children = append(e.state.Children, childInfo{
-		TypeName:     t.Name,
-		MorphName:    m.MorphName,
-		IDColumn:     idCol,
-		TypeColumn:   typeCol,
-		IDType:       m.IDType,
-		AllowedTypes: m.AllowedTypes,
+		TypeName:       t.Name,
+		MorphName:      m.MorphName,
+		IDColumn:       idCol,
+		TypeColumn:     typeCol,
+		IDType:         m.IDType,
+		AllowedTypes:   m.AllowedTypes,
+		ResolveTargets: targets,
 	})
 
 	// MorphTo's allowed parents implicitly participate in the morph map.

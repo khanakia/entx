@@ -1,3 +1,32 @@
+// extension.go — the entc.Extension wiring. This file is the entry point
+// callers register in their ent/entc.go via entc.Extensions(...). Everything
+// after entc.Generate is invoked goes through the three-phase hook chain
+// defined here.
+//
+// Notes:
+//
+//   - Hook ordering is load-bearing: preprocess → next.Generate → generate.
+//     preprocess mutates the graph BEFORE ent's templates run; if you swap
+//     the order, ent emits FK columns + edge methods for our polymorphic
+//     edges (because they have a placeholder Type) and the generated code
+//     refuses to compile.
+//
+//   - generate (the sidecar emit) is gated on next.Generate succeeding.
+//     If ent's own codegen fails, we skip our pass — emitting against a
+//     partial graph just produces confusing compile errors downstream.
+//
+//   - Options must be idempotent. WithMorphMap merges into the existing
+//     map; calling it twice with overlapping keys is allowed and the
+//     later call wins. New options should follow the same contract.
+//
+//   - The Extension struct embeds entc.DefaultExtension so we satisfy the
+//     entc.Extension interface even if ent adds new optional methods in
+//     a future version. Do not remove the embedding.
+//
+//   - The `state` field is mutated during preprocess and read during
+//     generate. It is a single sequential pipeline; there is no
+//     concurrency to guard against today. If we ever parallelise
+//     codegen, this field needs synchronisation.
 package entpoly
 
 import (

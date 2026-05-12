@@ -49,13 +49,13 @@ func (_u *CommentUpdate) ClearCommentableID() *CommentUpdate {
 }
 
 // SetCommentableType sets the "commentable_type" field.
-func (_u *CommentUpdate) SetCommentableType(v string) *CommentUpdate {
+func (_u *CommentUpdate) SetCommentableType(v comment.CommentableType) *CommentUpdate {
 	_u.mutation.SetCommentableType(v)
 	return _u
 }
 
 // SetNillableCommentableType sets the "commentable_type" field if the given value is not nil.
-func (_u *CommentUpdate) SetNillableCommentableType(v *string) *CommentUpdate {
+func (_u *CommentUpdate) SetNillableCommentableType(v *comment.CommentableType) *CommentUpdate {
 	if v != nil {
 		_u.SetCommentableType(*v)
 	}
@@ -114,6 +114,16 @@ func (_u *CommentUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *CommentUpdate) check() error {
+	if v, ok := _u.mutation.CommentableType(); ok {
+		if err := comment.CommentableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "commentable_type", err: fmt.Errorf(`ent: validator failed for field "Comment.commentable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *CommentUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CommentUpdate {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -121,6 +131,9 @@ func (_u *CommentUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *Commen
 }
 
 func (_u *CommentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(comment.Table, comment.Columns, sqlgraph.NewFieldSpec(comment.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -136,10 +149,10 @@ func (_u *CommentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		_spec.ClearField(comment.FieldCommentableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.CommentableType(); ok {
-		_spec.SetField(comment.FieldCommentableType, field.TypeString, value)
+		_spec.SetField(comment.FieldCommentableType, field.TypeEnum, value)
 	}
 	if _u.mutation.CommentableTypeCleared() {
-		_spec.ClearField(comment.FieldCommentableType, field.TypeString)
+		_spec.ClearField(comment.FieldCommentableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(comment.FieldBody, field.TypeString, value)
@@ -187,13 +200,13 @@ func (_u *CommentUpdateOne) ClearCommentableID() *CommentUpdateOne {
 }
 
 // SetCommentableType sets the "commentable_type" field.
-func (_u *CommentUpdateOne) SetCommentableType(v string) *CommentUpdateOne {
+func (_u *CommentUpdateOne) SetCommentableType(v comment.CommentableType) *CommentUpdateOne {
 	_u.mutation.SetCommentableType(v)
 	return _u
 }
 
 // SetNillableCommentableType sets the "commentable_type" field if the given value is not nil.
-func (_u *CommentUpdateOne) SetNillableCommentableType(v *string) *CommentUpdateOne {
+func (_u *CommentUpdateOne) SetNillableCommentableType(v *comment.CommentableType) *CommentUpdateOne {
 	if v != nil {
 		_u.SetCommentableType(*v)
 	}
@@ -265,6 +278,16 @@ func (_u *CommentUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *CommentUpdateOne) check() error {
+	if v, ok := _u.mutation.CommentableType(); ok {
+		if err := comment.CommentableTypeValidator(v); err != nil {
+			return &ValidationError{Name: "commentable_type", err: fmt.Errorf(`ent: validator failed for field "Comment.commentable_type": %w`, err)}
+		}
+	}
+	return nil
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *CommentUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *CommentUpdateOne {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -272,6 +295,9 @@ func (_u *CommentUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *Com
 }
 
 func (_u *CommentUpdateOne) sqlSave(ctx context.Context) (_node *Comment, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(comment.Table, comment.Columns, sqlgraph.NewFieldSpec(comment.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -304,10 +330,10 @@ func (_u *CommentUpdateOne) sqlSave(ctx context.Context) (_node *Comment, err er
 		_spec.ClearField(comment.FieldCommentableID, field.TypeString)
 	}
 	if value, ok := _u.mutation.CommentableType(); ok {
-		_spec.SetField(comment.FieldCommentableType, field.TypeString, value)
+		_spec.SetField(comment.FieldCommentableType, field.TypeEnum, value)
 	}
 	if _u.mutation.CommentableTypeCleared() {
-		_spec.ClearField(comment.FieldCommentableType, field.TypeString)
+		_spec.ClearField(comment.FieldCommentableType, field.TypeEnum)
 	}
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(comment.FieldBody, field.TypeString, value)

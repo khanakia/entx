@@ -3,8 +3,8 @@
 package ent
 
 import (
-	"github.com/khanakia/entx/entpoly/examples/basic/ent/schema"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
+	"github.com/khanakia/entx/entpoly/examples/basic/schema"
 )
 
 // The init function reads all schema descriptors with runtime code

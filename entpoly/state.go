@@ -1,3 +1,35 @@
+// state.go — defines the polyState struct that bridges the two halves of
+// the codegen pipeline. preprocess.go writes to it; generate.go reads from
+// it. Nothing in this file performs IO or graph mutation; it is pure
+// data-shape definition.
+//
+// Notes:
+//
+//   - polyState is rebuilt fresh on every preprocess() call (NOT cached
+//     across runs). This is what makes the tests deterministic and what
+//     lets us run codegen multiple times in a single process without
+//     leaking state — important because the test suite does exactly
+//     that.
+//
+//   - childInfo / parentInfo / holderInfo are the three "kinds" of
+//     polymorphic declaration the extension recognises. If you add a
+//     new kind (e.g. MorphOneOfMany for Laravel's $latestOfMany), add
+//     a corresponding info struct here, populate it from preprocess,
+//     and consume it from buildTmplData.
+//
+//   - resolveTargetRef carries the parent's GO ID type ("int", "int64",
+//     "string", "uuid.UUID", ...). This is populated by preprocess by
+//     looking up the target in gen.Graph; the template uses it to pick
+//     the right strconv flavour in the forward resolver. When adding
+//     support for new ID types (e.g. UUIDs from field.UUID), update the
+//     template's switch in the resolver section to handle the new
+//     IDGoType string.
+//
+//   - The unexported `parents` field on polyState is the accumulator
+//     for auto-registering snake_case morph keys. Every type seen as a
+//     parent in any MorphTo/MorphMany/MorphOne/MorphedByMany lands here;
+//     preprocess derives default morph map entries from this set at
+//     the tail of the pass.
 package entpoly
 
 import "sort"
@@ -58,12 +90,23 @@ func (s *polyState) parentNames() []string {
 // is precomputed during preprocess so the codegen template never has to
 // do string mutation.
 type childInfo struct {
-	TypeName     string   // The ent schema name (e.g. "Comment").
-	MorphName    string   // The relation name (e.g. "commentable").
-	IDColumn     string   // Resolved id column name.
-	TypeColumn   string   // Resolved type column name.
-	IDType       string   // "string" or "int".
-	AllowedTypes []string // Allowed parent schema names from the builder.
+	TypeName       string             // The ent schema name (e.g. "Comment").
+	MorphName      string             // The relation name (e.g. "commentable").
+	IDColumn       string             // Resolved id column name.
+	TypeColumn     string             // Resolved type column name.
+	IDType         string             // "string" or "int" — the morph_id column type.
+	AllowedTypes   []string           // Allowed parent schema names from the builder.
+	ResolveTargets []resolveTargetRef // Per-parent metadata for the typed resolver
+	// (QueryCommentable) — populated from the
+	// loaded gen.Graph at preprocess time.
+}
+
+// resolveTargetRef carries the per-parent metadata the typed parent
+// resolver needs to convert a stringified morph id back to the parent's
+// concrete primary key type and dispatch to the right ent client.
+type resolveTargetRef struct {
+	SchemaName string // The ent schema name (e.g. "Post").
+	IDGoType   string // The Go type of the parent's id field ("int", "int64", "string", "uuid.UUID", ...).
 }
 
 // parentInfo describes one MorphOne / MorphMany back-reference.
