@@ -210,19 +210,24 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 		holderFK := lower(h.HolderName) + "_id"
 		imports[targetIDent] = struct{}{}
 		imports[pivotIDent] = struct{}{}
+		holderIDent := lower(h.HolderName)
+		imports[holderIDent] = struct{}{}
 		d.Holders = append(d.Holders, holderData{
-			HolderName:     h.HolderName,
-			FieldName:      h.FieldName,
-			FieldCap:       pascalCase(h.FieldName),
-			Target:         h.Target,
-			TargetIDent:    targetIDent,
-			TargetIDGoType: h.TargetIDGoType,
-			TargetMorph:    h.Target + "MorphKey",
-			Pivot:          h.Pivot,
-			PivotIDent:     pivotIDent,
-			HolderFKField:  pascalGoFieldName(holderFK),
-			PivotIDField:   pascalGoFieldName(idCol),
-			PivotTypeField: pascalGoFieldName(typeCol),
+			HolderName:      h.HolderName,
+			HolderIDent:     holderIDent,
+			HolderIDGoType:  h.HolderIDGoType,
+			FieldName:       h.FieldName,
+			FieldCap:        pascalCase(h.FieldName),
+			InverseFieldCap: pascalCase(h.InverseFieldName),
+			Target:          h.Target,
+			TargetIDent:     targetIDent,
+			TargetIDGoType:  h.TargetIDGoType,
+			TargetMorph:     h.Target + "MorphKey",
+			Pivot:           h.Pivot,
+			PivotIDent:      pivotIDent,
+			HolderFKField:   pascalGoFieldName(holderFK),
+			PivotIDField:    pascalGoFieldName(idCol),
+			PivotTypeField:  pascalGoFieldName(typeCol),
 		})
 	}
 
@@ -304,18 +309,21 @@ type morphMapEntry struct {
 // query under the hood: first read pivot rows that match holder.ID +
 // target morph-key, then load the target rows by id.
 type holderData struct {
-	HolderName     string // Holder schema name (e.g. "Tag").
-	FieldName      string // Back-ref method name (e.g. "posts").
-	FieldCap       string // PascalCase of FieldName (e.g. "Posts").
-	Target         string // Concrete parent schema name (e.g. "Post").
-	TargetIDent    string // Target's lowercase predicate-package name.
-	TargetIDGoType string // Target's ID Go type ("int", "int64", "string").
-	TargetMorph    string // Morph-key constant for the target (e.g. "PostMorphKey").
-	Pivot          string // Pivot schema name (e.g. "Taggable").
-	PivotIDent     string // Pivot's lowercase predicate-package name.
-	HolderFKField  string // Pivot's column-method name for the holder FK (e.g. "TagID").
-	PivotIDField   string // Pivot's morph-id column method name (e.g. "TaggableID").
-	PivotTypeField string // Pivot's morph-type column method name (e.g. "TaggableType").
+	HolderName       string // Holder schema name (e.g. "Tag").
+	HolderIDent      string // Holder's lowercase predicate-package name.
+	HolderIDGoType   string // Holder's ID Go type ("int", "int64", "string").
+	FieldName        string // Back-ref method name on holder (e.g. "posts").
+	FieldCap         string // PascalCase of FieldName (e.g. "Posts").
+	InverseFieldCap  string // PascalCase of the inverse method name on target (e.g. "Tags").
+	Target           string // Concrete parent schema name (e.g. "Post").
+	TargetIDent      string // Target's lowercase predicate-package name.
+	TargetIDGoType   string // Target's ID Go type ("int", "int64", "string").
+	TargetMorph      string // Morph-key constant for the target (e.g. "PostMorphKey").
+	Pivot            string // Pivot schema name (e.g. "Taggable").
+	PivotIDent       string // Pivot's lowercase predicate-package name.
+	HolderFKField    string // Pivot's column-method name for the holder FK (e.g. "TagID").
+	PivotIDField     string // Pivot's morph-id column method name (e.g. "TaggableID").
+	PivotTypeField   string // Pivot's morph-type column method name (e.g. "TaggableType").
 }
 
 // parentData drives the typed back-ref method emission on a parent entity

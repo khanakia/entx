@@ -104,6 +104,14 @@ type markerAnnotation struct {
 	// pivot. Cosmetic; ent uses the schema name as the default.
 	ThroughName string `json:"through_name,omitempty"`
 
+	// InverseFieldName (MorphedByMany only) — the back-ref method name
+	// auto-emitted on the Target type (e.g. "tags" for the
+	// Tag.MorphedByMany("posts", Post.Type).Through(...) declaration
+	// produces post.QueryTags(ctx) []*Tag). Empty → defaults to
+	// snake-case of HolderName + "s" (e.g. "Tag" → "tags"). Override
+	// for irregular plurals (Category → "categories").
+	InverseFieldName string `json:"inverse_field_name,omitempty"`
+
 	// Required marks the relation as non-nullable. Currently advisory —
 	// v2 may emit a runtime hook that enforces the constraint.
 	Required bool `json:"required,omitempty"`
@@ -483,6 +491,22 @@ func (b *MorphedByManyBuilder) Through(name string, pivot any) *MorphedByManyBui
 // table name). Must match the MorphTo declaration on the pivot schema.
 func (b *MorphedByManyBuilder) MorphName(name string) *MorphedByManyBuilder {
 	b.ann.MorphName = name
+	b.syncAnnotation()
+	return b
+}
+
+// InverseName overrides the auto-emitted back-ref method name on the
+// Target type. Default is snake-case of the holder type name plus "s"
+// (e.g. Tag → "tags" → post.QueryTags). Override for irregular plurals:
+//
+//	entpoly.MorphedByMany("posts", Post.Type).
+//	    Through("categorizables", Categorizable.Type).
+//	    InverseName("categories")   // → post.QueryCategories(ctx)
+//
+// The codegen reflects this name as PascalCase on the emitted method
+// (categories → QueryCategories).
+func (b *MorphedByManyBuilder) InverseName(name string) *MorphedByManyBuilder {
+	b.ann.InverseFieldName = name
 	b.syncAnnotation()
 	return b
 }

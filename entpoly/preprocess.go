@@ -337,24 +337,38 @@ func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation)
 			t.Name,
 		)
 	}
-	// Look up the target's ID Go type so the holder back-ref method can
-	// emit the right strconv conversion (parsing the stringified pivot
-	// taggable_id back to the parent's real PK type).
+	// Look up target's + holder's ID Go types so both back-ref methods
+	// (holder → target AND target → holder) can emit the right
+	// strconv conversion / IDIn call.
 	targetIDType := "string"
 	if tt := e.findTypeByName(g, m.Target); tt != nil && tt.ID != nil && tt.ID.Type != nil {
 		targetIDType = tt.ID.Type.String()
 	}
+	holderIDType := "string"
+	if tt := e.findTypeByName(g, t.Name); tt != nil && tt.ID != nil && tt.ID.Type != nil {
+		holderIDType = tt.ID.Type.String()
+	}
+
+	// Default inverse field name = snake-case of holder + "s". User can
+	// override via InverseName(...) on the builder when the plural is
+	// irregular ("Category" → "categories").
+	inverse := m.InverseFieldName
+	if inverse == "" {
+		inverse = snake(t.Name) + "s"
+	}
 
 	e.state.Holders = append(e.state.Holders, holderInfo{
-		HolderName:     t.Name,
-		FieldName:      m.FieldName,
-		Target:         m.Target,
-		Pivot:          m.Through,
-		ThroughName:    m.ThroughName,
-		MorphName:      m.MorphName,
-		IDColumn:       m.IDColumn,
-		TypeColumn:     m.TypeColumn,
-		TargetIDGoType: targetIDType,
+		HolderName:       t.Name,
+		FieldName:        m.FieldName,
+		InverseFieldName: inverse,
+		Target:           m.Target,
+		Pivot:            m.Through,
+		ThroughName:      m.ThroughName,
+		MorphName:        m.MorphName,
+		IDColumn:         m.IDColumn,
+		TypeColumn:       m.TypeColumn,
+		TargetIDGoType:   targetIDType,
+		HolderIDGoType:   holderIDType,
 	})
 	e.state.parents = append(e.state.parents, m.Target)
 	return nil

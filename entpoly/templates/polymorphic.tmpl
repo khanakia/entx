@@ -365,6 +365,42 @@ func (h *{{ .HolderName }}) Query{{ .FieldCap }}(ctx context.Context) ([]*{{ .Ta
 	{{- end }}
 	return New{{ .Target }}Client(h.config).Query().Where({{ .TargetIDent }}.IDIn(ids...)).All(ctx)
 }
+
+// Query{{ .InverseFieldCap }} returns all {{ .HolderName }} rows attached
+// to this {{ .Target }} via the {{ .Pivot }} pivot. Inverse direction of
+// Query{{ .FieldCap }} above — auto-generated from the holder-side
+// MorphedByMany declaration so {{ .Target }} does NOT need a matching
+// schema declaration.
+//
+// Laravel:    $tags = $post->tags;
+// entpoly:    tags, err := post.Query{{ .InverseFieldCap }}(ctx)
+func (p *{{ .Target }}) Query{{ .InverseFieldCap }}(ctx context.Context) ([]*{{ .HolderName }}, error) {
+	pivots, err := New{{ .Pivot }}Client(p.config).Query().
+		Where(
+			{{ .PivotIDent }}.{{ .PivotIDField }}EQ(p.MorphID()),
+			{{ .PivotIDent }}.{{ .PivotTypeField }}EQ({{ .PivotIDent }}.{{ .PivotTypeField }}(string({{ .TargetMorph }}))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*{{ .HolderName }}{}, nil
+	}
+	// Pivot's holder FK is a regular ent field, NOT a stringified
+	// polymorphic id — collect the typed values directly.
+	{{- if eq .HolderIDGoType "int" }}
+	ids := make([]int, 0, len(pivots))
+	{{- else if eq .HolderIDGoType "int64" }}
+	ids := make([]int64, 0, len(pivots))
+	{{- else }}
+	ids := make([]string, 0, len(pivots))
+	{{- end }}
+	for _, pv := range pivots {
+		ids = append(ids, pv.{{ .HolderFKField }})
+	}
+	return New{{ .HolderName }}Client(p.config).Query().Where({{ .HolderIDent }}.IDIn(ids...)).All(ctx)
+}
 {{ end }}
 
 {{- /* ─── Parent-side typed back-refs (Laravel-style accessors) ──── */ -}}

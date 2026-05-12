@@ -11,6 +11,7 @@ import (
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/post"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/predicate"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/tag"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/video"
 )
@@ -534,6 +535,36 @@ func (h *Tag) QueryPosts(ctx context.Context) ([]*Post, error) {
 	return NewPostClient(h.config).Query().Where(post.IDIn(ids...)).All(ctx)
 }
 
+// QueryTags returns all Tag rows attached
+// to this Post via the Taggable pivot. Inverse direction of
+// QueryPosts above — auto-generated from the holder-side
+// MorphedByMany declaration so Post does NOT need a matching
+// schema declaration.
+//
+// Laravel:    $tags = $post->tags;
+// entpoly:    tags, err := post.QueryTags(ctx)
+func (p *Post) QueryTags(ctx context.Context) ([]*Tag, error) {
+	pivots, err := NewTaggableClient(p.config).Query().
+		Where(
+			taggable.TaggableIDEQ(p.MorphID()),
+			taggable.TaggableTypeEQ(taggable.TaggableType(string(PostMorphKey))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*Tag{}, nil
+	}
+	// Pivot's holder FK is a regular ent field, NOT a stringified
+	// polymorphic id — collect the typed values directly.
+	ids := make([]int, 0, len(pivots))
+	for _, pv := range pivots {
+		ids = append(ids, pv.TagID)
+	}
+	return NewTagClient(p.config).Query().Where(tag.IDIn(ids...)).All(ctx)
+}
+
 // QueryVideos returns all Video rows polymorphically
 // attached to this Tag via the Taggable pivot. Reads
 // the pivot rows that match (holder, target-morph-key), parses the
@@ -567,6 +598,36 @@ func (h *Tag) QueryVideos(ctx context.Context) ([]*Video, error) {
 		ids = append(ids, id)
 	}
 	return NewVideoClient(h.config).Query().Where(video.IDIn(ids...)).All(ctx)
+}
+
+// QueryTags returns all Tag rows attached
+// to this Video via the Taggable pivot. Inverse direction of
+// QueryVideos above — auto-generated from the holder-side
+// MorphedByMany declaration so Video does NOT need a matching
+// schema declaration.
+//
+// Laravel:    $tags = $post->tags;
+// entpoly:    tags, err := post.QueryTags(ctx)
+func (p *Video) QueryTags(ctx context.Context) ([]*Tag, error) {
+	pivots, err := NewTaggableClient(p.config).Query().
+		Where(
+			taggable.TaggableIDEQ(p.MorphID()),
+			taggable.TaggableTypeEQ(taggable.TaggableType(string(VideoMorphKey))),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(pivots) == 0 {
+		return []*Tag{}, nil
+	}
+	// Pivot's holder FK is a regular ent field, NOT a stringified
+	// polymorphic id — collect the typed values directly.
+	ids := make([]int, 0, len(pivots))
+	for _, pv := range pivots {
+		ids = append(ids, pv.TagID)
+	}
+	return NewTagClient(p.config).Query().Where(tag.IDIn(ids...)).All(ctx)
 }
 
 // QueryComments returns a query builder for all Comment rows

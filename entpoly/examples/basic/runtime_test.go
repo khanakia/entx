@@ -315,6 +315,59 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 }
 
+// TestMorphedByManyAutoInverseBackRef verifies the auto-emitted parent-
+// side back-ref — Laravel's $post->tags. Generated automatically from
+// the Tag.MorphedByMany("posts", ...) declaration; the Post schema does
+// NOT need any matching declaration of its own. Same auto-emit happens
+// for Video → tag.QueryVideos(ctx).
+func TestMorphedByManyAutoInverseBackRef(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	tagA := client.Tag.Create().SetName("a").SaveX(ctx)
+	tagB := client.Tag.Create().SetName("b").SaveX(ctx)
+	tagC := client.Tag.Create().SetName("c").SaveX(ctx)
+
+	// Attach: post has tagA + tagB, video has tagB + tagC.
+	for _, tg := range []*ent.Tag{tagA, tagB} {
+		_ = client.Taggable.Create().SetTagID(tg.ID).SetTaggable(post).SaveX(ctx)
+	}
+	for _, tg := range []*ent.Tag{tagB, tagC} {
+		_ = client.Taggable.Create().SetTagID(tg.ID).SetTaggable(video).SaveX(ctx)
+	}
+
+	// Laravel: $post->tags;
+	postTags, err := post.QueryTags(ctx)
+	if err != nil {
+		t.Fatalf("post.QueryTags: %v", err)
+	}
+	if len(postTags) != 2 {
+		t.Errorf("post.QueryTags = %d, want 2", len(postTags))
+	}
+
+	// Cross-target isolation: video sees its own tags.
+	videoTags, err := video.QueryTags(ctx)
+	if err != nil {
+		t.Fatalf("video.QueryTags: %v", err)
+	}
+	if len(videoTags) != 2 {
+		t.Errorf("video.QueryTags = %d, want 2", len(videoTags))
+	}
+
+	// Empty case — a post with no pivot rows.
+	emptyPost := client.Post.Create().SetTitle("empty").SaveX(ctx)
+	got, err := emptyPost.QueryTags(ctx)
+	if err != nil {
+		t.Fatalf("empty post.QueryTags: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty post.QueryTags = %v, want empty", got)
+	}
+}
+
 // TestQueryCommentableTypedReverseResolve is the v2 typed reverse
 // resolver — Laravel's `$comment->commentable`. The result type is the
 // sealed CommentCommentableParent interface, so the caller can ONLY
