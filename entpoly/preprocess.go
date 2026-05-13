@@ -103,6 +103,15 @@
 //                                                       Composes with comment.Or /
 //                                                       And for multi-type matches.
 //
+//   17  GraphQL union emission (Option B / ADR-002)     handleMorphTo records the
+//                                                       GQL flag + optional union
+//                                                       name; template emits Go-side
+//                                                       union surface (type alias +
+//                                                       exported markers + resolver
+//                                                       helper); generate.go writes
+//                                                       a sidecar .graphql file when
+//                                                       WithGQLSchemaFile is set.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly
@@ -445,6 +454,8 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		Cascade:         m.Cascade,
 		SoftDelete:      m.SoftDelete,
 		SoftDeleteField: softField,
+		GQL:             m.GQL,
+		GQLUnionName:    m.GQLUnionName,
 		ChildIDGoType:   childIDType,
 		ChildIDPkgPath:  childIDPkg,
 		ResolveTargets:  targets,

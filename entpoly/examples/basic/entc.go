@@ -26,6 +26,9 @@ func main() {
 				"video": "Video",
 				"image": "Image",
 			}),
+			// When set, entpoly writes a .graphql fragment with the
+			// union declarations for every MorphTo(...).GQL() relation.
+			entpoly.WithGQLSchemaFile("./graph/polymorphic.graphql"),
 		)),
 	}
 	if err := entc.Generate("./schema", &gen.Config{

@@ -401,6 +401,55 @@ func (c *{{ .Type }}) Query{{ .RelationCap }}(ctx context.Context) ({{ .Type }}{
 }
 {{ end }}
 
+{{- /* ─── GraphQL union emission (per child × allowed parent) ───────
+For every MorphTo declared with .GQL(), emit a Go-side union surface
+that gqlgen recognises:
+
+  - type alias: `type <Union> = <Child><Rel>Parent` so the sealed
+    interface doubles as the GraphQL union Go type.
+  - exported markers: `func (*Post) Is<Union>() {}` on every member;
+    gqlgen reflects over these (it ignores unexported markers, so
+    these supplement — they don't replace — the sealed interface's
+    unexported marker that powers Set/Clear restriction).
+  - GQL<Rel>(ctx) resolver helper: a thin alias over Query<Rel>(ctx)
+    so a gqlgen resolver is a one-liner.
+
+The matching `.graphql` schema fragment (`union X = A | B`) is
+written to the file configured via entpoly.WithGQLSchemaFile(...).
+Without that extension option the user must declare the union in
+their .graphql by hand. See docs/laravel-parity.md and the FAQ. */ -}}
+{{ if .HasGQL }}
+{{ range $c := .GQLChildren }}
+
+// {{ $c.GQLUnionName }} is the gqlgen-recognisable union type for
+// {{ $c.Type }}.{{ $c.Relation }}. Alias of the sealed-interface
+// {{ $c.Type }}{{ $c.RelationCap }}Parent; using the alias keeps the
+// GraphQL-side name independent of the Go-side identifier.
+type {{ $c.GQLUnionName }} = {{ $c.Type }}{{ $c.RelationCap }}Parent
+
+{{- range $rc := $c.ResolveCases }}
+
+// Is{{ $c.GQLUnionName }} marks *{{ $rc.Type }} as a member of the
+// {{ $c.GQLUnionName }} union for gqlgen. The exported marker is in
+// addition to the sealed is{{ $c.Type }}{{ $c.RelationCap }}Parent
+// marker that powers compile-time Set{{ $c.RelationCap }} restriction.
+func (*{{ $rc.Type }}) Is{{ $c.GQLUnionName }}() {}
+{{- end }}
+
+// GQL{{ $c.RelationCap }} is the gqlgen-resolver-ready accessor for
+// {{ $c.Type }}.{{ $c.Relation }}. Thin wrapper around
+// Query{{ $c.RelationCap }} — exists so the resolver in your gqlgen
+// project is a single-line forward:
+//
+//	func (r *{{ $c.IDent }}Resolver) {{ $c.RelationCap }}(ctx context.Context, c *{{ $c.Type }}) ({{ $c.GQLUnionName }}, error) {
+//	    return c.GQL{{ $c.RelationCap }}(ctx)
+//	}
+func (c *{{ $c.Type }}) GQL{{ $c.RelationCap }}(ctx context.Context) ({{ $c.GQLUnionName }}, error) {
+	return c.Query{{ $c.RelationCap }}(ctx)
+}
+{{ end }}
+{{ end }}
+
 {{- /* ─── Holder-side typed M2M back-refs ────────────────────────── */ -}}
 {{ range .Holders }}
 

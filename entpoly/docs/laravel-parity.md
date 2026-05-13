@@ -198,7 +198,7 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 | Laravel | Status in entpoly |
 |---|---|
 | `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | `ent.CommentCommentableOnPost(post.PublishedEQ(true))` — per-parent helper; multi-type via `comment.Or(...)`. See [ADR-002](./adr-002-where-morph-relation.md). |
-| GraphQL union resolver helper for entgql consumers | v2 — wire `<rel>_type` to a `union Commentable = Post \| Video` |
+| `union Commentable = Post \| Video` GraphQL surface | `MorphTo(...).GQL()` — emits Go-side type alias + exported `Is<Union>()` markers + resolver helper. `.graphql` fragment via `entpoly.WithGQLSchemaFile(...)`. Compatible with gqlgen / entgql. |
 
 ## What entpoly has that Laravel doesn't
 

@@ -112,6 +112,10 @@ type childInfo struct {
 	// SoftDeleteField is non-null. Per-target
 	// detection in ResolveTargets[i].HasSoftDelete.
 	SoftDeleteField string            // Parent column name to check (default "deleted_at").
+	GQL            bool               // True when MorphTo(...).GQL() was set — emit
+	// gqlgen-recognisable union surface.
+	GQLUnionName   string             // PascalCase union name (default = PascalCase of
+	// MorphName; override via .GQL("CustomName")).
 	ChildIDGoType  string             // The child's own ID Go type — used as the
 	// eager-load result-map key type. Builtin or
 	// custom Ident (e.g. "uuid.UUID").

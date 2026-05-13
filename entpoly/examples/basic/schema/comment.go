@@ -54,6 +54,7 @@ func (Comment) Edges() []ent.Edge {
 			Required().
 			Touch().
 			Cascade().
-			SoftDelete(),
+			SoftDelete().
+			GQL(),
 	}
 }

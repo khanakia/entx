@@ -264,6 +264,25 @@ func TestMorphTo_SoftDeleteEmptyArgKeepsDefault(t *testing.T) {
 	}
 }
 
+func TestMorphTo_GQL(t *testing.T) {
+	b := MorphTo("commentable", Post.Type, Video.Type).GQL()
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.GQL {
+		t.Error("GQL flag not set")
+	}
+	if m.GQLUnionName != "" {
+		t.Errorf("GQLUnionName default = %q, want empty (codegen derives PascalCase)", m.GQLUnionName)
+	}
+}
+
+func TestMorphTo_GQLCustomUnionName(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).GQL("PostOrVideo")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.GQLUnionName != "PostOrVideo" {
+		t.Errorf("GQLUnionName = %q, want PostOrVideo", m.GQLUnionName)
+	}
+}
+
 func TestMorphTo_AllOptionsCompose(t *testing.T) {
 	// Required + Touch + Cascade should all coexist on the same edge —
 	// the runtime registers all three hooks via RegisterPolyHooks.

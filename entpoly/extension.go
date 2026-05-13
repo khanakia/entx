@@ -69,6 +69,11 @@ type Extension struct {
 	// consumed by generate(). It is the bridge between the graph-mutation
 	// pass and the sidecar-emit pass.
 	state *polyState
+
+	// gqlSchemaPath is the optional output path for the GraphQL union
+	// schema fragment. Set via WithGQLSchemaFile(...). Empty means
+	// "skip — user writes the union declarations by hand."
+	gqlSchemaPath string
 }
 
 // NewExtension constructs an Extension and applies every functional option
@@ -80,6 +85,22 @@ func NewExtension(opts ...Option) *Extension {
 		opt(e)
 	}
 	return e
+}
+
+// WithGQLSchemaFile configures the output path for the GraphQL union
+// schema fragment emitted alongside polymorphic.go. When set AND at
+// least one MorphTo declares .GQL(), entpoly writes a small .graphql
+// file containing `union X = Y | Z` declarations for every GQL-
+// enabled relation in the project. Otherwise the user writes the
+// union declarations manually in their schema.graphqls.
+//
+//	entc.Extensions(entpoly.NewExtension(
+//	    entpoly.WithGQLSchemaFile("./graph/polymorphic.graphql"),
+//	))
+//
+// The path is relative to the directory where `go generate` runs.
+func WithGQLSchemaFile(path string) Option {
+	return func(e *Extension) { e.gqlSchemaPath = path }
 }
 
 // WithMorphMap registers explicit string aliases mapping morph keys

@@ -163,6 +163,21 @@ type markerAnnotation struct {
 	// nullable; the generated filter is `<Field>IsNil()` (i.e.,
 	// SELECT rows where the column IS NULL).
 	SoftDeleteField string `json:"soft_delete_field,omitempty"`
+
+	// GQL opts the relation into GraphQL union emission. When set,
+	// codegen emits a Go type alias + exported Is<Union>() markers on
+	// each allowed parent + a GQL<Rel>(ctx) resolver-helper. The
+	// matching `.graphql` schema fragment (`union X = A | B`) is
+	// emitted to the file configured via WithGQLSchemaFile on the
+	// extension; without that option, the .graphql fragment is the
+	// user's responsibility.
+	GQL bool `json:"gql,omitempty"`
+
+	// GQLUnionName overrides the default GraphQL union name (which is
+	// PascalCase(MorphName) — "commentable" → "Commentable"). Useful
+	// when you want a different GraphQL identity from the morph
+	// relation name.
+	GQLUnionName string `json:"gql_union_name,omitempty"`
 }
 
 // MarkerName identifies the annotation key for polymorphic edges. Exported
@@ -397,6 +412,40 @@ func (b *MorphToBuilder) SoftDelete(fieldName ...string) *MorphToBuilder {
 	b.ann.SoftDeleteField = "deleted_at"
 	if len(fieldName) > 0 && fieldName[0] != "" {
 		b.ann.SoftDeleteField = fieldName[0]
+	}
+	b.syncAnnotation()
+	return b
+}
+
+// GQL opts the relation into GraphQL union emission. When set, codegen
+// produces three things in polymorphic.go:
+//
+//   - A type alias `type <Union> = <Child><Rel>Parent` so the sealed
+//     interface doubles as a gqlgen-recognisable union type.
+//   - Exported marker methods `func (*Post) Is<Union>() {}` on every
+//     allowed parent. gqlgen reflects over these to wire the union
+//     variants at runtime.
+//   - A resolver-helper `func (*<Child>) GQL<Rel>(ctx) (<Union>, error)`
+//     that wraps QueryCommentable for use in a gqlgen resolver:
+//
+//	    func (r *commentResolver) Commentable(ctx, c *ent.Comment) (ent.Commentable, error) {
+//	        return c.GQLCommentable(ctx)
+//	    }
+//
+// The matching GraphQL schema fragment is emitted to the file
+// configured via entpoly.WithGQLSchemaFile(...) on the extension; if
+// that option is not set, the user must write the `union ... = ...`
+// declaration in their .graphql schema by hand.
+//
+// Default union name is PascalCase(MorphName) — "commentable" →
+// "Commentable". Override:
+//
+//	entpoly.MorphTo("commentable", Post.Type).GQL()              // → Commentable
+//	entpoly.MorphTo("commentable", Post.Type).GQL("PostOrVideo") // → PostOrVideo
+func (b *MorphToBuilder) GQL(unionName ...string) *MorphToBuilder {
+	b.ann.GQL = true
+	if len(unionName) > 0 && unionName[0] != "" {
+		b.ann.GQLUnionName = unionName[0]
 	}
 	b.syncAnnotation()
 	return b

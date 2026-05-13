@@ -321,6 +321,58 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 }
 
+// TestGQLMarkersAndTypeAlias verifies the GraphQL union surface
+// emitted by MorphTo("commentable").GQL():
+//
+//   - The Commentable type alias resolves to CommentCommentableParent
+//     (so the sealed interface and the GraphQL union are the same Go
+//     type).
+//   - Every allowed parent carries the exported Is<Union>() marker.
+//   - gqlgen-style type-assertion through the alias works.
+func TestGQLMarkersAndTypeAlias(t *testing.T) {
+	// Type-system check — *ent.Post must be assignable to the alias.
+	var _ ent.Commentable = (*ent.Post)(nil)
+	var _ ent.Commentable = (*ent.Video)(nil)
+
+	// Exported marker methods compile + are callable. The body is empty
+	// — we only care that they exist on each member type.
+	(*ent.Post)(nil).IsCommentable()
+	(*ent.Video)(nil).IsCommentable()
+}
+
+// TestGQLCommentableForwardsToQuery verifies the resolver-helper
+// GQLCommentable returns the same result as QueryCommentable. The
+// helper exists so gqlgen resolvers stay one-liners.
+func TestGQLCommentableForwardsToQuery(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	c := client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
+
+	// Both call sites should return the same concrete parent.
+	viaQuery, err := c.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable: %v", err)
+	}
+	viaGQL, err := c.GQLCommentable(ctx)
+	if err != nil {
+		t.Fatalf("GQLCommentable: %v", err)
+	}
+	pQuery, ok1 := viaQuery.(*ent.Post)
+	pGQL, ok2 := viaGQL.(*ent.Post)
+	if !ok1 || !ok2 {
+		t.Fatalf("expected *ent.Post from both, got %T / %T", viaQuery, viaGQL)
+	}
+	if pQuery.ID != pGQL.ID {
+		t.Errorf("QueryCommentable id %d != GQLCommentable id %d", pQuery.ID, pGQL.ID)
+	}
+
+	// Type-assert through the alias path — gqlgen will reflect over
+	// the same interface at runtime.
+	var _ ent.Commentable = viaGQL
+}
+
 // TestWhereMorphRelationFiltersByParentPredicate verifies the
 // CommentCommentableOnPost / OnVideo predicate constructors —
 // entpoly's whereMorphRelation equivalent. Filters Comments by a

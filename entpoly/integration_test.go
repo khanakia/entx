@@ -570,6 +570,166 @@ func TestPreprocess_SoftDeleteOffWhenFlagNotSet(t *testing.T) {
 	}
 }
 
+// Case #17 — GQL() propagates through preprocess.
+func TestPreprocess_GQLFlagFlowsThrough(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+		GQL:          true,
+		GQLUnionName: "PostUnion",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if !e.state.Children[0].GQL {
+		t.Error("GQL flag did not flow through to childInfo")
+	}
+	if e.state.Children[0].GQLUnionName != "PostUnion" {
+		t.Errorf("GQLUnionName = %q, want PostUnion", e.state.Children[0].GQLUnionName)
+	}
+}
+
+// TestBuildTmplData_GQLChildrenFilteredAndDefaultName — verifies the
+// filter that splits Children → GQLChildren AND that the default
+// union name is PascalCase(MorphName) when GQLUnionName is empty.
+func TestBuildTmplData_GQLChildrenFilteredAndDefaultName(t *testing.T) {
+	e := NewExtension()
+	e.state = &polyState{
+		Package: "ent",
+		Children: []childInfo{
+			{
+				TypeName:     "Comment",
+				MorphName:    "commentable",
+				IDColumn:     "commentable_id",
+				TypeColumn:   "commentable_type",
+				IDType:       "string",
+				AllowedTypes: []string{"Post"},
+				GQL:          true,
+				// GQLUnionName empty → should default to "Commentable"
+			},
+			{
+				TypeName:     "Image",
+				MorphName:    "imageable",
+				IDColumn:     "imageable_id",
+				TypeColumn:   "imageable_type",
+				IDType:       "string",
+				AllowedTypes: []string{"Post"},
+				GQL:          false, // should be filtered out
+			},
+		},
+		MorphMap: map[string]string{"post": "Post"},
+	}
+	d, err := e.buildTmplData()
+	if err != nil {
+		t.Fatalf("buildTmplData: %v", err)
+	}
+	if !d.HasGQL {
+		t.Error("HasGQL = false, want true")
+	}
+	if len(d.GQLChildren) != 1 {
+		t.Fatalf("GQLChildren len = %d, want 1", len(d.GQLChildren))
+	}
+	if d.GQLChildren[0].GQLUnionName != "Commentable" {
+		t.Errorf("default GQLUnionName = %q, want Commentable", d.GQLChildren[0].GQLUnionName)
+	}
+}
+
+// TestWriteGQLSchema_SingleUnion verifies the simplest emit shape.
+func TestWriteGQLSchema_SingleUnion(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "polymorphic.graphql")
+	children := []childData{
+		{GQLUnionName: "Commentable", AllowedTypes: []string{"Post", "Video"}},
+	}
+	if err := writeGQLSchema(path, children); err != nil {
+		t.Fatalf("writeGQLSchema: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(got), "union Commentable = Post | Video") {
+		t.Errorf("output missing expected union line:\n%s", got)
+	}
+}
+
+// TestWriteGQLSchema_MultipleUnions — two relations produce two
+// lines in iteration order (the caller is responsible for sorting,
+// which buildTmplData does via the Children iteration order).
+func TestWriteGQLSchema_MultipleUnions(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "polymorphic.graphql")
+	children := []childData{
+		{GQLUnionName: "Commentable", AllowedTypes: []string{"Post", "Video"}},
+		{GQLUnionName: "Imageable", AllowedTypes: []string{"Post"}},
+	}
+	if err := writeGQLSchema(path, children); err != nil {
+		t.Fatalf("writeGQLSchema: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	s := string(got)
+	for _, want := range []string{
+		"union Commentable = Post | Video",
+		"union Imageable = Post",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+// TestWriteGQLSchema_CustomUnionName verifies the override path —
+// GQLUnionName is what lands in the schema, not the relation name.
+func TestWriteGQLSchema_CustomUnionName(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "polymorphic.graphql")
+	children := []childData{
+		{GQLUnionName: "PostOrVideo", AllowedTypes: []string{"Post", "Video"}},
+	}
+	if err := writeGQLSchema(path, children); err != nil {
+		t.Fatalf("writeGQLSchema: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	if !strings.Contains(string(got), "union PostOrVideo = Post | Video") {
+		t.Errorf("custom union name not used:\n%s", got)
+	}
+	if strings.Contains(string(got), "union Commentable") {
+		t.Errorf("output should not include the default name:\n%s", got)
+	}
+}
+
+// TestWriteGQLSchema_DeterministicOutput — same input, byte-identical
+// output. Important for codegen-friendly diffs.
+func TestWriteGQLSchema_DeterministicOutput(t *testing.T) {
+	tmp := t.TempDir()
+	p1 := filepath.Join(tmp, "a.graphql")
+	p2 := filepath.Join(tmp, "b.graphql")
+	children := []childData{
+		{GQLUnionName: "Commentable", AllowedTypes: []string{"Post", "Video"}},
+		{GQLUnionName: "Imageable", AllowedTypes: []string{"Post"}},
+	}
+	if err := writeGQLSchema(p1, children); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeGQLSchema(p2, children); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := os.ReadFile(p1)
+	b, _ := os.ReadFile(p2)
+	if string(a) != string(b) {
+		t.Errorf("non-deterministic output:\n%s\n---\n%s", a, b)
+	}
+}
+
 // Case #14 — Cascade() propagates through preprocess. TestPreprocess_CascadeFlagFlowsThrough verifies the .Cascade()
 // builder option lands in childInfo so the template's cascade-hook
 // emission picks it up.

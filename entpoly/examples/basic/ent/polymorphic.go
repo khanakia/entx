@@ -668,6 +668,36 @@ func (c *Taggable) QueryTaggable(ctx context.Context) (TaggableTaggableParent, e
 	}
 }
 
+// Commentable is the gqlgen-recognisable union type for
+// Comment.commentable. Alias of the sealed-interface
+// CommentCommentableParent; using the alias keeps the
+// GraphQL-side name independent of the Go-side identifier.
+type Commentable = CommentCommentableParent
+
+// IsCommentable marks *Post as a member of the
+// Commentable union for gqlgen. The exported marker is in
+// addition to the sealed isCommentCommentableParent
+// marker that powers compile-time SetCommentable restriction.
+func (*Post) IsCommentable() {}
+
+// IsCommentable marks *Video as a member of the
+// Commentable union for gqlgen. The exported marker is in
+// addition to the sealed isCommentCommentableParent
+// marker that powers compile-time SetCommentable restriction.
+func (*Video) IsCommentable() {}
+
+// GQLCommentable is the gqlgen-resolver-ready accessor for
+// Comment.commentable. Thin wrapper around
+// QueryCommentable — exists so the resolver in your gqlgen
+// project is a single-line forward:
+//
+//	func (r *commentResolver) Commentable(ctx context.Context, c *Comment) (Commentable, error) {
+//	    return c.GQLCommentable(ctx)
+//	}
+func (c *Comment) GQLCommentable(ctx context.Context) (Commentable, error) {
+	return c.QueryCommentable(ctx)
+}
+
 // QueryPosts returns all Post rows polymorphically
 // attached to this Tag via the Taggable pivot. Reads
 // the pivot rows that match (holder, target-morph-key), parses the
