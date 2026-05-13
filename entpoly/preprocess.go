@@ -94,6 +94,15 @@
 //                                                       per-target IsNil filter in
 //                                                       the resolver + eager-load.
 //
+//   16  <Child><Rel>On<Parent> sub-query predicate     Per (child × allowed parent)
+//       constructor                                     helper emitted in the
+//                                                       template; builds a sub-
+//                                                       SELECT of parent IDs scoped
+//                                                       to the morph type. SoftDelete
+//                                                       auto-included in the sub.
+//                                                       Composes with comment.Or /
+//                                                       And for multi-type matches.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly

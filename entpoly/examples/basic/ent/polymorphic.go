@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/post"
@@ -18,6 +19,11 @@ import (
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/video"
 )
 
+// Compile-time silence for the sql import when no per-parent
+// predicate constructor (On<Parent>) is emitted. The compiler trims
+// dead code; this var avoids "imported and not used" on a graph that
+// happens to have no polymorphic children with ResolveCases.
+var _ = sql.Select
 var _ = time.Now
 
 // Compile-time silence in case strconv is never referenced (rare — only
@@ -238,6 +244,67 @@ func CommentCommentableIsType(k MorphKey) predicate.Comment {
 	return comment.CommentableTypeEQ(comment.CommentableType(string(k)))
 }
 
+// CommentCommentableOnPost returns a predicate.Comment
+// matching rows whose polymorphic "commentable" parent is a
+// Post satisfying every supplied predicate. Zero predicates
+// match every Comment pointing at a Post, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('commentable', [Post::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.Comment.Query().Where(
+//	    CommentCommentableOnPost(post.ApprovedEQ(true)),
+//	).All(ctx)
+//
+// SoftDelete enabled: the sub-query also filters out Post rows
+// whose DeletedAt is non-null, matching the read-side
+// guarantees of QueryCommentable / WithCommentable.
+func CommentCommentableOnPost(preds ...predicate.Post) predicate.Comment {
+	return predicate.Comment(func(s *sql.Selector) {
+		sub := sql.Select(post.FieldID).From(sql.Table(post.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		sub.Where(sql.IsNull(post.FieldDeletedAt))
+		s.Where(sql.And(
+			sql.EQ(s.C(comment.FieldCommentableType), string(PostMorphKey)),
+			sql.In(s.C(comment.FieldCommentableID), sub),
+		))
+	})
+}
+
+// CommentCommentableOnVideo returns a predicate.Comment
+// matching rows whose polymorphic "commentable" parent is a
+// Video satisfying every supplied predicate. Zero predicates
+// match every Comment pointing at a Video, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('commentable', [Video::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.Comment.Query().Where(
+//	    CommentCommentableOnVideo(video.ApprovedEQ(true)),
+//	).All(ctx)
+func CommentCommentableOnVideo(preds ...predicate.Video) predicate.Comment {
+	return predicate.Comment(func(s *sql.Selector) {
+		sub := sql.Select(video.FieldID).From(sql.Table(video.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		s.Where(sql.And(
+			sql.EQ(s.C(comment.FieldCommentableType), string(VideoMorphKey)),
+			sql.In(s.C(comment.FieldCommentableID), sub),
+		))
+	})
+}
+
 // QueryCommentable resolves the polymorphic parent of this Comment
 // and returns it through the sealed-interface return type. The caller
 // type-switches on the result to recover the concrete parent — only the
@@ -364,6 +431,34 @@ func ImageImageableIsType(k MorphKey) predicate.Image {
 	return image.ImageableTypeEQ(image.ImageableType(string(k)))
 }
 
+// ImageImageableOnPost returns a predicate.Image
+// matching rows whose polymorphic "imageable" parent is a
+// Post satisfying every supplied predicate. Zero predicates
+// match every Image pointing at a Post, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('imageable', [Post::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.Image.Query().Where(
+//	    ImageImageableOnPost(post.ApprovedEQ(true)),
+//	).All(ctx)
+func ImageImageableOnPost(preds ...predicate.Post) predicate.Image {
+	return predicate.Image(func(s *sql.Selector) {
+		sub := sql.Select(post.FieldID).From(sql.Table(post.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		s.Where(sql.And(
+			sql.EQ(s.C(image.FieldImageableType), string(PostMorphKey)),
+			sql.In(s.C(image.FieldImageableID), sub),
+		))
+	})
+}
+
 // QueryImageable resolves the polymorphic parent of this Image
 // and returns it through the sealed-interface return type. The caller
 // type-switches on the result to recover the concrete parent — only the
@@ -467,6 +562,62 @@ func TaggableTaggableIs(p TaggableTaggableParent) predicate.Taggable {
 //	    All(ctx)
 func TaggableTaggableIsType(k MorphKey) predicate.Taggable {
 	return taggable.TaggableTypeEQ(taggable.TaggableType(string(k)))
+}
+
+// TaggableTaggableOnPost returns a predicate.Taggable
+// matching rows whose polymorphic "taggable" parent is a
+// Post satisfying every supplied predicate. Zero predicates
+// match every Taggable pointing at a Post, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('taggable', [Post::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.Taggable.Query().Where(
+//	    TaggableTaggableOnPost(post.ApprovedEQ(true)),
+//	).All(ctx)
+func TaggableTaggableOnPost(preds ...predicate.Post) predicate.Taggable {
+	return predicate.Taggable(func(s *sql.Selector) {
+		sub := sql.Select(post.FieldID).From(sql.Table(post.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		s.Where(sql.And(
+			sql.EQ(s.C(taggable.FieldTaggableType), string(PostMorphKey)),
+			sql.In(s.C(taggable.FieldTaggableID), sub),
+		))
+	})
+}
+
+// TaggableTaggableOnVideo returns a predicate.Taggable
+// matching rows whose polymorphic "taggable" parent is a
+// Video satisfying every supplied predicate. Zero predicates
+// match every Taggable pointing at a Video, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('taggable', [Video::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.Taggable.Query().Where(
+//	    TaggableTaggableOnVideo(video.ApprovedEQ(true)),
+//	).All(ctx)
+func TaggableTaggableOnVideo(preds ...predicate.Video) predicate.Taggable {
+	return predicate.Taggable(func(s *sql.Selector) {
+		sub := sql.Select(video.FieldID).From(sql.Table(video.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		s.Where(sql.And(
+			sql.EQ(s.C(taggable.FieldTaggableType), string(VideoMorphKey)),
+			sql.In(s.C(taggable.FieldTaggableID), sub),
+		))
+	})
 }
 
 // QueryTaggable resolves the polymorphic parent of this Taggable

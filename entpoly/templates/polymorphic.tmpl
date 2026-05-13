@@ -82,6 +82,7 @@ import (
 	"time"
 {{- end }}
 
+	"entgo.io/ent/dialect/sql"
 	"{{ .ImportPath }}/predicate"
 {{- range .SubpackageImports }}
 	"{{ $.ImportPath }}/{{ . }}"
@@ -90,6 +91,12 @@ import (
 	"{{ . }}"
 {{- end }}
 )
+
+// Compile-time silence for the sql import when no per-parent
+// predicate constructor (On<Parent>) is emitted. The compiler trims
+// dead code; this var avoids "imported and not used" on a graph that
+// happens to have no polymorphic children with ResolveCases.
+var _ = sql.Select
 
 {{- if .HasTouch }}
 var _ = time.Now
@@ -263,6 +270,60 @@ func {{ .Type }}{{ .RelationCap }}Is(p {{ .Type }}{{ .RelationCap }}Parent) pred
 func {{ .Type }}{{ .RelationCap }}IsType(k MorphKey) predicate.{{ .Type }} {
 	return {{ .IDent }}.{{ .TypeField }}EQ({{ .IDent }}.{{ .TypeField }}(string(k)))
 }
+
+{{- /* Per-parent predicate constructors: <Child><Rel>On<Parent> emit
+a single-statement sub-query filter — "rows whose polymorphic parent
+is a <Parent> matching every passed predicate." Zero predicates =
+type-only filter. When MorphTo.SoftDelete() is set AND the parent
+declares the soft-delete column, an IS NULL filter on that column is
+appended to the sub-query automatically. Composes with comment.Or /
+And to express multi-type matches:
+
+  comment.Or(
+      ent.CommentCommentableOnPost(post.PublishedEQ(true)),
+      ent.CommentCommentableOnVideo(video.ViewsGT(1000)),
+  )
+
+See docs/adr-002-where-morph-relation.md for the design. */ -}}
+{{ $c := . }}
+{{ range $rc := $c.ResolveCases }}
+// {{ $c.Type }}{{ $c.RelationCap }}On{{ $rc.Type }} returns a predicate.{{ $c.Type }}
+// matching rows whose polymorphic "{{ $c.Relation }}" parent is a
+// {{ $rc.Type }} satisfying every supplied predicate. Zero predicates
+// match every {{ $c.Type }} pointing at a {{ $rc.Type }}, regardless of
+// the parent's columns.
+//
+// Laravel equivalent:
+//
+//	Comment::whereHasMorph('{{ $c.Relation }}', [{{ $rc.Type }}::class], fn ($q) => $q->where('approved', true))
+//
+// entpoly:
+//
+//	client.{{ $c.Type }}.Query().Where(
+//	    {{ $c.Type }}{{ $c.RelationCap }}On{{ $rc.Type }}({{ $rc.IDent }}.ApprovedEQ(true)),
+//	).All(ctx)
+//
+{{- if $rc.HasSoftDelete }}
+// SoftDelete enabled: the sub-query also filters out {{ $rc.Type }} rows
+// whose {{ $rc.SoftDeleteFieldCap }} is non-null, matching the read-side
+// guarantees of Query{{ $c.RelationCap }} / With{{ $c.RelationCap }}.
+{{- end }}
+func {{ $c.Type }}{{ $c.RelationCap }}On{{ $rc.Type }}(preds ...predicate.{{ $rc.Type }}) predicate.{{ $c.Type }} {
+	return predicate.{{ $c.Type }}(func(s *sql.Selector) {
+		sub := sql.Select({{ $rc.IDent }}.FieldID).From(sql.Table({{ $rc.IDent }}.Table))
+		for _, p := range preds {
+			p(sub)
+		}
+		{{- if $rc.HasSoftDelete }}
+		sub.Where(sql.IsNull({{ $rc.IDent }}.Field{{ $rc.SoftDeleteFieldCap }}))
+		{{- end }}
+		s.Where(sql.And(
+			sql.EQ(s.C({{ $c.IDent }}.Field{{ $c.TypeField }}), string({{ $rc.MorphConst }})),
+			sql.In(s.C({{ $c.IDent }}.Field{{ $c.IDField }}), sub),
+		))
+	})
+}
+{{ end }}
 
 // Query{{ .RelationCap }} resolves the polymorphic parent of this {{ .Type }}
 // and returns it through the sealed-interface return type. The caller

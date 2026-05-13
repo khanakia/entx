@@ -28,6 +28,7 @@ import (
 	"github.com/khanakia/entx/entpoly/examples/basic/ent"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/post"
 )
 
 // openTestClient spins up an in-memory SQLite database via the pure-Go
@@ -317,6 +318,85 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("empty tag.QueryPosts = %v, want empty", got)
+	}
+}
+
+// TestWhereMorphRelationFiltersByParentPredicate verifies the
+// CommentCommentableOnPost / OnVideo predicate constructors —
+// entpoly's whereMorphRelation equivalent. Filters Comments by a
+// sub-query on the parent table, scoped to the morph-type.
+func TestWhereMorphRelationFiltersByParentPredicate(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	postPub := client.Post.Create().SetTitle("Published").SaveX(ctx)
+	postDraft := client.Post.Create().SetTitle("Draft").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	cPub := client.Comment.Create().SetBody("on pub").SetCommentable(postPub).SaveX(ctx)
+	cDraft := client.Comment.Create().SetBody("on draft").SetCommentable(postDraft).SaveX(ctx)
+	cVideo := client.Comment.Create().SetBody("on video").SetCommentable(video).SaveX(ctx)
+
+	// All Post-attached comments via the "every Post" form (zero preds).
+	postComments := client.Comment.Query().
+		Where(ent.CommentCommentableOnPost()).
+		AllX(ctx)
+	if len(postComments) != 2 {
+		t.Errorf("CommentCommentableOnPost() = %d, want 2", len(postComments))
+	}
+
+	// Filter Posts by title — only "Published" Post matches the sub-query.
+	pubComments := client.Comment.Query().
+		Where(ent.CommentCommentableOnPost(post.TitleEQ("Published"))).
+		AllX(ctx)
+	if len(pubComments) != 1 || pubComments[0].ID != cPub.ID {
+		t.Errorf("filtered by Post.Title: got %d rows, want 1 (cPub.ID=%d)", len(pubComments), cPub.ID)
+	}
+	_ = cDraft
+
+	// Multi-type OR — comments on Posts titled "Draft" OR on any Video.
+	multi := client.Comment.Query().
+		Where(comment.Or(
+			ent.CommentCommentableOnPost(post.TitleEQ("Draft")),
+			ent.CommentCommentableOnVideo(),
+		)).
+		AllX(ctx)
+	if len(multi) != 2 {
+		t.Errorf("multi-type Or = %d, want 2", len(multi))
+	}
+	got := map[int]bool{}
+	for _, c := range multi {
+		got[c.ID] = true
+	}
+	if !got[cDraft.ID] || !got[cVideo.ID] {
+		t.Errorf("multi result %v, expected to include cDraft (%d) and cVideo (%d)", got, cDraft.ID, cVideo.ID)
+	}
+}
+
+// TestWhereMorphRelationHonorsSoftDelete verifies the auto-honoring
+// of SoftDelete in the sub-query — Posts that are soft-deleted are
+// excluded from the OnPost match even when no explicit deleted-at
+// predicate is passed.
+func TestWhereMorphRelationHonorsSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	livePost := client.Post.Create().SetTitle("Live").SaveX(ctx)
+	deadPost := client.Post.Create().SetTitle("Dead").SaveX(ctx)
+
+	_ = client.Comment.Create().SetBody("on live").SetCommentable(livePost).SaveX(ctx)
+	_ = client.Comment.Create().SetBody("on dead").SetCommentable(deadPost).SaveX(ctx)
+
+	// Soft-delete the dead post.
+	client.Post.UpdateOneID(deadPost.ID).SetDeletedAt(time.Now()).SaveX(ctx)
+
+	// Even with zero predicates, the helper filters out soft-deleted
+	// Posts because MorphTo(...).SoftDelete() is declared.
+	live := client.Comment.Query().
+		Where(ent.CommentCommentableOnPost()).
+		AllX(ctx)
+	if len(live) != 1 {
+		t.Errorf("CommentCommentableOnPost() = %d rows, want 1 (soft-deleted parent filtered)", len(live))
 	}
 }
 
