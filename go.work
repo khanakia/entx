@@ -6,4 +6,5 @@ use (
 	./entpoly
 	./testent
 	./testentgqlmulti
+	./testentpoly
 )

@@ -203,6 +203,7 @@ Every "did the user do something wrong, and if so do we tell them clearly?" deci
 | 14 | `Cascade()` opt-in propagates through preprocess to per-parent pre-delete hook emission | `preprocess.handleMorphTo` records the flag; template emits `<child><Rel>CascadeOn<Parent>DeleteHook` and wires it into `RegisterPolyHooks` | `TestMorphTo_Cascade` + `TestPreprocess_CascadeFlagFlowsThrough` + `TestCascadeDeletesPolymorphicChildren` |
 | 15 | `SoftDelete()` per-parent auto-detection | `preprocess.handleMorphTo` scans each allowed parent's `Fields` for the configured soft-delete column; `HasSoftDelete` on `resolveTargetRef` drives a per-target `IsNil` filter in the resolver + eager-load | `TestMorphTo_SoftDelete` + `TestPreprocess_SoftDeleteAutoDetectsPerParent` + `TestSoftDeleteSkipsParentInReverseResolve` |
 | 16 | `<Child><Rel>On<Parent>` sub-query predicate constructor | One helper per (child × allowed parent); template emits a single-statement SQL sub-query scoped to the morph type. Honors `SoftDelete()` automatically. Composes with `comment.Or` / `And` for multi-type matches. See [ADR-002](./adr-002-where-morph-relation.md) | `TestWhereMorphRelationFiltersByParentPredicate` + `TestWhereMorphRelationHonorsSoftDelete` |
+| 17 | GraphQL union emission via `.GQL()` | Per-relation opt-in; template emits a type alias + exported `Is<Union>()` markers on each parent + a `GQL<Rel>(ctx)` resolver-helper. `WithGQLSchemaFile(...)` optionally writes a sidecar `.graphql` file with the `union X = A \| B` declarations. | `TestMorphTo_GQL` + `TestMorphTo_GQLCustomUnionName` |
 
 The case-numbered header in `preprocess.go` is the source of truth — when adding a new case, update both the code header AND this table.
 
@@ -264,6 +265,7 @@ Everything listed below is generated end-to-end and verified by the runtime test
 |---|---|
 | Typed predicate constructors: `<Child><Rel>Is(parent)`, `<Child><Rel>IsType(MorphKey)` | ✅ |
 | Per-parent sub-query helpers: `<Child><Rel>On<Parent>(preds...)` — Laravel `whereHasMorph` equivalent | ✅ single-statement SQL; soft-delete-aware |
+| GraphQL union emission for gqlgen/entgql | ✅ opt-in via `.GQL()`; Go-side type alias + exported `Is<Union>()` markers + `GQL<Rel>(ctx)` resolver-helper. Optional `WithGQLSchemaFile(...)` writes the `.graphql` `union` fragment. |
 | Typed forward resolver `comment.QueryCommentable(ctx) → sealed iface, error` | ✅ — switch over allowed parents only, no `any` |
 | Typed reverse back-refs `post.QueryComments() *CommentQuery` (MorphMany) | ✅ |
 | Typed reverse back-ref `post.QueryFeaturedImage(ctx) (*Image, error)` (MorphOne) | ✅ — `(nil, nil)` for unset |
@@ -277,10 +279,11 @@ Everything listed below is generated end-to-end and verified by the runtime test
 
 ## v2 roadmap
 
-What is still ahead (all p2):
+All v1 roadmap items are shipped. Two follow-up gaps surfaced by the [`testentpoly`](../../testentpoly) integration harness remain on the backlog:
 
-| Deferred | Reason |
-|---|---|
-| GraphQL union resolver helper for entgql consumers | Optional emit — wires the `<rel>_type` discriminator to a GraphQL union type. |
+| Gap | Surfaced by | Notes |
+|---|---|---|
+| `WithMorphMap` emits duplicate `MorphKey` constants when two aliases map to the same schema | `testentpoly` `TestMorphMap_Rename` (skipped) | Codegen needs to dedup aliases per target schema, keeping the canonical key + an alias-set for runtime lookup. Test stays `t.Skip(...)` until dedup ships. |
+| Mixed-PK drift linter | `testentpoly` `TestDriftLinter_MixedPKsRejected` (skipped) | Today's drift linter only checks AllowedTypes alignment between mixin and edge. A second pass should reject `MorphTo(Post, Document)` when Post's PK is `int` and Document's is `uuid.UUID` — currently codegen succeeds but reverse-resolve hits a parse error at runtime. |
 
-None of these are blocked by upstream ent. v1 covers the typed write + read surface, runtime enforcement, and the index/migration mechanics. v2 will round out the platform-integration items.
+None of these are blocked by upstream ent. v1 covers the typed write + read surface, runtime enforcement, GraphQL union surface, and the index/migration mechanics.

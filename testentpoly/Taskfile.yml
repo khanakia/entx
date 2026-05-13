@@ -1,0 +1,60 @@
+version: "3"
+
+vars:
+  GQLGEN_BIN: "{{.TASKFILE_DIR}}/bin/gqlgen"
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list
+
+  install-gqlgen:
+    desc: Install gqlgen binary into ./bin (idempotent).
+    cmds:
+      - GOBIN={{.TASKFILE_DIR}}/bin GOWORK=off go install github.com/99designs/gqlgen
+    status:
+      - test -x {{.GQLGEN_BIN}}
+
+  ent:
+    desc: Run ent + entpoly codegen (writes ent/)
+    cmds:
+      - GOWORK=off go run entc.go
+
+  gqlgen:
+    desc: Run gqlgen codegen against api/gql/.
+    deps: [install-gqlgen]
+    cmds:
+      - cd api/gql && GOWORK=off {{.GQLGEN_BIN}} generate
+
+  generate:
+    desc: Full regeneration — ent codegen, then gqlgen, then go mod tidy.
+    cmds:
+      - task: ent
+      - task: gqlgen
+      - GOWORK=off go mod tidy
+
+  test:
+    desc: Run all tests (verbose)
+    cmds:
+      - GOWORK=off go test -v -count=1 .
+
+  test:short:
+    desc: Run tests (short output)
+    cmds:
+      - GOWORK=off go test -count=1 .
+
+  build:
+    desc: Compile everything
+    cmds:
+      - GOWORK=off go build ./...
+
+  serve:
+    desc: Run a real GraphQL server on :8080 (PORT env to override). Seeds Posts/Videos/Images + Comments so the polymorphic union has data on first load.
+    cmds:
+      - GOWORK=off go run ./cmd/serve
+
+  clean:
+    desc: Remove generated artifacts
+    cmds:
+      - rm -rf ent

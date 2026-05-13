@@ -83,8 +83,22 @@ ent.RegisterPolyHooks(client)   // wires Required + Touch + Cascade hooks
 | `.Touch()` / `.Touch("modified_at")` | Bumps parent's timestamp column on every child Save (Laravel `$touches`) |
 | `.Cascade()` | Pre-delete hook on every allowed parent — deletes polymorphic children when the parent dies |
 | `.SoftDelete()` / `.SoftDelete("removed_at")` | Reverse resolves skip parents whose soft-delete column is non-null; per-parent auto-detection |
+| `.GQL()` / `.GQL("CustomName")` | Emits a GraphQL union surface — Go type alias + exported `Is<Union>()` markers + `GQL<Rel>(ctx)` resolver-helper. Optional `.graphql` schema fragment via `entpoly.WithGQLSchemaFile(...)` |
 
 All four wire through one call: `ent.RegisterPolyHooks(client)` at startup. [Mutations reference →](./docs/mutations.md)
+
+### GraphQL union surface (`.GQL()`)
+
+Adding `.GQL()` to a `MorphTo` emits everything gqlgen needs to expose the relation as a GraphQL union:
+
+| Emission | Purpose |
+|---|---|
+| Go type alias `type Commentable = CommentCommentableParent` | gqlgen recognises the union by Go type identity |
+| Exported markers `func (*Post) IsCommentable() {}` on every allowed parent | gqlgen union-member contract — every member type must declare the interface marker |
+| Resolver helper `c.GQLCommentable(ctx) (Commentable, error)` | One-liner for gqlgen resolvers — same result as `c.QueryCommentable(ctx)` |
+| Optional `.graphql` fragment via `entpoly.WithGQLSchemaFile("./graph/poly.graphql")` | `union Commentable = Post \| Video \| Image` lands in your schema directory ready for gqlgen codegen |
+
+End-to-end queries (paste-ready) live in [`testentpoly/QUERIES.md`](../testentpoly/QUERIES.md). Spin up a real server with `cd testentpoly && task serve`.
 
 ### What we DON'T do
 
@@ -155,10 +169,11 @@ See [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) for the desig
 
 | Example | Demonstrates |
 |---|---|
-| [examples/basic/](./examples/basic/) | Int-PK parents (Post, Video, Image), Comment child w/ all options (`Required`, `Touch`, `Cascade`, `SoftDelete`), Tag/Taggable M2M, eager-load |
+| [examples/basic/](./examples/basic/) | Int-PK parents (Post, Video, Image), Comment child w/ all options (`Required`, `Touch`, `Cascade`, `SoftDelete`, `GQL`), Tag/Taggable M2M, eager-load |
 | [examples/uuid/](./examples/uuid/) | UUID-PK parents (Document, Report), Annotation child — full UUID round-trip |
+| [../testentpoly/](../testentpoly/) | **Full integration harness** — every feature, real HTTP GraphQL server, drift-linter negative tests, query tracer for eager-load batching. 27-row scenario matrix in [testentpoly/SCENARIOS.md](../testentpoly/SCENARIOS.md), paste-ready GraphQL queries in [testentpoly/QUERIES.md](../testentpoly/QUERIES.md). |
 
-Both come with runnable runtime tests against in-memory SQLite (`go test ./examples/...`).
+The two `examples/` are minimal runnable docs (`go test ./examples/...`). `testentpoly/` is the kitchen-sink integration suite — schema variants, hook combinations, polymorphic M2M, self-ref, custom column names, morph-map rename, drift-linter negatives, structural artifact assertions, and a real gqlgen HTTP server (`task serve`).
 
 ---
 
@@ -166,8 +181,9 @@ Both come with runnable runtime tests against in-memory SQLite (`go test ./examp
 
 | State | Items |
 |---|---|
-| ✅ Shipped | 11 of 13 roadmap items — see [docs/architecture.md § What v1 ships](./docs/architecture.md) |
-| ⏳ Backlog (p2) | GraphQL union resolver helper |
+| ✅ Shipped | 13 of 13 roadmap items — see [docs/architecture.md § What v1 ships](./docs/architecture.md) |
+| ⏳ Backlog | 2 follow-up gaps surfaced by `testentpoly` — see [docs/architecture.md § v2 roadmap](./docs/architecture.md#v2-roadmap) (dup `MorphKey` constants under aliased `WithMorphMap`; mixed-PK drift linter) |
+| 🧪 Test coverage | `entpoly/` core: 6 codegen GQL tests + integration tests. `examples/basic/` + `examples/uuid/`: runtime tests against in-memory SQLite. `testentpoly/`: 28 PASS / 2 SKIP / 0 FAIL across 5 phases — real ent codegen + real gqlgen + real HTTP + query tracer |
 
 ---
 

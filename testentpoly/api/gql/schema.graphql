@@ -1,0 +1,45 @@
+# Minimal GraphQL schema for testentpoly. Pulls in the union
+# declarations emitted by entpoly (polymorphic.graphql) and exposes a
+# handful of queries the scenario tests exercise.
+
+scalar UUID
+
+type Post {
+  id: ID!
+  title: String!
+  published: Boolean!
+}
+
+type Video {
+  id: ID!
+  title: String!
+}
+
+type Image {
+  id: ID!
+  url: String!
+}
+
+type Document {
+  id: UUID!
+  title: String!
+}
+
+type Report {
+  id: UUID!
+  name: String!
+}
+
+type Comment {
+  id: ID!
+  body: String!
+  commentable: Commentable
+}
+
+type Query {
+  comment(id: ID!): Comment
+  comments: [Comment!]!
+  post(id: ID!): Post
+  video(id: ID!): Video
+  document(id: UUID!): Document
+}

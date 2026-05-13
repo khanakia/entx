@@ -1,0 +1,32 @@
+schema:
+  - schema.graphql
+  - polymorphic.graphql
+
+exec:
+  filename: generated.go
+  package: gql
+
+model:
+  filename: models_gen.go
+  package: gql
+
+resolver:
+  layout: follow-schema
+  dir: .
+  package: gql
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - "github.com/khanakia/entx/testentpoly/ent"
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+      - github.com/99designs/gqlgen/graphql.Int
+  UUID:
+    model: github.com/99designs/gqlgen/graphql.String
+  Commentable:
+    model: github.com/khanakia/entx/testentpoly/ent.Commentable
+  AnnotationTarget:
+    model: github.com/khanakia/entx/testentpoly/ent.AnnotationTarget
