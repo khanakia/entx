@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -62,6 +63,12 @@ func (_u *PostUpdate) ClearBody() *PostUpdate {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *PostUpdate) SetUpdatedAt(v time.Time) *PostUpdate {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
 // Mutation returns the PostMutation object of the builder.
 func (_u *PostUpdate) Mutation() *PostMutation {
 	return _u.mutation
@@ -69,6 +76,7 @@ func (_u *PostUpdate) Mutation() *PostMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *PostUpdate) Save(ctx context.Context) (int, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -91,6 +99,14 @@ func (_u *PostUpdate) Exec(ctx context.Context) error {
 func (_u *PostUpdate) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
+	}
+}
+
+// defaults sets the default values of the builder before save.
+func (_u *PostUpdate) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := post.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
@@ -117,6 +133,9 @@ func (_u *PostUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.BodyCleared() {
 		_spec.ClearField(post.FieldBody, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(post.FieldUpdatedAt, field.TypeTime, value)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -174,6 +193,12 @@ func (_u *PostUpdateOne) ClearBody() *PostUpdateOne {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *PostUpdateOne) SetUpdatedAt(v time.Time) *PostUpdateOne {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
 // Mutation returns the PostMutation object of the builder.
 func (_u *PostUpdateOne) Mutation() *PostMutation {
 	return _u.mutation
@@ -194,6 +219,7 @@ func (_u *PostUpdateOne) Select(field string, fields ...string) *PostUpdateOne {
 
 // Save executes the query and returns the updated Post entity.
 func (_u *PostUpdateOne) Save(ctx context.Context) (*Post, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -216,6 +242,14 @@ func (_u *PostUpdateOne) Exec(ctx context.Context) error {
 func (_u *PostUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
+	}
+}
+
+// defaults sets the default values of the builder before save.
+func (_u *PostUpdateOne) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := post.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
@@ -259,6 +293,9 @@ func (_u *PostUpdateOne) sqlSave(ctx context.Context) (_node *Post, err error) {
 	}
 	if _u.mutation.BodyCleared() {
 		_spec.ClearField(post.FieldBody, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(post.FieldUpdatedAt, field.TypeTime, value)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	_node = &Post{config: _u.config}

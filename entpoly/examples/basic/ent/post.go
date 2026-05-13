@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -19,12 +20,10 @@ type Post struct {
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// Body holds the value of the "body" field.
-	Body                string `json:"body,omitempty"`
-	comment_commentable *int
-	image_imageable     *int
-	tag_posts           *int
-	taggable_taggable   *int
-	selectValues        sql.SelectValues
+	Body string `json:"body,omitempty"`
+	// UpdatedAt holds the value of the "updated_at" field.
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	selectValues sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -36,14 +35,8 @@ func (*Post) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case post.FieldTitle, post.FieldBody:
 			values[i] = new(sql.NullString)
-		case post.ForeignKeys[0]: // comment_commentable
-			values[i] = new(sql.NullInt64)
-		case post.ForeignKeys[1]: // image_imageable
-			values[i] = new(sql.NullInt64)
-		case post.ForeignKeys[2]: // tag_posts
-			values[i] = new(sql.NullInt64)
-		case post.ForeignKeys[3]: // taggable_taggable
-			values[i] = new(sql.NullInt64)
+		case post.FieldUpdatedAt:
+			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -77,33 +70,11 @@ func (_m *Post) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Body = value.String
 			}
-		case post.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field comment_commentable", value)
+		case post.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
-				_m.comment_commentable = new(int)
-				*_m.comment_commentable = int(value.Int64)
-			}
-		case post.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field image_imageable", value)
-			} else if value.Valid {
-				_m.image_imageable = new(int)
-				*_m.image_imageable = int(value.Int64)
-			}
-		case post.ForeignKeys[2]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field tag_posts", value)
-			} else if value.Valid {
-				_m.tag_posts = new(int)
-				*_m.tag_posts = int(value.Int64)
-			}
-		case post.ForeignKeys[3]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field taggable_taggable", value)
-			} else if value.Valid {
-				_m.taggable_taggable = new(int)
-				*_m.taggable_taggable = int(value.Int64)
+				_m.UpdatedAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -146,6 +117,9 @@ func (_m *Post) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("body=")
 	builder.WriteString(_m.Body)
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteByte(')')
 	return builder.String()
 }

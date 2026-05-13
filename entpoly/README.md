@@ -196,7 +196,7 @@ A mismatch surfaces at codegen time with a precise error message pointing at whi
 
 Polymorphic columns reference multiple tables, so SQL cannot enforce a FK constraint. `entpoly` therefore emits **no** foreign keys on the discriminator pair. Pair with [`entcascade`](../entcascade) for application-level cascade deletes when you need them.
 
-A composite index on `(<name>_type, <name>_id)` is recommended for read performance; declare it via standard `Indexes()` until v2 emits it automatically.
+`MorphMixin` emits a default composite index on `(<name>_type, <name>_id)` to keep back-ref reads fast at scale. Opt out via `entpoly.MixinNoIndex()` if a different access pattern dominates your workload.
 
 ## Laravel parity — full reference
 

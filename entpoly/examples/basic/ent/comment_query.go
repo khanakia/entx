@@ -22,7 +22,6 @@ type CommentQuery struct {
 	order      []comment.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Comment
-	withFKs    bool
 	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -335,13 +334,9 @@ func (_q *CommentQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *CommentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Comment, error) {
 	var (
-		nodes   = []*Comment{}
-		withFKs = _q.withFKs
-		_spec   = _q.querySpec()
+		nodes = []*Comment{}
+		_spec = _q.querySpec()
 	)
-	if withFKs {
-		_spec.Node.Columns = append(_spec.Node.Columns, comment.ForeignKeys...)
-	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Comment).scanValues(nil, columns)
 	}

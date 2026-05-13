@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 
@@ -15,6 +17,10 @@ func (Video) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("title"),
 		field.String("url"),
+		// updated_at must exist on every parent listed in
+		// Comment.MorphTo's AllowedTypes when Touch() is enabled —
+		// codegen calls SetUpdatedAt on each branch.
+		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
 }
 

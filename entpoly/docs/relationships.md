@@ -304,7 +304,16 @@ Polymorphic columns intentionally carry **no** foreign-key constraint. The `*_id
 1. Orphan rows are possible if a parent row is deleted out from under a child. Either delete children explicitly (in a transaction) or pair with `entcascade` for application-level cascade deletes.
 2. `entpoly` emits no `ON DELETE` clause. Strict per-type referential integrity requires a discriminated union (separate FK column per parent) instead.
 
-A composite index on `(<name>_type, <name>_id)` is recommended for read performance. Declare it manually until v2 emits it automatically:
+A composite index on `(<name>_type, <name>_id)` is emitted by default by `MorphMixin` — every back-ref read path uses it. Opt out via `MixinNoIndex()` when a different access pattern dominates and you want to save the write overhead:
+
+```go
+entpoly.MorphMixin("commentable",
+    entpoly.MixinAllowed(Post.Type, Video.Type),
+    entpoly.MixinNoIndex(),   // skip the (type, id) index
+)
+```
+
+You can also declare additional indexes manually if you need different shapes:
 
 ```go
 func (Comment) Indexes() []ent.Index {

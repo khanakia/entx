@@ -247,7 +247,7 @@ func (Comment) Edges() []ent.Edge {
 }
 ```
 
-The two `Post.Type, Video.Type` lists must agree. Today this is the user's responsibility; a future enhancement will have `preprocess` validate them and emit a clear error on drift.
+The two `Post.Type, Video.Type` lists must agree. `preprocess` cross-checks them at codegen time and surfaces a precise diff if they drift apart (showing exactly which entry is missing from which side).
 
 ## Comparable systems
 

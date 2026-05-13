@@ -18,7 +18,9 @@ package basic_test
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
+	"time"
 
 	entsql "entgo.io/ent/dialect/sql"
 	_ "modernc.org/sqlite"
@@ -51,6 +53,11 @@ func openTestClient(t *testing.T) *ent.Client {
 		t.Fatalf("schema migrate: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
+
+	// Wire entpoly's Required() runtime hooks. Without this call any
+	// Comment with .Required() set on its MorphTo edge would still
+	// accept a Save with the discriminator pair unset.
+	ent.RegisterPolyHooks(client)
 
 	return client
 }
@@ -135,28 +142,26 @@ func TestReassignAcrossParentTypes(t *testing.T) {
 	}
 }
 
-// TestClearCommentableNullsBothColumns verifies the Clear<Morph> path:
-// both discriminator columns return to NULL so a downstream nil check
-// can detect "no parent" cleanly.
-func TestClearCommentableNullsBothColumns(t *testing.T) {
+// TestClearImageableNullsBothColumns verifies the Clear<Morph> path on
+// a NOT-Required relation. Image.imageable is declared without
+// .Required(), so the column-clear path works the way it did before
+// Required() shipped. The Comment.commentable Required-Clear-rejection
+// case is covered by TestRequiredEnforcementHook above.
+func TestClearImageableNullsBothColumns(t *testing.T) {
 	ctx := context.Background()
 	client := openTestClient(t)
 
 	post := client.Post.Create().SetTitle("P").SaveX(ctx)
-	c := client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
-
-	// Sanity: parent set before clear.
-	if c.CommentableID == nil {
+	img := client.Image.Create().SetURL("u").SetImageable(post).SaveX(ctx)
+	if img.ImageableID == nil {
 		t.Fatal("precondition failed — id should be set before Clear")
 	}
-
-	c = c.Update().ClearCommentable().SaveX(ctx)
-
-	if c.CommentableID != nil {
-		t.Errorf("CommentableID = %v, want nil after Clear", c.CommentableID)
+	img = img.Update().ClearImageable().SaveX(ctx)
+	if img.ImageableID != nil {
+		t.Errorf("ImageableID = %v, want nil after Clear", img.ImageableID)
 	}
-	if c.CommentableType != nil {
-		t.Errorf("CommentableType = %v, want nil after Clear", c.CommentableType)
+	if img.ImageableType != nil {
+		t.Errorf("ImageableType = %v, want nil after Clear", img.ImageableType)
 	}
 }
 
@@ -315,6 +320,186 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 }
 
+// TestEagerLoadBatchingResolvesAcrossTypes verifies the
+// AllWithCommentable preload — the typed batched eager-load that
+// fixes the N+1 problem for polymorphic reads. A mixed batch of
+// Post-parents and Video-parents resolves correctly via a single
+// query per parent type.
+func TestEagerLoadBatchingResolvesAcrossTypes(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post1 := client.Post.Create().SetTitle("P1").SaveX(ctx)
+	post2 := client.Post.Create().SetTitle("P2").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	c1 := client.Comment.Create().SetBody("a").SetCommentable(post1).SaveX(ctx)
+	c2 := client.Comment.Create().SetBody("b").SetCommentable(post2).SaveX(ctx)
+	c3 := client.Comment.Create().SetBody("c").SetCommentable(video).SaveX(ctx)
+	c4 := client.Comment.Create().SetBody("d").SetCommentable(post1).SaveX(ctx)
+
+	r, err := client.Comment.Query().Order(ent.Asc(comment.FieldID)).WithCommentable().All(ctx)
+	if err != nil {
+		t.Fatalf("AllWithCommentable: %v", err)
+	}
+	if len(r.Comments) != 4 {
+		t.Fatalf("Children len = %d, want 4", len(r.Comments))
+	}
+	if len(r.Commentable) != 4 {
+		t.Fatalf("Commentable len = %d, want 4", len(r.Commentable))
+	}
+
+	// Each child's parent must round-trip to the right concrete type.
+	if p, ok := r.Commentable[c1.ID].(*ent.Post); !ok || p.ID != post1.ID {
+		t.Errorf("c1 parent = %v, want post1 (id=%d)", r.Commentable[c1.ID], post1.ID)
+	}
+	if p, ok := r.Commentable[c2.ID].(*ent.Post); !ok || p.ID != post2.ID {
+		t.Errorf("c2 parent = %v, want post2 (id=%d)", r.Commentable[c2.ID], post2.ID)
+	}
+	if v, ok := r.Commentable[c3.ID].(*ent.Video); !ok || v.ID != video.ID {
+		t.Errorf("c3 parent = %v, want video (id=%d)", r.Commentable[c3.ID], video.ID)
+	}
+	// c4 shares its parent with c1 — same loaded *Post instance is fine.
+	if p, ok := r.Commentable[c4.ID].(*ent.Post); !ok || p.ID != post1.ID {
+		t.Errorf("c4 parent = %v, want post1", r.Commentable[c4.ID])
+	}
+}
+
+// TestEagerLoadBatchingEmptyAndOneType covers the degenerate paths:
+// no children at all (nothing to eager-load), and all children share
+// one parent type (only that bucket's batch query fires).
+func TestEagerLoadBatchingEmptyAndOneType(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	// Zero children — result has empty Children + empty Commentable map.
+	r, err := client.Comment.Query().WithCommentable().All(ctx)
+	if err != nil {
+		t.Fatalf("empty AllWithCommentable: %v", err)
+	}
+	if len(r.Comments) != 0 || len(r.Commentable) != 0 {
+		t.Errorf("empty result = %+v, want both empty", r)
+	}
+
+	// All children point at Post — only the Post batch query fires.
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	for i := 0; i < 3; i++ {
+		_ = client.Comment.Create().SetBody("x").SetCommentable(post).SaveX(ctx)
+	}
+	r, err = client.Comment.Query().WithCommentable().All(ctx)
+	if err != nil {
+		t.Fatalf("single-type AllWithCommentable: %v", err)
+	}
+	if len(r.Comments) != 3 || len(r.Commentable) != 3 {
+		t.Errorf("single-type result lens: %d / %d, want 3 / 3", len(r.Comments), len(r.Commentable))
+	}
+	for _, c := range r.Comments {
+		if p, ok := r.Commentable[c.ID].(*ent.Post); !ok || p.ID != post.ID {
+			t.Errorf("comment %d parent wrong: %+v", c.ID, r.Commentable[c.ID])
+		}
+	}
+}
+
+// TestTouchHookBumpsParentTimestamp verifies the runtime hook
+// generated for MorphTo("commentable").Touch() — every successful
+// Comment Save bumps the parent's updated_at timestamp. Laravel
+// $touches behaviour: parent caches / listings can rely on
+// updated_at moving whenever a child mutates.
+func TestTouchHookBumpsParentTimestamp(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	originalTS := post.UpdatedAt
+
+	// Sleep a hair so the post-touch timestamp differs from the
+	// initial one even on systems with low-resolution clocks.
+	time.Sleep(10 * time.Millisecond)
+
+	// Create a comment — touch hook should bump post.updated_at.
+	_ = client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
+
+	got := client.Post.GetX(ctx, post.ID)
+	if !got.UpdatedAt.After(originalTS) {
+		t.Errorf("post.UpdatedAt = %v, want after %v", got.UpdatedAt, originalTS)
+	}
+	afterCreate := got.UpdatedAt
+
+	// Update the comment — should bump again.
+	time.Sleep(10 * time.Millisecond)
+	c := client.Comment.Query().FirstX(ctx)
+	_ = c.Update().SetBody("edited").SaveX(ctx)
+
+	got = client.Post.GetX(ctx, post.ID)
+	if !got.UpdatedAt.After(afterCreate) {
+		t.Errorf("post.UpdatedAt = %v, want after %v", got.UpdatedAt, afterCreate)
+	}
+}
+
+// TestTouchHookBumpsCorrectParentType verifies cross-type isolation —
+// a comment on a Post bumps Post.updated_at, not Video's.
+func TestTouchHookBumpsCorrectParentType(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+	postOriginal := post.UpdatedAt
+	videoOriginal := video.UpdatedAt
+
+	time.Sleep(10 * time.Millisecond)
+	_ = client.Comment.Create().SetBody("on video").SetCommentable(video).SaveX(ctx)
+
+	gotPost := client.Post.GetX(ctx, post.ID)
+	gotVideo := client.Video.GetX(ctx, video.ID)
+
+	if !gotVideo.UpdatedAt.After(videoOriginal) {
+		t.Errorf("video.UpdatedAt = %v, want after %v", gotVideo.UpdatedAt, videoOriginal)
+	}
+	if !gotPost.UpdatedAt.Equal(postOriginal) {
+		t.Errorf("post.UpdatedAt = %v, want unchanged %v (comment was on video, not post)", gotPost.UpdatedAt, postOriginal)
+	}
+}
+
+// TestRequiredEnforcementHook verifies the runtime hook generated for
+// MorphTo("commentable").Required() — the relation cannot be left
+// unset on Create and cannot be cleared on Update. The Go enum
+// validator catches "invalid values"; this hook catches "missing
+// values", together giving full coverage of the Required contract.
+func TestRequiredEnforcementHook(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	// Create without SetCommentable — must be rejected.
+	_, err := client.Comment.Create().SetBody("orphan").Save(ctx)
+	if err == nil {
+		t.Fatal("expected error for Create without SetCommentable, got nil")
+	}
+	if !strings.Contains(err.Error(), "required") {
+		t.Errorf("error should mention required; got %q", err.Error())
+	}
+
+	// Create with SetCommentable — succeeds.
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	c := client.Comment.Create().SetBody("ok").SetCommentable(post).SaveX(ctx)
+
+	// Update that clears the relation — must be rejected.
+	_, err = c.Update().ClearCommentable().Save(ctx)
+	if err == nil {
+		t.Fatal("expected error for ClearCommentable on Required relation, got nil")
+	}
+	if !strings.Contains(err.Error(), "Required") && !strings.Contains(err.Error(), "required") {
+		t.Errorf("error should mention Required; got %q", err.Error())
+	}
+
+	// Reassign across allowed parents — still succeeds (both columns stay set).
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+	c = c.Update().SetCommentable(video).SaveX(ctx)
+	if c.CommentableID == nil {
+		t.Error("reassign should leave discriminator set")
+	}
+}
+
 // TestMorphedByManyAutoInverseBackRef verifies the auto-emitted parent-
 // side back-ref — Laravel's $post->tags. Generated automatically from
 // the Tag.MorphedByMany("posts", ...) declaration; the Post schema does
@@ -411,15 +596,12 @@ func TestQueryCommentableTypedReverseResolve(t *testing.T) {
 		t.Errorf("resolved Video id = %d, want %d", v.ID, video.ID)
 	}
 
-	// Cleared parent → (nil, nil), no error.
-	c1 = c1.Update().ClearCommentable().SaveX(ctx)
-	parent, err = c1.QueryCommentable(ctx)
-	if err != nil {
-		t.Fatalf("QueryCommentable after Clear: %v", err)
-	}
-	if parent != nil {
-		t.Errorf("expected nil parent after Clear, got %+v", parent)
-	}
+	// Note: Comment.commentable is Required() in the schema, so a
+	// Clear path test is not appropriate here — see
+	// TestRequiredEnforcementHook for the rejection behaviour. The
+	// (nil, nil) return of QueryCommentable on an unset parent is
+	// exercised via Image.imageable (which is not Required) in the
+	// QueryImageable code path inside TestMorphOneFeaturedImage.
 }
 
 // TestLaravelStyleAccessors mirrors Laravel's polymorphic relationship

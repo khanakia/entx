@@ -5,6 +5,7 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -19,8 +20,9 @@ type Video struct {
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// URL holds the value of the "url" field.
-	URL          string `json:"url,omitempty"`
-	tag_videos   *int
+	URL string `json:"url,omitempty"`
+	// UpdatedAt holds the value of the "updated_at" field.
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -33,8 +35,8 @@ func (*Video) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case video.FieldTitle, video.FieldURL:
 			values[i] = new(sql.NullString)
-		case video.ForeignKeys[0]: // tag_videos
-			values[i] = new(sql.NullInt64)
+		case video.FieldUpdatedAt:
+			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -68,12 +70,11 @@ func (_m *Video) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.URL = value.String
 			}
-		case video.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field tag_videos", value)
+		case video.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
-				_m.tag_videos = new(int)
-				*_m.tag_videos = int(value.Int64)
+				_m.UpdatedAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -116,6 +117,9 @@ func (_m *Video) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("url=")
 	builder.WriteString(_m.URL)
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteByte(')')
 	return builder.String()
 }

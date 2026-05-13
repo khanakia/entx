@@ -49,9 +49,20 @@ import (
 	"reflect"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 )
+
+// polyEdgeAnnotations is the shared annotation set every entpoly edge
+// carries: our marker (for preprocess identification) plus entsql.Skip()
+// to suppress ent's automatic FK column emission. Without the Skip, ent
+// would add ghost FK columns to the child for every parent edge — see
+// the post_comments / video_comments cosmetic-but-confusing fields the
+// previous build produced.
+func polyEdgeAnnotations(marker markerAnnotation) []schema.Annotation {
+	return []schema.Annotation{marker, entsql.Skip()}
+}
 
 // markerAnnotation is attached to the edge.Descriptor.Annotations slice of
 // every polymorphic edge so the pre-codegen hook can identify these edges
@@ -115,6 +126,20 @@ type markerAnnotation struct {
 	// Required marks the relation as non-nullable. Currently advisory —
 	// v2 may emit a runtime hook that enforces the constraint.
 	Required bool `json:"required,omitempty"`
+
+	// Touch enables the Laravel-$touches behaviour: every successful
+	// Save of this child bumps the polymorphic parent's TouchField
+	// timestamp. Hook fires on OpCreate / OpUpdate / OpUpdateOne; the
+	// parent update happens in the same transaction (failure rolls
+	// back the whole save).
+	Touch bool `json:"touch,omitempty"`
+
+	// TouchField is the parent column name that the touch hook bumps.
+	// Defaults to "updated_at". Must exist on every parent listed in
+	// AllowedTypes; codegen produces a Set<PascalCase(TouchField)>
+	// call and compile fails clearly if the parent is missing the
+	// field.
+	TouchField string `json:"touch_field,omitempty"`
 }
 
 // MarkerName identifies the annotation key for polymorphic edges. Exported
@@ -241,7 +266,7 @@ func MorphTo(name string, parents ...any) *MorphToBuilder {
 		desc: &edge.Descriptor{
 			Name:        name,
 			Type:        placeholder,
-			Annotations: []schema.Annotation{*ann},
+			Annotations: polyEdgeAnnotations(*ann),
 		},
 		ann: ann,
 	}
@@ -282,6 +307,35 @@ func (b *MorphToBuilder) Required() *MorphToBuilder {
 	return b
 }
 
+// Touch enables Laravel-$touches semantics: every successful Save of
+// this child bumps the polymorphic parent's timestamp column. Hook
+// fires on OpCreate / OpUpdate / OpUpdateOne; the parent update
+// happens in the same logical operation, so a failure rolls back the
+// whole save.
+//
+//	entpoly.MorphTo("commentable", Post.Type, Video.Type).Touch()
+//	  // → bumps parent.updated_at on every Comment save
+//
+//	entpoly.MorphTo("commentable", Post.Type, Video.Type).Touch("modified_at")
+//	  // → bumps parent.modified_at instead
+//
+// Every parent in AllowedTypes must declare the timestamp column.
+// Without it, codegen emits a Set<Field>(...) call referencing a method
+// that doesn't exist, and the build fails with a clear "undefined"
+// error pointing at the missing field.
+//
+// Pair with RegisterPolyHooks(client) at startup to install the hook
+// — without that call Touch is silently advisory.
+func (b *MorphToBuilder) Touch(fieldName ...string) *MorphToBuilder {
+	b.ann.Touch = true
+	b.ann.TouchField = "updated_at"
+	if len(fieldName) > 0 && fieldName[0] != "" {
+		b.ann.TouchField = fieldName[0]
+	}
+	b.syncAnnotation()
+	return b
+}
+
 // Descriptor satisfies ent.Edge by returning the underlying descriptor
 // with the latest annotation state.
 func (b *MorphToBuilder) Descriptor() *edge.Descriptor {
@@ -295,7 +349,7 @@ func (b *MorphToBuilder) Descriptor() *edge.Descriptor {
 // descriptor's slice to be the source of truth for ent's pipeline but
 // the builder's annotation to be the source of truth for chaining).
 func (b *MorphToBuilder) syncAnnotation() {
-	b.desc.Annotations = []schema.Annotation{*b.ann}
+	b.desc.Annotations = polyEdgeAnnotations(*b.ann)
 }
 
 // Compile-time assertion that the builder satisfies ent.Edge.
@@ -335,7 +389,7 @@ func MorphMany(field string, child any, morphName string) *MorphManyBuilder {
 		desc: &edge.Descriptor{
 			Name:        field,
 			Type:        target,
-			Annotations: []schema.Annotation{*ann},
+			Annotations: polyEdgeAnnotations(*ann),
 		},
 		ann: ann,
 	}
@@ -363,7 +417,7 @@ func (b *MorphManyBuilder) Descriptor() *edge.Descriptor {
 }
 
 func (b *MorphManyBuilder) syncAnnotation() {
-	b.desc.Annotations = []schema.Annotation{*b.ann}
+	b.desc.Annotations = polyEdgeAnnotations(*b.ann)
 }
 
 var _ ent.Edge = (*MorphManyBuilder)(nil)
@@ -400,7 +454,7 @@ func MorphOne(field string, child any, morphName string) *MorphOneBuilder {
 		desc: &edge.Descriptor{
 			Name:        field,
 			Type:        target,
-			Annotations: []schema.Annotation{*ann},
+			Annotations: polyEdgeAnnotations(*ann),
 		},
 		ann: ann,
 	}
@@ -427,7 +481,7 @@ func (b *MorphOneBuilder) Descriptor() *edge.Descriptor {
 }
 
 func (b *MorphOneBuilder) syncAnnotation() {
-	b.desc.Annotations = []schema.Annotation{*b.ann}
+	b.desc.Annotations = polyEdgeAnnotations(*b.ann)
 }
 
 var _ ent.Edge = (*MorphOneBuilder)(nil)
@@ -466,7 +520,7 @@ func MorphedByMany(field string, parent any) *MorphedByManyBuilder {
 		desc: &edge.Descriptor{
 			Name:        field,
 			Type:        target,
-			Annotations: []schema.Annotation{*ann},
+			Annotations: polyEdgeAnnotations(*ann),
 		},
 		ann: ann,
 	}
@@ -532,7 +586,7 @@ func (b *MorphedByManyBuilder) Descriptor() *edge.Descriptor {
 }
 
 func (b *MorphedByManyBuilder) syncAnnotation() {
-	b.desc.Annotations = []schema.Annotation{*b.ann}
+	b.desc.Annotations = polyEdgeAnnotations(*b.ann)
 }
 
 var _ ent.Edge = (*MorphedByManyBuilder)(nil)

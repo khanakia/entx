@@ -132,16 +132,26 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 				IDGoType:   rt.IDGoType,
 			})
 		}
+		touchField := c.TouchField
+		if touchField == "" {
+			touchField = "updated_at"
+		}
 		d.Children = append(d.Children, childData{
-			Type:         c.TypeName,
-			IDent:        lower(c.TypeName),
-			Relation:     c.MorphName,
-			RelationCap:  pascalCase(c.MorphName),
-			IDField:      pascalGoFieldName(c.IDColumn),
-			TypeField:    pascalGoFieldName(c.TypeColumn),
-			IDIsInt:      c.IDType == "int",
-			AllowedTypes: c.AllowedTypes,
-			ResolveCases: cases,
+			Type:          c.TypeName,
+			IDent:         lower(c.TypeName),
+			Relation:      c.MorphName,
+			RelationCap:   pascalCase(c.MorphName),
+			IDField:       pascalGoFieldName(c.IDColumn),
+			TypeField:     pascalGoFieldName(c.TypeColumn),
+			IDIsInt:       c.IDType == "int",
+			Required:      c.Required,
+			Touch:         c.Touch,
+			TouchField:    touchField,
+			TouchFieldCap: pascalCase(touchField),
+			ChildIDGoType: c.ChildIDGoType,
+			ChildPlural:   c.TypeName + "s",
+			AllowedTypes:  c.AllowedTypes,
+			ResolveCases:  cases,
 		})
 	}
 
@@ -237,6 +247,20 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 	}
 	sort.Strings(d.SubpackageImports)
 
+	// Pre-filter the required- and touched-children lists once so the
+	// template can iterate them without re-checking the flags.
+	for _, c := range d.Children {
+		if c.Required {
+			d.RequiredChildren = append(d.RequiredChildren, c)
+		}
+		if c.Touch {
+			d.TouchedChildren = append(d.TouchedChildren, c)
+		}
+	}
+	d.HasRequired = len(d.RequiredChildren) > 0
+	d.HasTouch = len(d.TouchedChildren) > 0
+	d.HasPolyHooks = d.HasRequired || d.HasTouch
+
 	return d, nil
 }
 
@@ -296,6 +320,27 @@ type tmplData struct {
 	// referenced by the typed back-ref methods. Used by the template
 	// to emit the right import lines.
 	SubpackageImports []string
+
+	// HasRequired is true when at least one child declared Required().
+	// Drives the emission of the RegisterPolyHooks function and the
+	// `errors` import needed by the runtime hooks.
+	HasRequired bool
+
+	// HasTouch is true when at least one child declared Touch(). Used
+	// alongside HasRequired to gate the time / errors import emission
+	// and the RegisterPolyHooks function itself.
+	HasTouch bool
+
+	// RequiredChildren is the subset of Children that need a Required
+	// hook. Lifted here so the template can iterate without filtering.
+	RequiredChildren []childData
+
+	// TouchedChildren is the subset of Children that need a Touch hook.
+	TouchedChildren []childData
+
+	// HasPolyHooks is the OR of HasRequired / HasTouch — RegisterPolyHooks
+	// is emitted when either is true.
+	HasPolyHooks bool
 }
 
 // morphMapEntry is one row of the rendered morph map literal.
@@ -354,10 +399,26 @@ type childData struct {
 	IDField      string             // ent's Go-side field name for the id column.
 	TypeField    string             // ent's Go-side field name for the type column.
 	IDIsInt      bool               // True when the id column is int64 (vs string).
-	AllowedTypes []string           // Allowed parent ent schema names — drives the
+	Required       bool             // True when MorphTo(...).Required() was set — the
+	// template emits a runtime hook that rejects
+	// Saves leaving the discriminator unset or cleared.
+	Touch          bool             // True when MorphTo(...).Touch(...) was set.
+	TouchField     string           // Parent column name to bump (e.g. "updated_at").
+	TouchFieldCap  string           // PascalCase for setter name (e.g. "UpdatedAt" → Set<TouchFieldCap>).
+	ChildIDGoType  string           // The child schema's own ID type (e.g. "int") —
+	// used as the map-key type in the eager-load
+	// result struct so the lookup is typed end-to-end.
+	ChildPlural    string           // Plural of child Type name (e.g. "Comments" for
+	// Comment). Used as the result struct's slice
+	// field name so the API reads naturally:
+	// `for _, c := range r.Comments { ... }`.
+	// Default is Type + "s"; irregular plurals not
+	// auto-handled (rename via codegen if needed).
+	AllowedTypes   []string         // Allowed parent ent schema names — drives the
 	// sealed-interface marker methods.
 	ResolveCases []resolveCaseData // Per-parent switch cases for the typed
-	// parent resolver (Query<Relation>).
+	// parent resolver (Query<Relation>) and the
+	// touch hook's parent-update dispatch.
 }
 
 // resolveCaseData is one switch arm in the generated parent resolver. It

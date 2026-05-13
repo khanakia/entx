@@ -41,6 +41,17 @@ func (Comment) Edges() []ent.Edge {
 		// MorphTo declares the polymorphic side: the discriminator pair
 		// can point at either a Post or a Video. The parent types are
 		// passed via the ent .Type method-value idiom.
-		entpoly.MorphTo("commentable", Post.Type, Video.Type),
+		//
+		// .Required() opts into the runtime-enforcement hook generated
+		// by entpoly (see RegisterPolyHooks in polymorphic.go). A Save
+		// that leaves both discriminator columns unset — or one that
+		// clears them on update — is rejected with a typed error.
+		// .Required() = compile / runtime guarantee the relation is set.
+		// .Touch()    = bump the parent's updated_at on every Comment Save
+		//               (Laravel $touches). Both opt-ins require
+		//               RegisterPolyHooks(client) at startup.
+		entpoly.MorphTo("commentable", Post.Type, Video.Type).
+			Required().
+			Touch(),
 	}
 }

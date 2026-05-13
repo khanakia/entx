@@ -4,8 +4,10 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/comment"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/image"
@@ -15,6 +17,8 @@ import (
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/video"
 )
+
+var _ = time.Now
 
 // Compile-time silence in case strconv is never referenced (rare — only
 // when no child resolver branch needs numeric ID parsing).
@@ -630,6 +634,318 @@ func (p *Video) QueryTags(ctx context.Context) ([]*Tag, error) {
 	return NewTagClient(p.config).Query().Where(tag.IDIn(ids...)).All(ctx)
 }
 
+// CommentCommentablePreloadResult is the typed eager-load
+// result returned by (CommentQuery).WithCommentable().All(ctx).
+// The Comments slice is the same shape
+// CommentQuery.All(ctx) would have returned; the Commentable
+// map is keyed by Comment.ID and holds each row's resolved
+// polymorphic parent.
+type CommentCommentablePreloadResult struct {
+	Comments    []*Comment
+	Commentable map[int]CommentCommentableParent
+}
+
+// CommentCommentableLoader is the ent-native chainable
+// eager-load object returned by (CommentQuery).WithCommentable().
+// Call .All(ctx) on it to run the batched query and receive a typed
+// result. Mirrors ent's standard .WithX().All(ctx) idiom.
+type CommentCommentableLoader struct {
+	q *CommentQuery
+}
+
+// WithCommentable returns the typed eager-load chain for this query.
+// Use over plain .All(ctx) on any list-page path to avoid the N+1
+// problem inherent to per-row QueryCommentable(ctx) calls.
+//
+//	r, err := client.Comment.Query().Limit(50).WithCommentable().All(ctx)
+//	for _, child := range r.Comments {
+//	    parent := r.Commentable[child.ID]
+//	    switch p := parent.(type) {
+//	    case *Post: // typed *Post
+//	    case *Video: // typed *Video
+//	    case nil: // discriminator unset on this row
+//	    }
+//	}
+//
+// Total queries: 1 (children) + N (distinct parent types in the
+// batch). Compared to lazy resolution via QueryCommentable(ctx),
+// which fires one parent query PER child, this is the standard
+// N+1 fix.
+func (q *CommentQuery) WithCommentable() *CommentCommentableLoader {
+	return &CommentCommentableLoader{q: q}
+}
+
+// All runs the Comment query and eager-loads every row's
+// polymorphic "commentable" parent in batched per-type queries.
+func (l *CommentCommentableLoader) All(ctx context.Context) (*CommentCommentablePreloadResult, error) {
+	children, err := l.q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &CommentCommentablePreloadResult{
+		Comments:    children,
+		Commentable: make(map[int]CommentCommentableParent, len(children)),
+	}
+	if len(children) == 0 {
+		return result, nil
+	}
+
+	// Per-parent-type buckets — collect both the child→childlist map
+	// (so we can attach the loaded parent back to every child) and
+	// the list of parent IDs to feed the batched IN(...) query.
+	var postIDs []int
+	postToChildren := map[int][]*Comment{}
+	var videoIDs []int
+	videoToChildren := map[int][]*Comment{}
+
+	for _, ch := range children {
+		if ch.CommentableID == nil || ch.CommentableType == nil {
+			continue
+		}
+		switch *ch.CommentableType {
+		case comment.CommentableType(string(PostMorphKey)):
+			pid, perr := strconv.Atoi(*ch.CommentableID)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWithCommentable: parse Post id %q: %w", *ch.CommentableID, perr)
+			}
+			postIDs = append(postIDs, pid)
+			postToChildren[pid] = append(postToChildren[pid], ch)
+		case comment.CommentableType(string(VideoMorphKey)):
+			pid, perr := strconv.Atoi(*ch.CommentableID)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWithCommentable: parse Video id %q: %w", *ch.CommentableID, perr)
+			}
+			videoIDs = append(videoIDs, pid)
+			videoToChildren[pid] = append(videoToChildren[pid], ch)
+		}
+	}
+	if len(postIDs) > 0 {
+		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWithCommentable: batch-load Post: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range postToChildren[p.ID] {
+				result.Commentable[ch.ID] = p
+			}
+		}
+	}
+	if len(videoIDs) > 0 {
+		parents, perr := NewVideoClient(l.q.config).Query().Where(video.IDIn(videoIDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWithCommentable: batch-load Video: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range videoToChildren[p.ID] {
+				result.Commentable[ch.ID] = p
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// ImageImageablePreloadResult is the typed eager-load
+// result returned by (ImageQuery).WithImageable().All(ctx).
+// The Images slice is the same shape
+// ImageQuery.All(ctx) would have returned; the Imageable
+// map is keyed by Image.ID and holds each row's resolved
+// polymorphic parent.
+type ImageImageablePreloadResult struct {
+	Images    []*Image
+	Imageable map[int]ImageImageableParent
+}
+
+// ImageImageableLoader is the ent-native chainable
+// eager-load object returned by (ImageQuery).WithImageable().
+// Call .All(ctx) on it to run the batched query and receive a typed
+// result. Mirrors ent's standard .WithX().All(ctx) idiom.
+type ImageImageableLoader struct {
+	q *ImageQuery
+}
+
+// WithImageable returns the typed eager-load chain for this query.
+// Use over plain .All(ctx) on any list-page path to avoid the N+1
+// problem inherent to per-row QueryImageable(ctx) calls.
+//
+//	r, err := client.Image.Query().Limit(50).WithImageable().All(ctx)
+//	for _, child := range r.Images {
+//	    parent := r.Imageable[child.ID]
+//	    switch p := parent.(type) {
+//	    case *Post: // typed *Post
+//	    case nil: // discriminator unset on this row
+//	    }
+//	}
+//
+// Total queries: 1 (children) + N (distinct parent types in the
+// batch). Compared to lazy resolution via QueryImageable(ctx),
+// which fires one parent query PER child, this is the standard
+// N+1 fix.
+func (q *ImageQuery) WithImageable() *ImageImageableLoader {
+	return &ImageImageableLoader{q: q}
+}
+
+// All runs the Image query and eager-loads every row's
+// polymorphic "imageable" parent in batched per-type queries.
+func (l *ImageImageableLoader) All(ctx context.Context) (*ImageImageablePreloadResult, error) {
+	children, err := l.q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &ImageImageablePreloadResult{
+		Images:    children,
+		Imageable: make(map[int]ImageImageableParent, len(children)),
+	}
+	if len(children) == 0 {
+		return result, nil
+	}
+
+	// Per-parent-type buckets — collect both the child→childlist map
+	// (so we can attach the loaded parent back to every child) and
+	// the list of parent IDs to feed the batched IN(...) query.
+	var postIDs []int
+	postToChildren := map[int][]*Image{}
+
+	for _, ch := range children {
+		if ch.ImageableID == nil || ch.ImageableType == nil {
+			continue
+		}
+		switch *ch.ImageableType {
+		case image.ImageableType(string(PostMorphKey)):
+			pid, perr := strconv.Atoi(*ch.ImageableID)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWithImageable: parse Post id %q: %w", *ch.ImageableID, perr)
+			}
+			postIDs = append(postIDs, pid)
+			postToChildren[pid] = append(postToChildren[pid], ch)
+		}
+	}
+	if len(postIDs) > 0 {
+		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWithImageable: batch-load Post: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range postToChildren[p.ID] {
+				result.Imageable[ch.ID] = p
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// TaggableTaggablePreloadResult is the typed eager-load
+// result returned by (TaggableQuery).WithTaggable().All(ctx).
+// The Taggables slice is the same shape
+// TaggableQuery.All(ctx) would have returned; the Taggable
+// map is keyed by Taggable.ID and holds each row's resolved
+// polymorphic parent.
+type TaggableTaggablePreloadResult struct {
+	Taggables []*Taggable
+	Taggable  map[int]TaggableTaggableParent
+}
+
+// TaggableTaggableLoader is the ent-native chainable
+// eager-load object returned by (TaggableQuery).WithTaggable().
+// Call .All(ctx) on it to run the batched query and receive a typed
+// result. Mirrors ent's standard .WithX().All(ctx) idiom.
+type TaggableTaggableLoader struct {
+	q *TaggableQuery
+}
+
+// WithTaggable returns the typed eager-load chain for this query.
+// Use over plain .All(ctx) on any list-page path to avoid the N+1
+// problem inherent to per-row QueryTaggable(ctx) calls.
+//
+//	r, err := client.Taggable.Query().Limit(50).WithTaggable().All(ctx)
+//	for _, child := range r.Taggables {
+//	    parent := r.Taggable[child.ID]
+//	    switch p := parent.(type) {
+//	    case *Post: // typed *Post
+//	    case *Video: // typed *Video
+//	    case nil: // discriminator unset on this row
+//	    }
+//	}
+//
+// Total queries: 1 (children) + N (distinct parent types in the
+// batch). Compared to lazy resolution via QueryTaggable(ctx),
+// which fires one parent query PER child, this is the standard
+// N+1 fix.
+func (q *TaggableQuery) WithTaggable() *TaggableTaggableLoader {
+	return &TaggableTaggableLoader{q: q}
+}
+
+// All runs the Taggable query and eager-loads every row's
+// polymorphic "taggable" parent in batched per-type queries.
+func (l *TaggableTaggableLoader) All(ctx context.Context) (*TaggableTaggablePreloadResult, error) {
+	children, err := l.q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &TaggableTaggablePreloadResult{
+		Taggables: children,
+		Taggable:  make(map[int]TaggableTaggableParent, len(children)),
+	}
+	if len(children) == 0 {
+		return result, nil
+	}
+
+	// Per-parent-type buckets — collect both the child→childlist map
+	// (so we can attach the loaded parent back to every child) and
+	// the list of parent IDs to feed the batched IN(...) query.
+	var postIDs []int
+	postToChildren := map[int][]*Taggable{}
+	var videoIDs []int
+	videoToChildren := map[int][]*Taggable{}
+
+	for _, ch := range children {
+		if ch.TaggableID == nil || ch.TaggableType == nil {
+			continue
+		}
+		switch *ch.TaggableType {
+		case taggable.TaggableType(string(PostMorphKey)):
+			pid, perr := strconv.Atoi(*ch.TaggableID)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWithTaggable: parse Post id %q: %w", *ch.TaggableID, perr)
+			}
+			postIDs = append(postIDs, pid)
+			postToChildren[pid] = append(postToChildren[pid], ch)
+		case taggable.TaggableType(string(VideoMorphKey)):
+			pid, perr := strconv.Atoi(*ch.TaggableID)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWithTaggable: parse Video id %q: %w", *ch.TaggableID, perr)
+			}
+			videoIDs = append(videoIDs, pid)
+			videoToChildren[pid] = append(videoToChildren[pid], ch)
+		}
+	}
+	if len(postIDs) > 0 {
+		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWithTaggable: batch-load Post: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range postToChildren[p.ID] {
+				result.Taggable[ch.ID] = p
+			}
+		}
+	}
+	if len(videoIDs) > 0 {
+		parents, perr := NewVideoClient(l.q.config).Query().Where(video.IDIn(videoIDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWithTaggable: batch-load Video: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range videoToChildren[p.ID] {
+				result.Taggable[ch.ID] = p
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // QueryComments returns a query builder for all Comment rows
 // polymorphically attached to this Post via the
 // "commentable" relation. The query is composable — chain .Where(),
@@ -686,4 +1002,132 @@ func (p *Video) QueryComments() *CommentQuery {
 			comment.CommentableIDEQ(p.MorphID()),
 			comment.CommentableTypeEQ(comment.CommentableType(string(p.MorphKey()))),
 		)
+}
+
+// errEntPolyRequired is the sentinel returned by every Required()
+// enforcement hook. Use errors.Is to detect.
+var errEntPolyRequired = errors.New("entpoly: required polymorphic relation missing")
+
+// RegisterPolyHooks installs the runtime hooks declared by MorphTo
+// builder options (Required, Touch). Call once after creating the
+// client, before any writes:
+//
+//	client := ent.NewClient(...)
+//	ent.RegisterPolyHooks(client)
+//
+// Without this call the options are silently advisory:
+//
+//   - Required() will NOT reject incomplete writes.
+//   - Touch() will NOT bump the parent timestamp.
+//
+// Hooks run in registration order; Required hooks come first so a
+// rejected save short-circuits before any touch fires.
+func RegisterPolyHooks(c *Client) {
+	c.Comment.Use(commentCommentableRequiredHook())
+	c.Comment.Use(commentCommentableTouchHook())
+}
+
+// commentCommentableRequiredHook returns the ent.Hook that enforces
+// MorphTo("commentable").Required() at runtime. Wired automatically
+// by RegisterPolyHooks; exposed individually so callers can install it
+// on a sub-client (e.g. a tx) without registering every hook.
+func commentCommentableRequiredHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			cm, ok := m.(*CommentMutation)
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
+			switch cm.Op() {
+			case OpCreate:
+				// On create both columns must be set. Use the
+				// generated <Field>() (value, exists) getter.
+				_, idOK := cm.CommentableID()
+				_, tyOK := cm.CommentableType()
+				if !idOK || !tyOK {
+					return nil, fmt.Errorf("entpoly: Comment.commentable is required — "+
+						"call SetCommentable(parent) before Save: %w", errEntPolyRequired)
+				}
+			case OpUpdate, OpUpdateOne:
+				// On update reject explicit clears of either column.
+				if cm.CommentableIDCleared() || cm.CommentableTypeCleared() {
+					return nil, fmt.Errorf("entpoly: cannot ClearCommentable() — "+
+						"Comment.commentable is Required(): %w", errEntPolyRequired)
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+}
+
+// commentCommentableTouchHook returns the ent.Hook that
+// implements Laravel-$touches semantics for MorphTo("commentable").Touch():
+// after every successful Save of a Comment, the polymorphic
+// parent's updated_at column is bumped to time.Now(). The
+// parent update runs in the same logical operation; if it errors the
+// child save is reported as failed.
+//
+// The hook is registered automatically by RegisterPolyHooks. Exposed
+// individually so callers can install it on a sub-client (e.g. a tx).
+//
+// Each allowed parent type must declare a Time field named
+// "updated_at". A missing field surfaces as an undefined-method
+// compile error on SetUpdatedAt below.
+func commentCommentableTouchHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			// Run the child save first — only touch the parent if the
+			// child write succeeded. Same ordering Laravel uses.
+			v, err := next.Mutate(ctx, m)
+			if err != nil {
+				return v, err
+			}
+			cm, ok := m.(*CommentMutation)
+			if !ok {
+				return v, nil
+			}
+			// On Create the discriminator is in the mutation. On Update
+			// the user typically did not re-set it, so fall back to the
+			// OldX(ctx) accessor which loads the current row value
+			// from the DB. The relation can still be unset (NULL), in
+			// which case there is nothing to touch.
+			idStr, idOK := cm.CommentableID()
+			if !idOK {
+				if oldID, oerr := cm.OldCommentableID(ctx); oerr == nil && oldID != nil {
+					idStr = *oldID
+					idOK = true
+				}
+			}
+			tyVal, tyOK := cm.CommentableType()
+			if !tyOK {
+				if oldTy, oerr := cm.OldCommentableType(ctx); oerr == nil && oldTy != nil {
+					tyVal = *oldTy
+					tyOK = true
+				}
+			}
+			if !idOK || !tyOK {
+				return v, nil // discriminator unset; nothing to touch
+			}
+			now := time.Now()
+			switch string(tyVal) {
+			case string(PostMorphKey):
+				pid, perr := strconv.Atoi(idStr)
+				if perr != nil {
+					return v, fmt.Errorf("entpoly: touch Post: parse id %q: %w", idStr, perr)
+				}
+				if _, terr := cm.Client().Post.UpdateOneID(pid).SetUpdatedAt(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch Post id %d: %w", pid, terr)
+				}
+			case string(VideoMorphKey):
+				pid, perr := strconv.Atoi(idStr)
+				if perr != nil {
+					return v, fmt.Errorf("entpoly: touch Video: parse id %q: %w", idStr, perr)
+				}
+				if _, terr := cm.Client().Video.UpdateOneID(pid).SetUpdatedAt(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch Video id %d: %w", pid, terr)
+				}
+			}
+			return v, nil
+		})
+	}
 }

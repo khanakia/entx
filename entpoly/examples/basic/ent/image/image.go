@@ -37,21 +37,10 @@ var Columns = []string{
 	FieldHeight,
 }
 
-// ForeignKeys holds the SQL foreign-keys that are owned by the "images"
-// table and are not defined as standalone fields in the schema.
-var ForeignKeys = []string{
-	"post_featured_image",
-}
-
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
 	for i := range Columns {
 		if column == Columns[i] {
-			return true
-		}
-	}
-	for i := range ForeignKeys {
-		if column == ForeignKeys[i] {
 			return true
 		}
 	}

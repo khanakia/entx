@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -31,6 +32,20 @@ func (_c *VideoCreate) SetURL(v string) *VideoCreate {
 	return _c
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *VideoCreate) SetUpdatedAt(v time.Time) *VideoCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *VideoCreate) SetNillableUpdatedAt(v *time.Time) *VideoCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
 // Mutation returns the VideoMutation object of the builder.
 func (_c *VideoCreate) Mutation() *VideoMutation {
 	return _c.mutation
@@ -38,6 +53,7 @@ func (_c *VideoCreate) Mutation() *VideoMutation {
 
 // Save creates the Video in the database.
 func (_c *VideoCreate) Save(ctx context.Context) (*Video, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -63,6 +79,14 @@ func (_c *VideoCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_c *VideoCreate) defaults() {
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		v := video.DefaultUpdatedAt()
+		_c.mutation.SetUpdatedAt(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_c *VideoCreate) check() error {
 	if _, ok := _c.mutation.Title(); !ok {
@@ -70,6 +94,9 @@ func (_c *VideoCreate) check() error {
 	}
 	if _, ok := _c.mutation.URL(); !ok {
 		return &ValidationError{Name: "url", err: errors.New(`ent: missing required field "Video.url"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Video.updated_at"`)}
 	}
 	return nil
 }
@@ -105,6 +132,10 @@ func (_c *VideoCreate) createSpec() (*Video, *sqlgraph.CreateSpec) {
 		_spec.SetField(video.FieldURL, field.TypeString, value)
 		_node.URL = value
 	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(video.FieldUpdatedAt, field.TypeTime, value)
+		_node.UpdatedAt = value
+	}
 	return _node, _spec
 }
 
@@ -126,6 +157,7 @@ func (_c *VideoCreateBulk) Save(ctx context.Context) ([]*Video, error) {
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*VideoMutation)
 				if !ok {

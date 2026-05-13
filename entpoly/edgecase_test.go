@@ -339,6 +339,28 @@ func TestMorphMixin_NoIndexOpt(t *testing.T) {
 	}
 }
 
+func TestMorphMixin_NoIndexComposeswithAllowed(t *testing.T) {
+	// MixinNoIndex must compose with the other options without
+	// disabling them — Fields() should still emit the enum-typed
+	// type column when MixinAllowed is set alongside.
+	m := MorphMixin("commentable",
+		MixinAllowed(Post.Type, Video.Type),
+		MixinNoIndex(),
+	)
+	indexer := m.(interface{ Indexes() []ent.Index })
+	if got := indexer.Indexes(); len(got) != 0 {
+		t.Errorf("Indexes = %v, want empty", got)
+	}
+	fields := m.Fields()
+	if len(fields) != 2 {
+		t.Fatalf("Fields len = %d, want 2", len(fields))
+	}
+	typeField := fields[1].Descriptor()
+	if len(typeField.Enums) == 0 {
+		t.Error("MixinAllowed should still emit enum values even with MixinNoIndex")
+	}
+}
+
 func TestMorphMixin_CompositeIndexUsesCustomColumnNames(t *testing.T) {
 	m := MorphMixin("commentable",
 		MixinIDColumn("parent_id"),
@@ -351,9 +373,10 @@ func TestMorphMixin_CompositeIndexUsesCustomColumnNames(t *testing.T) {
 	}
 }
 
-// Drift linter — when the mixin emits the type column as field.Enum (via
-// MixinAllowed), the set of enum values must match the edge's
-// AllowedTypes set. Mismatches surface as a clear diff at codegen time.
+// Case #12 — drift linter. When the mixin emits the type column as
+// field.Enum (via MixinAllowed), the set of enum values must match
+// the edge's AllowedTypes set. Mismatches surface as a clear diff at
+// codegen time.
 func TestPreprocess_DriftBetweenMixinAndEdgeErrors(t *testing.T) {
 	// Mixin contributed columns for "post" and "video", but the edge's
 	// AllowedTypes only mention "post" — Video is in MixinAllowed but

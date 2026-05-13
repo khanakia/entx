@@ -55,6 +55,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "title", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "updated_at", Type: field.TypeTime},
 	}
 	// PostsTable holds the schema information for the "posts" table.
 	PostsTable = &schema.Table{
@@ -100,6 +101,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "title", Type: field.TypeString},
 		{Name: "url", Type: field.TypeString},
+		{Name: "updated_at", Type: field.TypeTime},
 	}
 	// VideosTable holds the schema information for the "videos" table.
 	VideosTable = &schema.Table{

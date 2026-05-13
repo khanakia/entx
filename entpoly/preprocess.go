@@ -54,6 +54,19 @@
 //                                                       check short-circuits the
 //                                                       sidecar emit entirely
 //
+//   11  Ghost FK columns left behind by ent's edge      preprocess tail: walk every
+//       processor after our edge strip                  type's ForeignKeys, drop
+//                                                       entries whose Edge has our
+//                                                       marker, also drop the FK
+//                                                       field from t.Fields. Result:
+//                                                       no leftover `post_comments`
+//                                                       *int on the child struct.
+//
+//   12  AllowedTypes drift between MixinAllowed enum    handleMorphTo: cross-check
+//       and MorphTo's parent list                       the typeCol's Enums against
+//                                                       AllowedTypes; report symmetric
+//                                                       diff with remediation hint.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly
@@ -135,6 +148,51 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 			}
 		}
 		t.Edges = kept
+	}
+
+	// Strip ghost FK columns ent auto-added for the polymorphic edges
+	// we just removed. ent's edge processor adds an entry to the
+	// target's gen.Type.ForeignKeys AND a hidden field on the target's
+	// gen.Type.Fields for every edge.To, BEFORE our hook runs. The
+	// strip above removes the edge from Edges, but the FK and its
+	// underlying field linger as ghost state — they show up as
+	// unexported fields on the generated entity struct (e.g.
+	// "post_comments *int" on Comment) and confuse readers of the
+	// generated code.
+	//
+	// We identify ghost FKs by walking each type's ForeignKeys and
+	// checking whether the linked Edge carries our marker annotation.
+	// Removing both the FK entry and its underlying field leaves the
+	// generated struct clean.
+	for _, t := range g.Nodes {
+		keptFKs := t.ForeignKeys[:0]
+		ghostFieldNames := map[string]struct{}{}
+		for _, fk := range t.ForeignKeys {
+			if fk.Edge == nil || fk.Edge.Annotations == nil {
+				keptFKs = append(keptFKs, fk)
+				continue
+			}
+			if _, isPoly := fk.Edge.Annotations[MarkerName]; isPoly {
+				// Record the ghost field name so we can also drop it
+				// from t.Fields below; do not re-add this FK entry.
+				if fk.Field != nil {
+					ghostFieldNames[fk.Field.Name] = struct{}{}
+				}
+				continue
+			}
+			keptFKs = append(keptFKs, fk)
+		}
+		t.ForeignKeys = keptFKs
+		if len(ghostFieldNames) > 0 {
+			keptFields := t.Fields[:0]
+			for _, f := range t.Fields {
+				if _, ghost := ghostFieldNames[f.Name]; ghost {
+					continue
+				}
+				keptFields = append(keptFields, f)
+			}
+			t.Fields = keptFields
+		}
 	}
 
 	// Auto-register any parent participant into the morph map so the
@@ -267,6 +325,13 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		break
 	}
 
+	// Look up the child's own ID Go type — used as the map-key type in
+	// the eager-load result struct.
+	childIDType := "int"
+	if t.ID != nil && t.ID.Type != nil {
+		childIDType = t.ID.Type.String()
+	}
+
 	// Resolve each allowed parent's ID Go type by looking it up in the
 	// loaded graph. This lets the typed resolver (QueryCommentable)
 	// emit the right strconv conversion for each branch without having
@@ -287,6 +352,10 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		TypeColumn:     typeCol,
 		IDType:         m.IDType,
 		AllowedTypes:   m.AllowedTypes,
+		Required:       m.Required,
+		Touch:          m.Touch,
+		TouchField:     m.TouchField,
+		ChildIDGoType:  childIDType,
 		ResolveTargets: targets,
 	})
 

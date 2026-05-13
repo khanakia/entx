@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -56,6 +57,12 @@ func (_u *VideoUpdate) SetNillableURL(v *string) *VideoUpdate {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *VideoUpdate) SetUpdatedAt(v time.Time) *VideoUpdate {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
 // Mutation returns the VideoMutation object of the builder.
 func (_u *VideoUpdate) Mutation() *VideoMutation {
 	return _u.mutation
@@ -63,6 +70,7 @@ func (_u *VideoUpdate) Mutation() *VideoMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (_u *VideoUpdate) Save(ctx context.Context) (int, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -88,6 +96,14 @@ func (_u *VideoUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_u *VideoUpdate) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := video.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
+	}
+}
+
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (_u *VideoUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *VideoUpdate {
 	_u.modifiers = append(_u.modifiers, modifiers...)
@@ -108,6 +124,9 @@ func (_u *VideoUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.URL(); ok {
 		_spec.SetField(video.FieldURL, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(video.FieldUpdatedAt, field.TypeTime, value)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
@@ -159,6 +178,12 @@ func (_u *VideoUpdateOne) SetNillableURL(v *string) *VideoUpdateOne {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *VideoUpdateOne) SetUpdatedAt(v time.Time) *VideoUpdateOne {
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
 // Mutation returns the VideoMutation object of the builder.
 func (_u *VideoUpdateOne) Mutation() *VideoMutation {
 	return _u.mutation
@@ -179,6 +204,7 @@ func (_u *VideoUpdateOne) Select(field string, fields ...string) *VideoUpdateOne
 
 // Save executes the query and returns the updated Video entity.
 func (_u *VideoUpdateOne) Save(ctx context.Context) (*Video, error) {
+	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
@@ -201,6 +227,14 @@ func (_u *VideoUpdateOne) Exec(ctx context.Context) error {
 func (_u *VideoUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
+	}
+}
+
+// defaults sets the default values of the builder before save.
+func (_u *VideoUpdateOne) defaults() {
+	if _, ok := _u.mutation.UpdatedAt(); !ok {
+		v := video.UpdateDefaultUpdatedAt()
+		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
@@ -241,6 +275,9 @@ func (_u *VideoUpdateOne) sqlSave(ctx context.Context) (_node *Video, err error)
 	}
 	if value, ok := _u.mutation.URL(); ok {
 		_spec.SetField(video.FieldURL, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(video.FieldUpdatedAt, field.TypeTime, value)
 	}
 	_spec.AddModifiers(_u.modifiers...)
 	_node = &Video{config: _u.config}

@@ -3,6 +3,8 @@
 package video
 
 import (
+	"time"
+
 	"entgo.io/ent/dialect/sql"
 )
 
@@ -15,6 +17,8 @@ const (
 	FieldTitle = "title"
 	// FieldURL holds the string denoting the url field in the database.
 	FieldURL = "url"
+	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
+	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the video in the database.
 	Table = "videos"
 )
@@ -24,12 +28,7 @@ var Columns = []string{
 	FieldID,
 	FieldTitle,
 	FieldURL,
-}
-
-// ForeignKeys holds the SQL foreign-keys that are owned by the "videos"
-// table and are not defined as standalone fields in the schema.
-var ForeignKeys = []string{
-	"tag_videos",
+	FieldUpdatedAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -39,13 +38,15 @@ func ValidColumn(column string) bool {
 			return true
 		}
 	}
-	for i := range ForeignKeys {
-		if column == ForeignKeys[i] {
-			return true
-		}
-	}
 	return false
 }
+
+var (
+	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
+	DefaultUpdatedAt func() time.Time
+	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
+	UpdateDefaultUpdatedAt func() time.Time
+)
 
 // OrderOption defines the ordering options for the Video queries.
 type OrderOption func(*sql.Selector)
@@ -63,4 +64,9 @@ func ByTitle(opts ...sql.OrderTermOption) OrderOption {
 // ByURL orders the results by the url field.
 func ByURL(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldURL, opts...).ToFunc()
+}
+
+// ByUpdatedAt orders the results by the updated_at field.
+func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
 }

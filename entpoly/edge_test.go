@@ -45,8 +45,11 @@ func TestMorphTo_RecordsAllowedParents(t *testing.T) {
 	if d.Name != "commentable" {
 		t.Errorf("Name = %q, want commentable", d.Name)
 	}
-	if len(d.Annotations) != 1 {
-		t.Fatalf("Annotations len = %d, want 1", len(d.Annotations))
+	// Polymorphic edges carry two annotations: the marker (drives
+	// preprocess) + entsql.Skip() (suppresses ent's auto FK-column
+	// emission on the child).
+	if len(d.Annotations) != 2 {
+		t.Fatalf("Annotations len = %d, want 2", len(d.Annotations))
 	}
 	m, ok := decodeMarker(d.Annotations)
 	if !ok {
@@ -161,6 +164,60 @@ func TestMorphedByMany_MorphNameOverride(t *testing.T) {
 	m, _ := decodeMarker(b.Descriptor().Annotations)
 	if m.MorphName != "custom" {
 		t.Errorf("MorphName = %q, want custom", m.MorphName)
+	}
+}
+
+func TestMorphedByMany_InverseNameOverride(t *testing.T) {
+	// Default inverse = snake(holder)+"s". For irregular plurals
+	// ("Category" → "categorys" — wrong) the user supplies an
+	// explicit override.
+	b := MorphedByMany("posts", Post.Type).
+		Through("categorizables", fakeSchema.Type).
+		InverseName("categories")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.InverseFieldName != "categories" {
+		t.Errorf("InverseFieldName = %q, want categories", m.InverseFieldName)
+	}
+}
+
+func TestMorphedByMany_InverseNameEmptyKeepsDefault(t *testing.T) {
+	// Calling InverseName("") should not clobber the default — the
+	// preprocess pass derives "<holder>s" when this field is empty.
+	b := MorphedByMany("posts", Post.Type).
+		Through("taggables", fakeSchema.Type)
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.InverseFieldName != "" {
+		t.Errorf("default InverseFieldName = %q, want empty (preprocess derives later)", m.InverseFieldName)
+	}
+}
+
+func TestMorphTo_TouchWithCustomField(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).Touch("modified_at")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.Touch {
+		t.Error("Touch flag not set")
+	}
+	if m.TouchField != "modified_at" {
+		t.Errorf("TouchField = %q, want modified_at", m.TouchField)
+	}
+}
+
+func TestMorphTo_TouchDefaultField(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).Touch()
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.Touch {
+		t.Error("Touch flag not set")
+	}
+	if m.TouchField != "updated_at" {
+		t.Errorf("TouchField default = %q, want updated_at", m.TouchField)
+	}
+}
+
+func TestMorphTo_TouchEmptyArgKeepsDefault(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).Touch("")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.TouchField != "updated_at" {
+		t.Errorf("empty Touch arg → field = %q, want updated_at (default)", m.TouchField)
 	}
 }
 

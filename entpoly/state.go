@@ -96,6 +96,16 @@ type childInfo struct {
 	TypeColumn     string             // Resolved type column name.
 	IDType         string             // "string" or "int" — the morph_id column type.
 	AllowedTypes   []string           // Allowed parent schema names from the builder.
+	Required       bool               // True when MorphTo(...).Required() was set — the
+	// emitted runtime hook rejects Saves that leave
+	// the discriminator pair unset or clear it.
+	Touch          bool               // True when MorphTo(...).Touch() was set — Laravel
+	// $touches semantics; on every child Save the
+	// parent's TouchField is bumped to time.Now().
+	TouchField     string             // Parent column name to bump (default "updated_at").
+	ChildIDGoType  string             // The child's own ID Go type ("int", "int64",
+	// "string"). Used by the eager-load result struct
+	// to type the result map's key.
 	ResolveTargets []resolveTargetRef // Per-parent metadata for the typed resolver
 	// (QueryCommentable) — populated from the
 	// loaded gen.Graph at preprocess time.

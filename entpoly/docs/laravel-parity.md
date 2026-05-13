@@ -82,20 +82,22 @@ case nil:         /* unset        */
 
 ### Reverse — holder ↔ pivot (`MorphedByMany`)
 
-In v1, M2M back-refs go through the pivot directly:
+Typed back-refs emitted from a single `Tag.MorphedByMany("posts", Post.Type).Through(...)` declaration:
 
 ```go
-// All tags attached to a post
-pivots, _ := client.Taggable.Query().
-    Where(ent.TaggableTaggableIs(post)).  // typed predicate, accepts only AllowedTypes
-    All(ctx)
+// Holder → parents
+posts, _ := tag.QueryPosts(ctx)     // []*Post
+videos, _ := tag.QueryVideos(ctx)   // []*Video
 
-tagIDs := make([]int, len(pivots))
-for i, p := range pivots { tagIDs[i] = p.TagID }
-tags, _ := client.Tag.Query().Where(tag.IDIn(tagIDs...)).All(ctx)
+// Parent → holders (auto-emitted from the same declaration above —
+// no separate decl on Post is required)
+tags, _ := post.QueryTags(ctx)      // []*Tag
+tags, _ = video.QueryTags(ctx)
 ```
 
-v2 will emit `tag.QueryPosts(ctx)` / `post.QueryTags(ctx)` directly.
+Both directions run as 2-step queries under the hood: pivot scan, then a single batched IN(...) load against the target table.
+
+Override the auto-derived plural via `.InverseName("categories")` on the `MorphedByMany` builder for irregular cases.
 
 ## Write
 
@@ -184,17 +186,17 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 |---|---|
 | `protected $morphMap` enforcement | `MixinAllowed(...)` emits `field.Enum` → runtime validator + DB CHECK |
 | Manual model-level validation hooks | ent hooks; reject if `*_type` outside allowed set |
-| `protected $touches = ['commentable']` | manual via ent hook (see [mutations.md](./mutations.md#touch-parents-on-child-save)) |
+| `protected $touches = ['commentable']` | `MorphTo(...).Touch()` — bumps parent's `updated_at` (or override field name) on every child Save. Wired via `RegisterPolyHooks(client)`. |
+| `$comment->touch()` parent timestamps | Same `.Touch()` mechanism above fires on Create + Update + UpdateOne. |
+| `Comment::with('commentable')->get()` eager loading | `cq.WithCommentable().All(ctx)` — typed result struct, 1 + N queries (one per parent type), not N+1. |
 
 ## What Laravel has that we don't yet (v2 backlog)
 
 | Laravel | Status in entpoly |
 |---|---|
-| `MorphedByMany` typed back-refs (`$tag->posts`) | v2 codegen — manual pivot query for now |
-| `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | v2 — manual per-type composition |
-| `$post->load('comments')` eager loading (single batched query) | v2 — chain `.WithComments()`-style helpers |
-| `$comment->touch()` parent timestamps | manual ent hook |
-| Soft-delete-aware reverse resolve | manual filter |
+| `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | v2 — compose per-type sub-predicate over `cq.WithCommentable()` |
+| Soft-delete-aware reverse resolve | v2 — skip soft-deleted parents in `QueryCommentable` and eager-load batches |
+| Custom Go-typed parent IDs (`uuid.UUID` etc) | v2 — codegen branch parameterised but lacks the `uuid.UUID` import emit + `uuid.Parse` strconv replacement |
 
 ## What entpoly has that Laravel doesn't
 

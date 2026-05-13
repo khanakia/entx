@@ -3,7 +3,11 @@
 package ent
 
 import (
+	"time"
+
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/post"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/taggable"
+	"github.com/khanakia/entx/entpoly/examples/basic/ent/video"
 	"github.com/khanakia/entx/entpoly/examples/basic/schema"
 )
 
@@ -11,10 +15,26 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	postFields := schema.Post{}.Fields()
+	_ = postFields
+	// postDescUpdatedAt is the schema descriptor for updated_at field.
+	postDescUpdatedAt := postFields[2].Descriptor()
+	// post.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	post.DefaultUpdatedAt = postDescUpdatedAt.Default.(func() time.Time)
+	// post.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	post.UpdateDefaultUpdatedAt = postDescUpdatedAt.UpdateDefault.(func() time.Time)
 	taggableFields := schema.Taggable{}.Fields()
 	_ = taggableFields
 	// taggableDescSortOrder is the schema descriptor for sort_order field.
 	taggableDescSortOrder := taggableFields[2].Descriptor()
 	// taggable.DefaultSortOrder holds the default value on creation for the sort_order field.
 	taggable.DefaultSortOrder = taggableDescSortOrder.Default.(int)
+	videoFields := schema.Video{}.Fields()
+	_ = videoFields
+	// videoDescUpdatedAt is the schema descriptor for updated_at field.
+	videoDescUpdatedAt := videoFields[2].Descriptor()
+	// video.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	video.DefaultUpdatedAt = videoDescUpdatedAt.Default.(func() time.Time)
+	// video.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	video.UpdateDefaultUpdatedAt = videoDescUpdatedAt.UpdateDefault.(func() time.Time)
 }

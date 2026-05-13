@@ -25,9 +25,8 @@ type Image struct {
 	// Width holds the value of the "width" field.
 	Width int `json:"width,omitempty"`
 	// Height holds the value of the "height" field.
-	Height              int `json:"height,omitempty"`
-	post_featured_image *int
-	selectValues        sql.SelectValues
+	Height       int `json:"height,omitempty"`
+	selectValues sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -39,8 +38,6 @@ func (*Image) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case image.FieldImageableID, image.FieldImageableType, image.FieldURL:
 			values[i] = new(sql.NullString)
-		case image.ForeignKeys[0]: // post_featured_image
-			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -93,13 +90,6 @@ func (_m *Image) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field height", values[i])
 			} else if value.Valid {
 				_m.Height = int(value.Int64)
-			}
-		case image.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field post_featured_image", value)
-			} else if value.Valid {
-				_m.post_featured_image = new(int)
-				*_m.post_featured_image = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])

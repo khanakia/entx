@@ -191,24 +191,41 @@ _, _ = client.Post.DeleteOneID(post.ID).Exec(ctx)
 
 ## Touch parents on child save
 
-Laravel automatically bumps `updated_at` on the parent when a child is saved if the child declares `protected $touches = ['commentable']`. `entpoly` does not implement touch in v1. Add it manually via an ent hook:
+Laravel automatically bumps `updated_at` on the parent when a child is saved if the child declares `protected $touches = ['commentable']`. `entpoly` ships the same behaviour via `.Touch()` on the `MorphTo` edge builder:
 
 ```go
-func (Comment) Hooks() []ent.Hook {
-    return []ent.Hook{
-        hook.On(func(next ent.Mutator) ent.Mutator {
-            return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-                v, err := next.Mutate(ctx, m)
-                if err != nil { return v, err }
-                cm := m.(*ent.CommentMutation)
-                if t, ok := cm.CommentableType(); ok {
-                    if id, ok := cm.CommentableID(); ok {
-                        _ = touchParent(ctx, cm.Client(), t, id) // your helper
-                    }
-                }
-                return v, nil
-            })
-        }, ent.OpCreate|ent.OpUpdate|ent.OpUpdateOne),
+// ent/schema/comment.go
+func (Comment) Edges() []ent.Edge {
+    return []ent.Edge{
+        entpoly.MorphTo("commentable", Post.Type, Video.Type).
+            Touch(),                  // bump parent.updated_at
+        // or:
+        entpoly.MorphTo("commentable", Post.Type, Video.Type).
+            Touch("modified_at"),     // bump a custom field name
     }
 }
 ```
+
+Wire the runtime hook once at startup:
+
+```go
+client := ent.NewClient(...)
+ent.RegisterPolyHooks(client)        // installs every Required / Touch hook
+```
+
+Every successful Save of a `Comment` (OpCreate / OpUpdate / OpUpdateOne) now bumps the polymorphic parent's `updated_at`. Hook ordering: child save runs first; only on success does the touch fire. A touch failure rolls the whole save back, matching Laravel.
+
+Each parent listed in the `MorphTo` must declare the touched field — typically `field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now)`. Missing field = compile error pointing at the missing `Set<Field>` method in `polymorphic.go`.
+
+## Required relations (forbid unset)
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).Required()
+```
+
+The generated hook (also wired by `RegisterPolyHooks`) rejects:
+
+- Create without `SetCommentable(...)` — the discriminator pair is unset
+- Update / UpdateOne that calls `ClearCommentable()` — relation is required
+
+Pairs with `.Touch()` cleanly — install both in the same `RegisterPolyHooks` call.

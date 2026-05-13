@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -39,6 +40,20 @@ func (_c *PostCreate) SetNillableBody(v *string) *PostCreate {
 	return _c
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *PostCreate) SetUpdatedAt(v time.Time) *PostCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *PostCreate) SetNillableUpdatedAt(v *time.Time) *PostCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
 // Mutation returns the PostMutation object of the builder.
 func (_c *PostCreate) Mutation() *PostMutation {
 	return _c.mutation
@@ -46,6 +61,7 @@ func (_c *PostCreate) Mutation() *PostMutation {
 
 // Save creates the Post in the database.
 func (_c *PostCreate) Save(ctx context.Context) (*Post, error) {
+	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
@@ -71,10 +87,21 @@ func (_c *PostCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (_c *PostCreate) defaults() {
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		v := post.DefaultUpdatedAt()
+		_c.mutation.SetUpdatedAt(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (_c *PostCreate) check() error {
 	if _, ok := _c.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "Post.title"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Post.updated_at"`)}
 	}
 	return nil
 }
@@ -110,6 +137,10 @@ func (_c *PostCreate) createSpec() (*Post, *sqlgraph.CreateSpec) {
 		_spec.SetField(post.FieldBody, field.TypeString, value)
 		_node.Body = value
 	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(post.FieldUpdatedAt, field.TypeTime, value)
+		_node.UpdatedAt = value
+	}
 	return _node, _spec
 }
 
@@ -131,6 +162,7 @@ func (_c *PostCreateBulk) Save(ctx context.Context) ([]*Post, error) {
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*PostMutation)
 				if !ok {

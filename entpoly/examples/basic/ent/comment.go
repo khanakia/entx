@@ -21,10 +21,8 @@ type Comment struct {
 	// CommentableType holds the value of the "commentable_type" field.
 	CommentableType *comment.CommentableType `json:"commentable_type,omitempty"`
 	// Body holds the value of the "body" field.
-	Body           string `json:"body,omitempty"`
-	post_comments  *int
-	video_comments *int
-	selectValues   sql.SelectValues
+	Body         string `json:"body,omitempty"`
+	selectValues sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -36,10 +34,6 @@ func (*Comment) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case comment.FieldCommentableID, comment.FieldCommentableType, comment.FieldBody:
 			values[i] = new(sql.NullString)
-		case comment.ForeignKeys[0]: // post_comments
-			values[i] = new(sql.NullInt64)
-		case comment.ForeignKeys[1]: // video_comments
-			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -80,20 +74,6 @@ func (_m *Comment) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field body", values[i])
 			} else if value.Valid {
 				_m.Body = value.String
-			}
-		case comment.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field post_comments", value)
-			} else if value.Valid {
-				_m.post_comments = new(int)
-				*_m.post_comments = int(value.Int64)
-			}
-		case comment.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field video_comments", value)
-			} else if value.Valid {
-				_m.video_comments = new(int)
-				*_m.video_comments = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])

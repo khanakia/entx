@@ -22,7 +22,6 @@ type VideoQuery struct {
 	order      []video.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Video
-	withFKs    bool
 	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -335,13 +334,9 @@ func (_q *VideoQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *VideoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Video, error) {
 	var (
-		nodes   = []*Video{}
-		withFKs = _q.withFKs
-		_spec   = _q.querySpec()
+		nodes = []*Video{}
+		_spec = _q.querySpec()
 	)
-	if withFKs {
-		_spec.Node.Columns = append(_spec.Node.Columns, video.ForeignKeys...)
-	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Video).scanValues(nil, columns)
 	}

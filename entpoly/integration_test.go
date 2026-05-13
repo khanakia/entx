@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"entgo.io/ent/entc/gen"
+	"entgo.io/ent/schema/field"
 )
 
 // markerToAnnotations serialises a markerAnnotation through JSON the same
@@ -370,5 +371,197 @@ func TestHook_RunsFullPipeline(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "polymorphic.go")); err != nil {
 		t.Errorf("sidecar missing: %v", err)
+	}
+}
+
+// typeWithID is a *gen.Type with a synthetic ID field of the given Go
+// type. Used by the per-parent-ID-type tests below to drive
+// preprocess's per-target strconv-flavour selection.
+func typeWithID(name string, idType field.Type) *gen.Type {
+	return &gen.Type{
+		Name: name,
+		ID:   &gen.Field{Name: "id", Type: &field.TypeInfo{Type: idType}},
+	}
+}
+
+// Case #11 — Ghost FK columns left behind by ent's edge processor
+// after our edge strip. TestPreprocess_StripsGhostForeignKeys verifies
+// that the ForeignKeys
+// + Fields cleanup pass removes ent's auto-added FK column entries
+// that came from a now-stripped polymorphic edge. Without this pass,
+// the generated Comment struct would carry leftover unexported fields
+// like `post_comments *int` for every parent declaring MorphMany on
+// Comment — cosmetic clutter that confuses readers of the generated
+// code.
+func TestPreprocess_StripsGhostForeignKeys(t *testing.T) {
+	// Comment is the polymorphic child here. We seed it with a ghost
+	// FK entry whose Edge carries our marker — exactly the shape ent
+	// produces for an edge.To(Comment.Type) on a parent type before
+	// our preprocess runs.
+	ghostEdge := &gen.Edge{
+		Name:        "post_comments",
+		Annotations: markerToAnnotations(t, markerAnnotation{Kind: "morphMany"}),
+	}
+	ghostField := &gen.Field{Name: "post_comments"}
+	comment := withDiscriminatorFields(&gen.Type{
+		Name:        "Comment",
+		ForeignKeys: []*gen.ForeignKey{{Field: ghostField, Edge: ghostEdge}},
+		Fields:      []*gen.Field{ghostField},
+	}, "commentable")
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+	})
+	comment.Edges = []*gen.Edge{commentEdge}
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}},
+	}
+	if err := NewExtension().preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if len(comment.ForeignKeys) != 0 {
+		t.Errorf("ghost FK not stripped: %+v", comment.ForeignKeys)
+	}
+	for _, f := range comment.Fields {
+		if f.Name == "post_comments" {
+			t.Errorf("ghost FK field not stripped from Fields: %s", f.Name)
+		}
+	}
+}
+
+// TestPreprocess_KeepsNonPolyForeignKeys is the safety net for the
+// strip pass — only FKs whose Edge carries our marker get removed.
+// Regular ent FK columns (from a true edge.To) must survive.
+func TestPreprocess_KeepsNonPolyForeignKeys(t *testing.T) {
+	// FK whose Edge has NO marker (a real, non-polymorphic edge).
+	realEdge := &gen.Edge{Name: "author"}
+	realField := &gen.Field{Name: "author_id"}
+	comment := withDiscriminatorFields(&gen.Type{
+		Name:        "Comment",
+		ForeignKeys: []*gen.ForeignKey{{Field: realField, Edge: realEdge}},
+		Fields:      []*gen.Field{realField},
+	}, "commentable")
+	polyEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+	})
+	comment.Edges = []*gen.Edge{polyEdge, realEdge}
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}},
+	}
+	if err := NewExtension().preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if len(comment.ForeignKeys) != 1 || comment.ForeignKeys[0].Field.Name != "author_id" {
+		t.Errorf("real FK was incorrectly stripped: %+v", comment.ForeignKeys)
+	}
+}
+
+// TestPreprocess_RecordsTargetIDGoTypeString verifies that when a
+// MorphTo's allowed parent has a string ID (the UUID / ULID case),
+// preprocess records "string" in childInfo.ResolveTargets — which
+// the template uses to skip strconv entirely and pass the morph id
+// through unchanged into the parent's Get(ctx, id) call.
+func TestPreprocess_RecordsTargetIDGoTypeString(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"User"},
+		IDType:       "string",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	user := typeWithID("User", field.TypeString)
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, user},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if len(e.state.Children) != 1 {
+		t.Fatalf("Children len = %d, want 1", len(e.state.Children))
+	}
+	rt := e.state.Children[0].ResolveTargets
+	if len(rt) != 1 || rt[0].IDGoType != "string" {
+		t.Errorf("ResolveTargets[0].IDGoType = %v, want string", rt)
+	}
+}
+
+// TestPreprocess_RecordsTargetIDGoTypeInt64 covers the int64 PK
+// path. The template's strconv branch picks ParseInt over Atoi when
+// this string is "int64".
+func TestPreprocess_RecordsTargetIDGoTypeInt64(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"BigPost"},
+		IDType:       "string",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	bigPost := typeWithID("BigPost", field.TypeInt64)
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, bigPost},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	rt := e.state.Children[0].ResolveTargets
+	if rt[0].IDGoType != "int64" {
+		t.Errorf("IDGoType = %q, want int64", rt[0].IDGoType)
+	}
+}
+
+// TestPreprocess_MixedAllowedTypesRecordedSeparately verifies the
+// per-parent ID typing — each allowed parent's ID type is recorded
+// independently, so a polymorphic relation referencing both int and
+// string parents emits the correct strconv flavour per branch.
+func TestPreprocess_MixedAllowedTypesRecordedSeparately(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post", "User"},
+		IDType:       "string",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	post := typeWithID("Post", field.TypeInt)
+	user := typeWithID("User", field.TypeString)
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, post, user},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	rt := e.state.Children[0].ResolveTargets
+	if len(rt) != 2 {
+		t.Fatalf("ResolveTargets len = %d, want 2", len(rt))
+	}
+	gotByName := map[string]string{}
+	for _, r := range rt {
+		gotByName[r.SchemaName] = r.IDGoType
+	}
+	if gotByName["Post"] != "int" {
+		t.Errorf("Post IDGoType = %q, want int", gotByName["Post"])
+	}
+	if gotByName["User"] != "string" {
+		t.Errorf("User IDGoType = %q, want string", gotByName["User"])
 	}
 }

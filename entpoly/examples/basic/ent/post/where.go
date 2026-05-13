@@ -3,6 +3,8 @@
 package post
 
 import (
+	"time"
+
 	"entgo.io/ent/dialect/sql"
 	"github.com/khanakia/entx/entpoly/examples/basic/ent/predicate"
 )
@@ -60,6 +62,11 @@ func Title(v string) predicate.Post {
 // Body applies equality check predicate on the "body" field. It's identical to BodyEQ.
 func Body(v string) predicate.Post {
 	return predicate.Post(sql.FieldEQ(FieldBody, v))
+}
+
+// UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
+func UpdatedAt(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
 // TitleEQ applies the EQ predicate on the "title" field.
@@ -200,6 +207,46 @@ func BodyEqualFold(v string) predicate.Post {
 // BodyContainsFold applies the ContainsFold predicate on the "body" field.
 func BodyContainsFold(v string) predicate.Post {
 	return predicate.Post(sql.FieldContainsFold(FieldBody, v))
+}
+
+// UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
+func UpdatedAtEQ(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// UpdatedAtNEQ applies the NEQ predicate on the "updated_at" field.
+func UpdatedAtNEQ(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldNEQ(FieldUpdatedAt, v))
+}
+
+// UpdatedAtIn applies the In predicate on the "updated_at" field.
+func UpdatedAtIn(vs ...time.Time) predicate.Post {
+	return predicate.Post(sql.FieldIn(FieldUpdatedAt, vs...))
+}
+
+// UpdatedAtNotIn applies the NotIn predicate on the "updated_at" field.
+func UpdatedAtNotIn(vs ...time.Time) predicate.Post {
+	return predicate.Post(sql.FieldNotIn(FieldUpdatedAt, vs...))
+}
+
+// UpdatedAtGT applies the GT predicate on the "updated_at" field.
+func UpdatedAtGT(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldGT(FieldUpdatedAt, v))
+}
+
+// UpdatedAtGTE applies the GTE predicate on the "updated_at" field.
+func UpdatedAtGTE(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldGTE(FieldUpdatedAt, v))
+}
+
+// UpdatedAtLT applies the LT predicate on the "updated_at" field.
+func UpdatedAtLT(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldLT(FieldUpdatedAt, v))
+}
+
+// UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
+func UpdatedAtLTE(v time.Time) predicate.Post {
+	return predicate.Post(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
 // And groups predicates with the AND operator between them.

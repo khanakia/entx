@@ -165,7 +165,9 @@ The template now emits **typed back-reference methods**:
 
 The forward resolver dispatches over `*c.<TypeField>` (an ent-generated enum value), converts the stringified morph id back to the parent's real PK type (`strconv.Atoi`, `strconv.ParseInt`, or pass-through for string IDs), and calls the right `New<Parent>Client(c.config).Get(ctx, id)`.
 
-The only typed back-ref still pending is the M2M holder side (`tag.QueryPosts(ctx) []*Post`); see the v2 roadmap below.
+v1 also emits the M2M back-refs in both directions from a single `MorphedByMany` declaration: `tag.QueryPosts(ctx) []*Post` on the holder side AND `post.QueryTags(ctx) []*Tag` on the parent side, auto-derived.
+
+Eager-load batching is shipped via the ent-native `cq.WithCommentable().All(ctx)` chain — returns a typed result struct with the children slice and a `map[childID]parent` lookup. Single batched query per parent type; one + N total instead of N+1.
 
 ### `helper/helper.go`
 
@@ -178,6 +180,27 @@ Pure runtime helpers — no codegen, no graph, no client dependency. Three funct
 | `SyncWithoutDetach(attached, target)` | Idempotently add every id in `target` not already attached. |
 
 The helpers do not touch the database. They compute set diffs; applying them is the caller's job. This keeps the helper package free of any client-shape dependency.
+
+## Edge cases — what entpoly catches and where
+
+Every "did the user do something wrong, and if so do we tell them clearly?" decision is made in one place: `preprocess.go`. The table below mirrors the case-numbered header at the top of that file. Each case is referenced by `Case #N` in the test that exercises it — grep the codebase for `Case #5` to find both the handler and the test.
+
+| # | Case | Where handled | Test |
+|---|---|---|---|
+| 1 | `MorphTo("x")` with no parents | `preprocess.handleMorphTo` — errors at preprocess with hint to pass at least one `X.Type` | `TestPreprocess_MorphToWithNoParentsErrors` |
+| 2 | Mixin column name vs edge override mismatch | `preprocess.handleMorphTo` — error message includes correct `MixinIDColumn` / `MixinTypeColumn` hint | `TestPreprocess_CustomColumnMismatchSurfacedInError` |
+| 3 | Multiple `MorphTo` edges on one schema | `preprocess` loop — independent dispatch per edge; both recorded as separate Children | `TestPreprocess_TwoMorphToOnSameSchema` |
+| 4 | Self-referential polymorphic (`Comment → Comment`) | `preprocess.handleMorphTo` — host appearing in its own AllowedTypes auto-registered in morph map | `TestPreprocess_SelfReferentialPolymorphic` |
+| 5 | `MorphedByMany` without `.Through()` | `preprocess.handleHolder` — errors with remediation hint | `TestPreprocess_MorphedByManyWithoutThroughErrors` |
+| 6 | `MorphedByMany` with no parent type | `preprocess.handleHolder` — defensive errors; surfaces builder-API misuse | (covered by the builder-API typing) |
+| 7 | Mixin column overrides agree with edge | `preprocess.handleMorphTo` — column-presence check IS the agreement check | `TestMorphMixin_*` (4 tests) |
+| 8 | Non-polymorphic edges preserved alongside poly | `preprocess` loop — only edges with the marker get stripped | `TestPreprocess_KeepsNonPolymorphicEdges` |
+| 9 | Parent participants auto-registered in morph map even without explicit alias | `preprocess` tail — types referenced as parents but missing from the map get snake_case aliases | `TestPreprocess_RegistersAllowedTypesInMorphMap` |
+| 10 | No-op when graph has no polymorphic edges | `generate` — `hasParticipants` check short-circuits the sidecar emit entirely | `TestGenerate_NoParticipantsSkipsEmit` |
+| 11 | Ghost FK columns left behind by ent's edge processor after our strip | `preprocess` tail — walk every type's `ForeignKeys`, drop entries whose `Edge` has our marker; also drop the FK field from `t.Fields` | `TestPreprocess_StripsGhostForeignKeys` + `TestPreprocess_KeepsNonPolyForeignKeys` |
+| 12 | `AllowedTypes` drift between `MixinAllowed` enum values and `MorphTo`'s parent list | `preprocess.handleMorphTo` — cross-checks the typeCol's `Enums` against `AllowedTypes`; reports symmetric diff with remediation hint | `TestPreprocess_DriftBetweenMixinAndEdgeErrors` + `_AgreementBetweenMixinAndEdgePasses` |
+
+The case-numbered header in `preprocess.go` is the source of truth — when adding a new case, update both the code header AND this table.
 
 ## Conventions and invariants
 
@@ -198,38 +221,62 @@ These are the rules the codegen relies on. Break them and the generated code wil
 - **New runtime helper** — add to `helper/helper.go` with full tests. Helpers must stay reflection-free, allocation-light, and database-agnostic.
 - **New `Extension` option** — add an `Option` constructor (returns `func(*Extension)`). Make it idempotent — registering the same option twice must produce the same final state.
 
-## What v1 ships (vs. earlier drafts of this document)
+## What v1 ships
 
-The v1 codegen has expanded since the first design sketch. Everything listed below is now generated end-to-end and verified by the runtime test suite (`examples/basic/runtime_test.go`).
+Everything listed below is generated end-to-end and verified by the runtime test suite (`examples/basic/runtime_test.go` + the core test suite in `entpoly/`).
+
+### Schema-time surface
 
 | Surface | Status |
 |---|---|
 | Discriminator columns (`<rel>_id`, `<rel>_type`) | ✅ via `MorphMixin` |
 | Optional DB-level enum (CHECK / native ENUM) for the type column | ✅ via `MorphMixin(name, MixinAllowed(...))` |
+| Composite index on `(<rel>_type, <rel>_id)` — opt-out via `MixinNoIndex()` | ✅ default-on |
+| Ghost FK column suppression — no leftover `<parent>_<rel>` ints on the child struct | ✅ via `entsql.Skip()` on every edge + preprocess ForeignKeys / Fields cleanup |
+
+### Type-safety
+
+| Surface | Status |
+|---|---|
 | ent enum runtime validator + typed `<TypeColumn>` Go type | ✅ ent generates from `field.Enum` |
 | Per-parent typed `MorphKey` constants (`PostMorphKey`, ...) | ✅ |
 | Named `MorphKey` type — rejects raw string literals | ✅ |
-| Sealed parent interface per relation (`CommentCommentableParent`) | ✅ — `Set<Morph>(p sealed)` |
+| Sealed parent interface per relation (`CommentCommentableParent`) | ✅ — `Set<Morph>(p sealed)` rejects non-allowed parents at compile time |
 | Per-parent `MorphID() string` + `MorphKey() MorphKey` | ✅ |
+| Allowed-set drift linter — mixin enum values vs MorphTo's AllowedTypes | ✅ preprocess errors with a diff before codegen finishes |
+
+### Mutations
+
+| Surface | Status |
+|---|---|
 | `Set<Morph>` / `Clear<Morph>` on Create / Update / UpdateOne / Mutation builders | ✅ |
+| `Required()` runtime enforcement hook (reject Save w/ unset or cleared discriminator) | ✅ wired via `RegisterPolyHooks(client)` |
+| `Touch(field)` runtime hook — Laravel `$touches` semantics (bump parent's column) | ✅ wired via `RegisterPolyHooks(client)`; custom field name supported |
+
+### Reads
+
+| Surface | Status |
+|---|---|
 | Typed predicate constructors: `<Child><Rel>Is(parent)`, `<Child><Rel>IsType(MorphKey)` | ✅ |
-| **Typed forward resolver** `comment.QueryCommentable(ctx) → sealed iface, error` | ✅ — switch over allowed parents only, no `any` |
-| **Typed reverse back-refs** `post.QueryComments() *CommentQuery` (MorphMany) | ✅ |
-| **Typed reverse back-ref** `post.QueryFeaturedImage(ctx) (*Image, error)` (MorphOne) | ✅ — `(nil, nil)` for unset |
-| ID conversion in resolver — `int`, `int64`, `string` (UUIDs) | ✅ per-parent at codegen time |
+| Typed forward resolver `comment.QueryCommentable(ctx) → sealed iface, error` | ✅ — switch over allowed parents only, no `any` |
+| Typed reverse back-refs `post.QueryComments() *CommentQuery` (MorphMany) | ✅ |
+| Typed reverse back-ref `post.QueryFeaturedImage(ctx) (*Image, error)` (MorphOne) | ✅ — `(nil, nil)` for unset |
+| Typed M2M holder back-refs `tag.QueryPosts(ctx) []*Post` (MorphedByMany) | ✅ pivot + target batch query |
+| Auto-emitted M2M parent-side back-refs `post.QueryTags(ctx) []*Tag` | ✅ derived from single `MorphedByMany` declaration |
+| Eager-load batching `client.Comment.Query().WithCommentable().All(ctx)` | ✅ ent-native chain, returns typed result struct |
+| ID conversion in resolvers — `int`, `int64`, `string` | ✅ per-parent at codegen time (`gen.Type.ID.Type`) |
 | Set-diff helpers `Toggle` / `Sync` / `SyncWithoutDetach` for M2M | ✅ in `helper/` |
 
 ## v2 roadmap
 
-What is still ahead:
+What is still ahead (all p2):
 
 | Deferred | Reason |
 |---|---|
-| Typed M2M holder back-refs (`tag.QueryPosts(ctx) []*Post`) | Currently the user reads the pivot manually then queries the target. Codegen for both ends of the M2M is mechanical — not blocked, just not landed. |
-| Eager-load batching (`client.Comment.Query().WithCommentable(ctx)`) | Builds on the existing typed resolver: emit a method that groups child rows by `<rel>_type`, then fires one batch query per parent type. |
-| Auto-touch on parent update (Laravel `$touches`) | Runtime hook registration via the extension — bump `parent.updated_at` whenever a child saves. |
-| Composite index emission on `(<rel>_type, <rel>_id)` | Atlas annotation injection at codegen time so the read path scales without a manual `Indexes()` declaration. |
 | GraphQL union resolver helper for entgql consumers | Optional emit — wires the `<rel>_type` discriminator to a GraphQL union type. |
-| Validation hook for `AllowedTypes` mismatch between mixin and edge | Today preprocess catches the column-name mismatch via "missing column" error; an explicit cross-check between `MixinAllowed` and `MorphTo`'s parent list would surface drift earlier with a clearer message. |
+| entcascade auto-wire integration | When `entcascade` is also registered, emit the cascade-delete helpers automatically for polymorphic relations. |
+| `whereMorphRelation`-style closure pattern | Compose a per-type sub-predicate over the child query — equivalent to Laravel's `Comment::whereHasMorph('commentable', [Post::class], fn ($q) => $q->where(...))`. |
+| Soft-delete-aware reverse resolve | When parents declare a `deleted_at` mixin, skip soft-deleted rows in `QueryCommentable` and in eager-load batches. |
+| UUID / custom Go-typed parent IDs | Codegen branch is parameterised on `IDGoType` but lacks the `uuid.UUID` import emission + the `uuid.Parse` strconv replacement. Mechanical addition. |
 
-None of these are blocked by upstream ent — they are implementation work inside `entpoly`. The v1 line was drawn at "feature-complete typed read + write surface across all four shapes, DB-level enforcement opt-in, full Laravel parity on the canonical operations". v2 will fill in batching, M2M-side typing, and the platform-level integrations.
+None of these are blocked by upstream ent. v1 covers the typed write + read surface, runtime enforcement, and the index/migration mechanics. v2 will round out the platform-integration items.

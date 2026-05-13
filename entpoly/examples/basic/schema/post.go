@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 
@@ -17,6 +19,12 @@ func (Post) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("title"),
 		field.Text("body").Optional(),
+		// updated_at is the column Comment.Touch() bumps. Default +
+		// UpdateDefault give us the "set on insert, bump on update"
+		// behaviour ent supports natively; entpoly's touch hook also
+		// sets it explicitly when a child saves, so the timestamp
+		// advances even when the parent itself is unchanged.
+		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}
 }
 

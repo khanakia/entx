@@ -73,14 +73,24 @@ package {{ .Package }}
 
 import (
 	"context"
+{{- if .HasRequired }}
+	"errors"
+{{- end }}
 	"fmt"
 	"strconv"
+{{- if .HasTouch }}
+	"time"
+{{- end }}
 
 	"{{ .ImportPath }}/predicate"
 {{- range .SubpackageImports }}
 	"{{ $.ImportPath }}/{{ . }}"
 {{- end }}
 )
+
+{{- if .HasTouch }}
+var _ = time.Now
+{{- end }}
 
 // Compile-time silence in case strconv is never referenced (rare — only
 // when no child resolver branch needs numeric ID parsing).
@@ -403,6 +413,146 @@ func (p *{{ .Target }}) Query{{ .InverseFieldCap }}(ctx context.Context) ([]*{{ 
 }
 {{ end }}
 
+{{- /* ─── Eager-load batching (N+1 fix) ─────────────────────────────
+For every MorphTo with at least one allowed parent type, emit a
+"AllWith<Rel>" method on the child's Query type that:
+
+  1. Runs the normal child query (returns []*Child).
+  2. Buckets the children by their persisted morph_type value.
+  3. Fires ONE batched parent query per bucket (a single IN(...)).
+  4. Returns a typed result struct mapping child.ID → parent.
+
+Total queries: 1 + (distinct parent types in this batch). For most
+list pages that is 2-3, down from N+1.
+
+The result map key is the child's own ID Go type so the lookup is
+type-safe end-to-end. The map value is the sealed parent interface,
+so `case *Article:` would not compile even if accidentally present
+in a type switch over the returned parents. */ -}}
+{{ range $c := .Children }}
+{{- if $c.ResolveCases }}
+
+// {{ $c.Type }}{{ $c.RelationCap }}PreloadResult is the typed eager-load
+// result returned by ({{ $c.Type }}Query).With{{ $c.RelationCap }}().All(ctx).
+// The {{ $c.ChildPlural }} slice is the same shape
+// {{ $c.Type }}Query.All(ctx) would have returned; the {{ $c.RelationCap }}
+// map is keyed by {{ $c.Type }}.ID and holds each row's resolved
+// polymorphic parent.
+type {{ $c.Type }}{{ $c.RelationCap }}PreloadResult struct {
+	{{ $c.ChildPlural }} []*{{ $c.Type }}
+	{{ $c.RelationCap }} map[{{ $c.ChildIDGoType }}]{{ $c.Type }}{{ $c.RelationCap }}Parent
+}
+
+// {{ $c.Type }}{{ $c.RelationCap }}Loader is the ent-native chainable
+// eager-load object returned by ({{ $c.Type }}Query).With{{ $c.RelationCap }}().
+// Call .All(ctx) on it to run the batched query and receive a typed
+// result. Mirrors ent's standard .WithX().All(ctx) idiom.
+type {{ $c.Type }}{{ $c.RelationCap }}Loader struct {
+	q *{{ $c.Type }}Query
+}
+
+// With{{ $c.RelationCap }} returns the typed eager-load chain for this query.
+// Use over plain .All(ctx) on any list-page path to avoid the N+1
+// problem inherent to per-row Query{{ $c.RelationCap }}(ctx) calls.
+//
+//	r, err := client.{{ $c.Type }}.Query().Limit(50).With{{ $c.RelationCap }}().All(ctx)
+//	for _, child := range r.{{ $c.ChildPlural }} {
+//	    parent := r.{{ $c.RelationCap }}[child.ID]
+//	    switch p := parent.(type) {
+{{- range $rc := $c.ResolveCases }}
+//	    case *{{ $rc.Type }}: // typed *{{ $rc.Type }}
+{{- end }}
+//	    case nil: // discriminator unset on this row
+//	    }
+//	}
+//
+// Total queries: 1 (children) + N (distinct parent types in the
+// batch). Compared to lazy resolution via Query{{ $c.RelationCap }}(ctx),
+// which fires one parent query PER child, this is the standard
+// N+1 fix.
+func (q *{{ $c.Type }}Query) With{{ $c.RelationCap }}() *{{ $c.Type }}{{ $c.RelationCap }}Loader {
+	return &{{ $c.Type }}{{ $c.RelationCap }}Loader{q: q}
+}
+
+// All runs the {{ $c.Type }} query and eager-loads every row's
+// polymorphic "{{ $c.Relation }}" parent in batched per-type queries.
+func (l *{{ $c.Type }}{{ $c.RelationCap }}Loader) All(ctx context.Context) (*{{ $c.Type }}{{ $c.RelationCap }}PreloadResult, error) {
+	children, err := l.q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &{{ $c.Type }}{{ $c.RelationCap }}PreloadResult{
+		{{ $c.ChildPlural }}: children,
+		{{ $c.RelationCap }}: make(map[{{ $c.ChildIDGoType }}]{{ $c.Type }}{{ $c.RelationCap }}Parent, len(children)),
+	}
+	if len(children) == 0 {
+		return result, nil
+	}
+
+	// Per-parent-type buckets — collect both the child→childlist map
+	// (so we can attach the loaded parent back to every child) and
+	// the list of parent IDs to feed the batched IN(...) query.
+	{{- range $rc := $c.ResolveCases }}
+	{{- if eq $rc.IDGoType "int" }}
+	var {{ $rc.IDent }}IDs []int
+	{{ $rc.IDent }}ToChildren := map[int][]*{{ $c.Type }}{}
+	{{- else if eq $rc.IDGoType "int64" }}
+	var {{ $rc.IDent }}IDs []int64
+	{{ $rc.IDent }}ToChildren := map[int64][]*{{ $c.Type }}{}
+	{{- else }}
+	var {{ $rc.IDent }}IDs []string
+	{{ $rc.IDent }}ToChildren := map[string][]*{{ $c.Type }}{}
+	{{- end }}
+	{{- end }}
+
+	for _, ch := range children {
+		if ch.{{ $c.IDField }} == nil || ch.{{ $c.TypeField }} == nil {
+			continue
+		}
+		switch *ch.{{ $c.TypeField }} {
+		{{- range $rc := $c.ResolveCases }}
+		case {{ $c.IDent }}.{{ $c.TypeField }}(string({{ $rc.MorphConst }})):
+			{{- if eq $rc.IDGoType "int" }}
+			pid, perr := strconv.Atoi(*ch.{{ $c.IDField }})
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: parse {{ $rc.Type }} id %q: %w", *ch.{{ $c.IDField }}, perr)
+			}
+			{{ $rc.IDent }}IDs = append({{ $rc.IDent }}IDs, pid)
+			{{ $rc.IDent }}ToChildren[pid] = append({{ $rc.IDent }}ToChildren[pid], ch)
+			{{- else if eq $rc.IDGoType "int64" }}
+			pid, perr := strconv.ParseInt(*ch.{{ $c.IDField }}, 10, 64)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: parse {{ $rc.Type }} id %q: %w", *ch.{{ $c.IDField }}, perr)
+			}
+			{{ $rc.IDent }}IDs = append({{ $rc.IDent }}IDs, pid)
+			{{ $rc.IDent }}ToChildren[pid] = append({{ $rc.IDent }}ToChildren[pid], ch)
+			{{- else }}
+			{{ $rc.IDent }}IDs = append({{ $rc.IDent }}IDs, *ch.{{ $c.IDField }})
+			{{ $rc.IDent }}ToChildren[*ch.{{ $c.IDField }}] = append({{ $rc.IDent }}ToChildren[*ch.{{ $c.IDField }}], ch)
+			{{- end }}
+		{{- end }}
+		}
+	}
+
+	{{- range $rc := $c.ResolveCases }}
+	if len({{ $rc.IDent }}IDs) > 0 {
+		parents, perr := New{{ $rc.Type }}Client(l.q.config).Query().Where({{ $rc.IDent }}.IDIn({{ $rc.IDent }}IDs...)).All(ctx)
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: batch-load {{ $rc.Type }}: %w", perr)
+		}
+		for _, p := range parents {
+			for _, ch := range {{ $rc.IDent }}ToChildren[p.ID] {
+				result.{{ $c.RelationCap }}[ch.ID] = p
+			}
+		}
+	}
+	{{- end }}
+
+	return result, nil
+}
+{{- end }}
+{{ end }}
+
 {{- /* ─── Parent-side typed back-refs (Laravel-style accessors) ──── */ -}}
 {{ range .Parents }}
 {{ if eq .Kind "morphOne" }}
@@ -449,5 +599,172 @@ func (p *{{ .ParentName }}) Query{{ .FieldCap }}() *{{ .Target }}Query {
 		)
 }
 {{- end }}
+{{ end }}
+
+{{- /* ─── Runtime hooks (Required + Touch) ────────────────────────
+Polymorphic relations support two opt-in runtime behaviours that need
+hook registration to activate:
+
+  - Required()  → rejects Save when the discriminator is missing or
+                  being cleared. Fills the "missing value" gap that
+                  field.Enum's validator alone does not catch.
+  - Touch(field) → bumps the parent's timestamp column on every child
+                   Save, Laravel-$touches style.
+
+Both are wired through RegisterPolyHooks(client) which the user calls
+once at startup. Without that call, both flags are silently advisory.
+*/ -}}
+{{ if .HasRequired }}
+// errEntPolyRequired is the sentinel returned by every Required()
+// enforcement hook. Use errors.Is to detect.
+var errEntPolyRequired = errors.New("entpoly: required polymorphic relation missing")
+{{ end }}
+
+{{ if .HasPolyHooks }}
+// RegisterPolyHooks installs the runtime hooks declared by MorphTo
+// builder options (Required, Touch). Call once after creating the
+// client, before any writes:
+//
+//	client := ent.NewClient(...)
+//	ent.RegisterPolyHooks(client)
+//
+// Without this call the options are silently advisory:
+//
+//   - Required() will NOT reject incomplete writes.
+//   - Touch() will NOT bump the parent timestamp.
+//
+// Hooks run in registration order; Required hooks come first so a
+// rejected save short-circuits before any touch fires.
+func RegisterPolyHooks(c *Client) {
+{{- range .RequiredChildren }}
+	c.{{ .Type }}.Use({{ .IDent }}{{ .RelationCap }}RequiredHook())
+{{- end }}
+{{- range .TouchedChildren }}
+	c.{{ .Type }}.Use({{ .IDent }}{{ .RelationCap }}TouchHook())
+{{- end }}
+}
+{{ end }}
+
+{{ if .HasRequired }}
+
+{{ range .RequiredChildren }}
+// {{ .IDent }}{{ .RelationCap }}RequiredHook returns the ent.Hook that enforces
+// MorphTo("{{ .Relation }}").Required() at runtime. Wired automatically
+// by RegisterPolyHooks; exposed individually so callers can install it
+// on a sub-client (e.g. a tx) without registering every hook.
+func {{ .IDent }}{{ .RelationCap }}RequiredHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			cm, ok := m.(*{{ .Type }}Mutation)
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
+			switch cm.Op() {
+			case OpCreate:
+				// On create both columns must be set. Use the
+				// generated <Field>() (value, exists) getter.
+				_, idOK := cm.{{ .IDField }}()
+				_, tyOK := cm.{{ .TypeField }}()
+				if !idOK || !tyOK {
+					return nil, fmt.Errorf("entpoly: {{ .Type }}.{{ .Relation }} is required — "+
+						"call Set{{ .RelationCap }}(parent) before Save: %w", errEntPolyRequired)
+				}
+			case OpUpdate, OpUpdateOne:
+				// On update reject explicit clears of either column.
+				if cm.{{ .IDField }}Cleared() || cm.{{ .TypeField }}Cleared() {
+					return nil, fmt.Errorf("entpoly: cannot Clear{{ .RelationCap }}() — "+
+						"{{ .Type }}.{{ .Relation }} is Required(): %w", errEntPolyRequired)
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+}
+{{ end }}
+{{ end }}
+
+{{- /* ─── Touch hooks ───────────────────────────────────────────── */ -}}
+{{ if .HasTouch }}
+{{ range $c := .TouchedChildren }}
+// {{ $c.IDent }}{{ $c.RelationCap }}TouchHook returns the ent.Hook that
+// implements Laravel-$touches semantics for MorphTo("{{ $c.Relation }}").Touch():
+// after every successful Save of a {{ $c.Type }}, the polymorphic
+// parent's {{ $c.TouchField }} column is bumped to time.Now(). The
+// parent update runs in the same logical operation; if it errors the
+// child save is reported as failed.
+//
+// The hook is registered automatically by RegisterPolyHooks. Exposed
+// individually so callers can install it on a sub-client (e.g. a tx).
+//
+// Each allowed parent type must declare a Time field named
+// "{{ $c.TouchField }}". A missing field surfaces as an undefined-method
+// compile error on Set{{ $c.TouchFieldCap }} below.
+func {{ $c.IDent }}{{ $c.RelationCap }}TouchHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			// Run the child save first — only touch the parent if the
+			// child write succeeded. Same ordering Laravel uses.
+			v, err := next.Mutate(ctx, m)
+			if err != nil {
+				return v, err
+			}
+			cm, ok := m.(*{{ $c.Type }}Mutation)
+			if !ok {
+				return v, nil
+			}
+			// On Create the discriminator is in the mutation. On Update
+			// the user typically did not re-set it, so fall back to the
+			// OldX(ctx) accessor which loads the current row value
+			// from the DB. The relation can still be unset (NULL), in
+			// which case there is nothing to touch.
+			idStr, idOK := cm.{{ $c.IDField }}()
+			if !idOK {
+				if oldID, oerr := cm.Old{{ $c.IDField }}(ctx); oerr == nil && oldID != nil {
+					idStr = *oldID
+					idOK = true
+				}
+			}
+			tyVal, tyOK := cm.{{ $c.TypeField }}()
+			if !tyOK {
+				if oldTy, oerr := cm.Old{{ $c.TypeField }}(ctx); oerr == nil && oldTy != nil {
+					tyVal = *oldTy
+					tyOK = true
+				}
+			}
+			if !idOK || !tyOK {
+				return v, nil // discriminator unset; nothing to touch
+			}
+			now := time.Now()
+			switch string(tyVal) {
+			{{- range $rc := $c.ResolveCases }}
+			case string({{ $rc.MorphConst }}):
+				{{- if eq $rc.IDGoType "int" }}
+				pid, perr := strconv.Atoi(idStr)
+				if perr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }}: parse id %q: %w", idStr, perr)
+				}
+				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(pid).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %d: %w", pid, terr)
+				}
+				{{- else if eq $rc.IDGoType "int64" }}
+				pid, perr := strconv.ParseInt(idStr, 10, 64)
+				if perr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }}: parse id %q: %w", idStr, perr)
+				}
+				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(pid).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %d: %w", pid, terr)
+				}
+				{{- else }}
+				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(idStr).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %q: %w", idStr, terr)
+				}
+				{{- end }}
+			{{- end }}
+			}
+			return v, nil
+		})
+	}
+}
+{{ end }}
 {{ end }}
 {{ end }}

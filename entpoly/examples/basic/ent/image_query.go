@@ -22,7 +22,6 @@ type ImageQuery struct {
 	order      []image.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Image
-	withFKs    bool
 	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -335,13 +334,9 @@ func (_q *ImageQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *ImageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Image, error) {
 	var (
-		nodes   = []*Image{}
-		withFKs = _q.withFKs
-		_spec   = _q.querySpec()
+		nodes = []*Image{}
+		_spec = _q.querySpec()
 	)
-	if withFKs {
-		_spec.Node.Columns = append(_spec.Node.Columns, image.ForeignKeys...)
-	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Image).scanValues(nil, columns)
 	}

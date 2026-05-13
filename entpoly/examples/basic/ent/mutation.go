@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -1211,6 +1212,7 @@ type PostMutation struct {
 	id            *int
 	title         *string
 	body          *string
+	updated_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Post, error)
@@ -1400,6 +1402,42 @@ func (m *PostMutation) ResetBody() {
 	delete(m.clearedFields, post.FieldBody)
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PostMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PostMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Post entity.
+// If the Post object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PostMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PostMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
 // Where appends a list predicates to the PostMutation builder.
 func (m *PostMutation) Where(ps ...predicate.Post) {
 	m.predicates = append(m.predicates, ps...)
@@ -1434,12 +1472,15 @@ func (m *PostMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PostMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 3)
 	if m.title != nil {
 		fields = append(fields, post.FieldTitle)
 	}
 	if m.body != nil {
 		fields = append(fields, post.FieldBody)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, post.FieldUpdatedAt)
 	}
 	return fields
 }
@@ -1453,6 +1494,8 @@ func (m *PostMutation) Field(name string) (ent.Value, bool) {
 		return m.Title()
 	case post.FieldBody:
 		return m.Body()
+	case post.FieldUpdatedAt:
+		return m.UpdatedAt()
 	}
 	return nil, false
 }
@@ -1466,6 +1509,8 @@ func (m *PostMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTitle(ctx)
 	case post.FieldBody:
 		return m.OldBody(ctx)
+	case post.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Post field %s", name)
 }
@@ -1488,6 +1533,13 @@ func (m *PostMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBody(v)
+		return nil
+	case post.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Post field %s", name)
@@ -1552,6 +1604,9 @@ func (m *PostMutation) ResetField(name string) error {
 		return nil
 	case post.FieldBody:
 		m.ResetBody()
+		return nil
+	case post.FieldUpdatedAt:
+		m.ResetUpdatedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Post field %s", name)
@@ -2610,6 +2665,7 @@ type VideoMutation struct {
 	id            *int
 	title         *string
 	url           *string
+	updated_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Video, error)
@@ -2786,6 +2842,42 @@ func (m *VideoMutation) ResetURL() {
 	m.url = nil
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (m *VideoMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *VideoMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Video entity.
+// If the Video object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *VideoMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
 // Where appends a list predicates to the VideoMutation builder.
 func (m *VideoMutation) Where(ps ...predicate.Video) {
 	m.predicates = append(m.predicates, ps...)
@@ -2820,12 +2912,15 @@ func (m *VideoMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *VideoMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 3)
 	if m.title != nil {
 		fields = append(fields, video.FieldTitle)
 	}
 	if m.url != nil {
 		fields = append(fields, video.FieldURL)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, video.FieldUpdatedAt)
 	}
 	return fields
 }
@@ -2839,6 +2934,8 @@ func (m *VideoMutation) Field(name string) (ent.Value, bool) {
 		return m.Title()
 	case video.FieldURL:
 		return m.URL()
+	case video.FieldUpdatedAt:
+		return m.UpdatedAt()
 	}
 	return nil, false
 }
@@ -2852,6 +2949,8 @@ func (m *VideoMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldTitle(ctx)
 	case video.FieldURL:
 		return m.OldURL(ctx)
+	case video.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Video field %s", name)
 }
@@ -2874,6 +2973,13 @@ func (m *VideoMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetURL(v)
+		return nil
+	case video.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Video field %s", name)
@@ -2929,6 +3035,9 @@ func (m *VideoMutation) ResetField(name string) error {
 		return nil
 	case video.FieldURL:
 		m.ResetURL()
+		return nil
+	case video.FieldUpdatedAt:
+		m.ResetUpdatedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Video field %s", name)
