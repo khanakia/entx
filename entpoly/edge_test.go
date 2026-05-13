@@ -221,6 +221,41 @@ func TestMorphTo_TouchEmptyArgKeepsDefault(t *testing.T) {
 	}
 }
 
+func TestMorphTo_Cascade(t *testing.T) {
+	b := MorphTo("commentable", Post.Type, Video.Type).Cascade()
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.Cascade {
+		t.Error("Cascade flag not set after .Cascade()")
+	}
+}
+
+func TestMorphTo_CascadeDefaultOff(t *testing.T) {
+	b := MorphTo("commentable", Post.Type, Video.Type)
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.Cascade {
+		t.Error("Cascade flag set on a builder that did not call .Cascade()")
+	}
+}
+
+func TestMorphTo_AllOptionsCompose(t *testing.T) {
+	// Required + Touch + Cascade should all coexist on the same edge —
+	// the runtime registers all three hooks via RegisterPolyHooks.
+	b := MorphTo("commentable", Post.Type, Video.Type).
+		Required().
+		Touch("modified_at").
+		Cascade()
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.Required {
+		t.Error("Required not set")
+	}
+	if !m.Touch || m.TouchField != "modified_at" {
+		t.Errorf("Touch/TouchField wrong: touch=%v field=%q", m.Touch, m.TouchField)
+	}
+	if !m.Cascade {
+		t.Error("Cascade not set")
+	}
+}
+
 func TestSingularise(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"taggables", "taggable"},

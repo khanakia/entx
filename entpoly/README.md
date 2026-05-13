@@ -282,6 +282,46 @@ Three layers, all compile- or DB-enforced:
 
 See [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) for the full design rationale, alternative approaches considered, and tradeoffs.
 
+## Runtime hooks (opt-in)
+
+Three runtime behaviours opt in per relation. All install through a single `ent.RegisterPolyHooks(client)` call at startup:
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).
+    Required().              // reject Save with discriminator unset / cleared
+    Touch("updated_at").     // bump parent.updated_at on every child Save (Laravel $touches)
+    Cascade()                // delete polymorphic children when parent is deleted
+```
+
+```go
+client := ent.NewClient(...)
+ent.RegisterPolyHooks(client)
+```
+
+Without `RegisterPolyHooks`, all three are silently advisory. With it, each fires in well-defined order:
+
+- **Cascade hook** runs BEFORE the parent delete; children removed in the same logical operation
+- **Required hook** runs BEFORE the child save; rejects with a typed sentinel error
+- **Touch hook** runs AFTER the child save (only on success); bumps the parent's timestamp
+
+See [docs/mutations.md](./docs/mutations.md) for the full per-verb reference.
+
+## Non-int primary keys (UUID, ULID, etc.)
+
+entpoly auto-detects custom Go-typed parent PKs via `gen.Type.ID.Type.Ident` at codegen time:
+
+```go
+type Document struct{ ent.Schema }
+func (Document) Fields() []ent.Field {
+    return []ent.Field{
+        field.UUID("id", uuid.UUID{}).Default(uuid.New),
+        field.String("title"),
+    }
+}
+```
+
+The generated `polymorphic.go` imports `github.com/google/uuid`, uses `uuid.Parse` to decode the morph id string back to `uuid.UUID`, and types the eager-load result map as `map[uuid.UUID]...`. Verified end-to-end in `examples/uuid/`.
+
 ## Documentation
 
 | Doc | Use when |

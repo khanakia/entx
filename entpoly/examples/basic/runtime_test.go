@@ -320,6 +320,51 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 }
 
+// TestCascadeDeletesPolymorphicChildren verifies the runtime
+// pre-delete hook generated for MorphTo("commentable").Cascade() —
+// when a polymorphic parent is deleted, every Comment pointing at it
+// via the discriminator pair is also deleted. The hook runs in the
+// same logical operation; children are removed BEFORE the parent so
+// no orphan window opens.
+func TestCascadeDeletesPolymorphicChildren(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+
+	// Two comments on post, one on video.
+	c1 := client.Comment.Create().SetBody("a").SetCommentable(post).SaveX(ctx)
+	c2 := client.Comment.Create().SetBody("b").SetCommentable(post).SaveX(ctx)
+	c3 := client.Comment.Create().SetBody("c").SetCommentable(video).SaveX(ctx)
+
+	// Pre-flight — all 3 comments exist.
+	if n := client.Comment.Query().CountX(ctx); n != 3 {
+		t.Fatalf("precondition: comment count = %d, want 3", n)
+	}
+
+	// Delete the post — cascade hook fires, removes c1 + c2.
+	client.Post.DeleteOneID(post.ID).ExecX(ctx)
+
+	// The two post-comments must be gone, the video-comment must
+	// still exist.
+	if exists, _ := client.Comment.Query().Where(comment.IDEQ(c1.ID)).Exist(ctx); exists {
+		t.Error("c1 should have cascaded to deletion when post was removed")
+	}
+	if exists, _ := client.Comment.Query().Where(comment.IDEQ(c2.ID)).Exist(ctx); exists {
+		t.Error("c2 should have cascaded to deletion when post was removed")
+	}
+	if exists, _ := client.Comment.Query().Where(comment.IDEQ(c3.ID)).Exist(ctx); !exists {
+		t.Error("c3 (on video) should still exist after deleting post")
+	}
+
+	// Deleting the video also cascades.
+	client.Video.DeleteOneID(video.ID).ExecX(ctx)
+	if n := client.Comment.Query().CountX(ctx); n != 0 {
+		t.Errorf("after deleting video too, comment count = %d, want 0", n)
+	}
+}
+
 // TestEagerLoadBatchingResolvesAcrossTypes verifies the
 // AllWithCommentable preload — the typed batched eager-load that
 // fixes the N+1 problem for polymorphic reads. A mixed batch of

@@ -67,6 +67,25 @@
 //                                                       AllowedTypes; report symmetric
 //                                                       diff with remediation hint.
 //
+//   13  Non-builtin parent ID Go type                   idGoType helper captures
+//       (uuid.UUID, ULID, etc)                          both Ident + PkgPath;
+//                                                       collected into
+//                                                       tmplData.ExtraImports so the
+//                                                       generated file imports the
+//                                                       package (e.g. uuid). Template
+//                                                       branches on "uuid.UUID" for
+//                                                       the strconv → uuid.Parse swap.
+//
+//   14  Cascade() pre-delete hook emission              handleMorphTo records the
+//                                                       flag; template emits one
+//                                                       cascade hook per (child,
+//                                                       allowed parent) pair on the
+//                                                       PARENT type, wired into
+//                                                       RegisterPolyHooks. Hook runs
+//                                                       BEFORE next.Generate (delete)
+//                                                       so children leave before
+//                                                       parent.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly
@@ -228,6 +247,36 @@ func (e *Extension) findTypeByName(g *gen.Graph, name string) *gen.Type {
 	return nil
 }
 
+// idGoType returns the Go-side type name + import path for a *gen.Type's
+// ID field. Used to drive the typed resolver / batch-load / map-key
+// rendering across the codegen.
+//
+// Result interpretations:
+//
+//   - Builtin (`int`, `int64`, `string`): goType is the builtin name,
+//     pkgPath is empty. Template strconv branches dispatch on goType.
+//   - Custom Go-typed PK (e.g. uuid.UUID): goType is the Ident
+//     ("uuid.UUID"), pkgPath is the import path
+//     ("github.com/google/uuid"). The template renders goType verbatim
+//     in map keys / parameter types and adds pkgPath to the import set.
+//
+// Returns ("string", "") when t is nil or has no ID — defensive
+// default so the template falls through to a pass-through code path.
+func idGoType(t *gen.Type) (goType, pkgPath string) {
+	if t == nil || t.ID == nil || t.ID.Type == nil {
+		return "string", ""
+	}
+	info := t.ID.Type
+	// Custom Go types (UUID, ULID, named int aliases) carry an Ident
+	// + PkgPath. info.Type.String() returns the underlying SQL kind
+	// (e.g. "[16]byte" for UUID) — useless for rendering — so prefer
+	// the Ident when set.
+	if info.Ident != "" {
+		return info.Ident, info.PkgPath
+	}
+	return info.String(), ""
+}
+
 func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation) error {
 	// Builder-time validation that should have caught this — the edge
 	// must declare at least one allowed parent type. Without parents
@@ -326,23 +375,25 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 	}
 
 	// Look up the child's own ID Go type — used as the map-key type in
-	// the eager-load result struct.
-	childIDType := "int"
-	if t.ID != nil && t.ID.Type != nil {
-		childIDType = t.ID.Type.String()
-	}
+	// the eager-load result struct. For custom Go-typed PKs (e.g.
+	// uuid.UUID) idGoType also returns the import path so the
+	// generated file imports the package.
+	childIDType, childIDPkg := idGoType(t)
 
-	// Resolve each allowed parent's ID Go type by looking it up in the
-	// loaded graph. This lets the typed resolver (QueryCommentable)
-	// emit the right strconv conversion for each branch without having
-	// to encode the parent's ID shape in the schema declaration.
+	// Resolve each allowed parent's ID Go type. The typed resolver
+	// (QueryCommentable), the eager-load batched IN(...) call, and
+	// the M2M holder back-ref all need to convert the persisted morph
+	// id string back to the parent's real PK type. We record both the
+	// Go type name (for rendering) and the import path (for the import
+	// block) per allowed parent so each branch picks the right parse.
 	targets := make([]resolveTargetRef, 0, len(m.AllowedTypes))
 	for _, name := range m.AllowedTypes {
-		ref := resolveTargetRef{SchemaName: name, IDGoType: "string"}
-		if tt := e.findTypeByName(g, name); tt != nil && tt.ID != nil && tt.ID.Type != nil {
-			ref.IDGoType = tt.ID.Type.String()
-		}
-		targets = append(targets, ref)
+		gt, pkg := idGoType(e.findTypeByName(g, name))
+		targets = append(targets, resolveTargetRef{
+			SchemaName: name,
+			IDGoType:   gt,
+			IDPkgPath:  pkg,
+		})
 	}
 
 	e.state.Children = append(e.state.Children, childInfo{
@@ -355,7 +406,9 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		Required:       m.Required,
 		Touch:          m.Touch,
 		TouchField:     m.TouchField,
+		Cascade:        m.Cascade,
 		ChildIDGoType:  childIDType,
+		ChildIDPkgPath: childIDPkg,
 		ResolveTargets: targets,
 	})
 
@@ -408,15 +461,10 @@ func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation)
 	}
 	// Look up target's + holder's ID Go types so both back-ref methods
 	// (holder → target AND target → holder) can emit the right
-	// strconv conversion / IDIn call.
-	targetIDType := "string"
-	if tt := e.findTypeByName(g, m.Target); tt != nil && tt.ID != nil && tt.ID.Type != nil {
-		targetIDType = tt.ID.Type.String()
-	}
-	holderIDType := "string"
-	if tt := e.findTypeByName(g, t.Name); tt != nil && tt.ID != nil && tt.ID.Type != nil {
-		holderIDType = tt.ID.Type.String()
-	}
+	// strconv conversion / IDIn call. idGoType also surfaces the
+	// import path for custom Go-typed PKs (uuid.UUID etc.).
+	targetIDType, targetIDPkg := idGoType(e.findTypeByName(g, m.Target))
+	holderIDType, holderIDPkg := idGoType(e.findTypeByName(g, t.Name))
 
 	// Default inverse field name = snake-case of holder + "s". User can
 	// override via InverseName(...) on the builder when the plural is
@@ -437,7 +485,9 @@ func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation)
 		IDColumn:         m.IDColumn,
 		TypeColumn:       m.TypeColumn,
 		TargetIDGoType:   targetIDType,
+		TargetIDPkgPath:  targetIDPkg,
 		HolderIDGoType:   holderIDType,
+		HolderIDPkgPath:  holderIDPkg,
 	})
 	e.state.parents = append(e.state.parents, m.Target)
 	return nil

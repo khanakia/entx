@@ -1025,6 +1025,8 @@ var errEntPolyRequired = errors.New("entpoly: required polymorphic relation miss
 func RegisterPolyHooks(c *Client) {
 	c.Comment.Use(commentCommentableRequiredHook())
 	c.Comment.Use(commentCommentableTouchHook())
+	c.Post.Use(commentCommentableCascadeOnPostDeleteHook())
+	c.Video.Use(commentCommentableCascadeOnVideoDeleteHook())
 }
 
 // commentCommentableRequiredHook returns the ent.Hook that enforces
@@ -1128,6 +1130,82 @@ func commentCommentableTouchHook() Hook {
 				}
 			}
 			return v, nil
+		})
+	}
+}
+
+// commentCommentableCascadeOnPostDeleteHook returns the
+// pre-delete hook installed on Post by RegisterPolyHooks when
+// MorphTo("commentable").Cascade() was declared on Comment.
+// Deletes every Comment row whose "commentable" discriminator
+// points at the Post being deleted, in the same logical op.
+//
+// Polymorphic columns cannot carry FK constraints, so the database
+// will not cascade for us; this hook fills the gap. Order matters:
+// children are removed BEFORE the parent so no orphan window opens.
+func commentCommentableCascadeOnPostDeleteHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			switch m.Op() {
+			case OpDelete, OpDeleteOne:
+			default:
+				return next.Mutate(ctx, m)
+			}
+			pm, ok := m.(*PostMutation)
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
+			ids, err := pm.IDs(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("entpoly: cascade Comment.commentable: enumerate Post ids: %w", err)
+			}
+			for _, pid := range ids {
+				if _, derr := pm.Client().Comment.Delete().Where(
+					comment.CommentableTypeEQ(comment.CommentableType(string(PostMorphKey))),
+					comment.CommentableIDEQ(fmt.Sprint(pid)),
+				).Exec(ctx); derr != nil {
+					return nil, fmt.Errorf("entpoly: cascade Comment.commentable for Post id %v: %w", pid, derr)
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+}
+
+// commentCommentableCascadeOnVideoDeleteHook returns the
+// pre-delete hook installed on Video by RegisterPolyHooks when
+// MorphTo("commentable").Cascade() was declared on Comment.
+// Deletes every Comment row whose "commentable" discriminator
+// points at the Video being deleted, in the same logical op.
+//
+// Polymorphic columns cannot carry FK constraints, so the database
+// will not cascade for us; this hook fills the gap. Order matters:
+// children are removed BEFORE the parent so no orphan window opens.
+func commentCommentableCascadeOnVideoDeleteHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			switch m.Op() {
+			case OpDelete, OpDeleteOne:
+			default:
+				return next.Mutate(ctx, m)
+			}
+			pm, ok := m.(*VideoMutation)
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
+			ids, err := pm.IDs(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("entpoly: cascade Comment.commentable: enumerate Video ids: %w", err)
+			}
+			for _, pid := range ids {
+				if _, derr := pm.Client().Comment.Delete().Where(
+					comment.CommentableTypeEQ(comment.CommentableType(string(VideoMorphKey))),
+					comment.CommentableIDEQ(fmt.Sprint(pid)),
+				).Exec(ctx); derr != nil {
+					return nil, fmt.Errorf("entpoly: cascade Comment.commentable for Video id %v: %w", pid, derr)
+				}
+			}
+			return next.Mutate(ctx, m)
 		})
 	}
 }

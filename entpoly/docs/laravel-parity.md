@@ -189,6 +189,8 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 | `protected $touches = ['commentable']` | `MorphTo(...).Touch()` — bumps parent's `updated_at` (or override field name) on every child Save. Wired via `RegisterPolyHooks(client)`. |
 | `$comment->touch()` parent timestamps | Same `.Touch()` mechanism above fires on Create + Update + UpdateOne. |
 | `Comment::with('commentable')->get()` eager loading | `cq.WithCommentable().All(ctx)` — typed result struct, 1 + N queries (one per parent type), not N+1. |
+| Cascade delete of polymorphic children when parent deleted | `MorphTo(...).Cascade()` — pre-delete hook on every allowed parent deletes children with matching discriminator. Same logical op; no orphan window. |
+| UUID / non-int parent PKs | `field.UUID("id", uuid.UUID{})` on parents → entpoly auto-detects and emits `uuid.Parse` / `map[uuid.UUID]...` end-to-end. |
 
 ## What Laravel has that we don't yet (v2 backlog)
 
@@ -196,7 +198,7 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 |---|---|
 | `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | v2 — compose per-type sub-predicate over `cq.WithCommentable()` |
 | Soft-delete-aware reverse resolve | v2 — skip soft-deleted parents in `QueryCommentable` and eager-load batches |
-| Custom Go-typed parent IDs (`uuid.UUID` etc) | v2 — codegen branch parameterised but lacks the `uuid.UUID` import emit + `uuid.Parse` strconv replacement |
+| GraphQL union resolver helper for entgql consumers | v2 — wire `<rel>_type` to a `union Commentable = Post \| Video` |
 
 ## What entpoly has that Laravel doesn't
 

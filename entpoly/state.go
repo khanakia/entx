@@ -103,9 +103,14 @@ type childInfo struct {
 	// $touches semantics; on every child Save the
 	// parent's TouchField is bumped to time.Now().
 	TouchField     string             // Parent column name to bump (default "updated_at").
-	ChildIDGoType  string             // The child's own ID Go type ("int", "int64",
-	// "string"). Used by the eager-load result struct
-	// to type the result map's key.
+	Cascade        bool               // True when MorphTo(...).Cascade() was set — emit a
+	// pre-delete hook on every allowed parent that
+	// deletes all polymorphic children pointing at
+	// the parent. Application-level cascade.
+	ChildIDGoType  string             // The child's own ID Go type — used as the
+	// eager-load result-map key type. Builtin or
+	// custom Ident (e.g. "uuid.UUID").
+	ChildIDPkgPath string             // Import path for ChildIDGoType when non-builtin.
 	ResolveTargets []resolveTargetRef // Per-parent metadata for the typed resolver
 	// (QueryCommentable) — populated from the
 	// loaded gen.Graph at preprocess time.
@@ -116,7 +121,14 @@ type childInfo struct {
 // concrete primary key type and dispatch to the right ent client.
 type resolveTargetRef struct {
 	SchemaName string // The ent schema name (e.g. "Post").
-	IDGoType   string // The Go type of the parent's id field ("int", "int64", "string", "uuid.UUID", ...).
+	IDGoType   string // The Go type of the parent's id field — used as
+	// BOTH the template branch tag AND the rendered Go
+	// type. Builtins: "int", "int64", "string". Custom
+	// Go types: their Ident, e.g. "uuid.UUID".
+	IDPkgPath  string // Non-builtin import path (e.g.
+	// "github.com/google/uuid"). Empty for builtin
+	// types. Collected into tmplData.ExtraImports so
+	// the generated polymorphic.go imports the package.
 }
 
 // parentInfo describes one MorphOne / MorphMany back-reference.
@@ -142,6 +154,8 @@ type holderInfo struct {
 	MorphName        string // The relation name on the pivot.
 	IDColumn         string // Custom id column override on the pivot.
 	TypeColumn       string // Custom type column override on the pivot.
-	TargetIDGoType   string // Go type of Target's ID field ("int" / "int64" / "string").
-	HolderIDGoType   string // Go type of Holder's ID field ("int" / "int64" / "string").
+	TargetIDGoType   string // Go type of Target's ID field ("int" / "int64" / "string" / "uuid.UUID" / ...).
+	TargetIDPkgPath  string // Import path for the target's ID type when non-builtin.
+	HolderIDGoType   string // Go type of Holder's ID field.
+	HolderIDPkgPath  string // Import path for the holder's ID type when non-builtin.
 }

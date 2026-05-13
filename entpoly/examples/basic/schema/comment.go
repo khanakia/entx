@@ -52,6 +52,7 @@ func (Comment) Edges() []ent.Edge {
 		//               RegisterPolyHooks(client) at startup.
 		entpoly.MorphTo("commentable", Post.Type, Video.Type).
 			Required().
-			Touch(),
+			Touch().
+			Cascade(),
 	}
 }

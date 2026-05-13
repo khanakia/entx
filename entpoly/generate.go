@@ -148,6 +148,7 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 			Touch:         c.Touch,
 			TouchField:    touchField,
 			TouchFieldCap: pascalCase(touchField),
+			Cascade:       c.Cascade,
 			ChildIDGoType: c.ChildIDGoType,
 			ChildPlural:   c.TypeName + "s",
 			AllowedTypes:  c.AllowedTypes,
@@ -170,6 +171,12 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 	imports := map[string]struct{}{}
 	for _, c := range d.Children {
 		imports[c.IDent] = struct{}{}
+		// Resolver / eager-load both reference each allowed parent's
+		// predicate sub-package (e.g. `document.IDIn(...)`), so every
+		// case's IDent must end up in the import set.
+		for _, rc := range c.ResolveCases {
+			imports[rc.IDent] = struct{}{}
+		}
 	}
 	for _, p := range sortedParents {
 		idCol := p.IDColumn
@@ -256,10 +263,43 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 		if c.Touch {
 			d.TouchedChildren = append(d.TouchedChildren, c)
 		}
+		if c.Cascade {
+			d.CascadedChildren = append(d.CascadedChildren, c)
+		}
 	}
 	d.HasRequired = len(d.RequiredChildren) > 0
 	d.HasTouch = len(d.TouchedChildren) > 0
-	d.HasPolyHooks = d.HasRequired || d.HasTouch
+	d.HasCascade = len(d.CascadedChildren) > 0
+	d.HasPolyHooks = d.HasRequired || d.HasTouch || d.HasCascade
+
+	// Collect non-builtin ID-type import paths so the generated file
+	// can import "github.com/google/uuid" (etc) for UUID-typed PKs.
+	// Deduplicate via a set since the same package may appear on
+	// multiple targets.
+	extra := map[string]struct{}{}
+	for _, c := range s.Children {
+		if c.ChildIDPkgPath != "" {
+			extra[c.ChildIDPkgPath] = struct{}{}
+		}
+		for _, rt := range c.ResolveTargets {
+			if rt.IDPkgPath != "" {
+				extra[rt.IDPkgPath] = struct{}{}
+			}
+		}
+	}
+	for _, h := range s.Holders {
+		if h.TargetIDPkgPath != "" {
+			extra[h.TargetIDPkgPath] = struct{}{}
+		}
+		if h.HolderIDPkgPath != "" {
+			extra[h.HolderIDPkgPath] = struct{}{}
+		}
+	}
+	d.ExtraImports = make([]string, 0, len(extra))
+	for p := range extra {
+		d.ExtraImports = append(d.ExtraImports, p)
+	}
+	sort.Strings(d.ExtraImports)
 
 	return d, nil
 }
@@ -321,6 +361,13 @@ type tmplData struct {
 	// to emit the right import lines.
 	SubpackageImports []string
 
+	// ExtraImports holds the deduplicated import paths for any
+	// non-builtin Go-typed ID encountered across the graph (typically
+	// "github.com/google/uuid" for uuid.UUID PKs). Emitted in the
+	// import block so the generated polymorphic.go compiles when the
+	// child / parent / holder uses a custom PK type.
+	ExtraImports []string
+
 	// HasRequired is true when at least one child declared Required().
 	// Drives the emission of the RegisterPolyHooks function and the
 	// `errors` import needed by the runtime hooks.
@@ -331,6 +378,9 @@ type tmplData struct {
 	// and the RegisterPolyHooks function itself.
 	HasTouch bool
 
+	// HasCascade is true when at least one child declared Cascade().
+	HasCascade bool
+
 	// RequiredChildren is the subset of Children that need a Required
 	// hook. Lifted here so the template can iterate without filtering.
 	RequiredChildren []childData
@@ -338,8 +388,12 @@ type tmplData struct {
 	// TouchedChildren is the subset of Children that need a Touch hook.
 	TouchedChildren []childData
 
-	// HasPolyHooks is the OR of HasRequired / HasTouch — RegisterPolyHooks
-	// is emitted when either is true.
+	// CascadedChildren is the subset of Children that need a per-parent
+	// pre-delete cascade hook.
+	CascadedChildren []childData
+
+	// HasPolyHooks is the OR of HasRequired / HasTouch / HasCascade —
+	// RegisterPolyHooks is emitted when any of them is true.
 	HasPolyHooks bool
 }
 
@@ -405,6 +459,10 @@ type childData struct {
 	Touch          bool             // True when MorphTo(...).Touch(...) was set.
 	TouchField     string           // Parent column name to bump (e.g. "updated_at").
 	TouchFieldCap  string           // PascalCase for setter name (e.g. "UpdatedAt" → Set<TouchFieldCap>).
+	Cascade        bool             // True when MorphTo(...).Cascade() was set — emits a
+	// pre-delete hook on every allowed parent that
+	// deletes polymorphic children pointing at the
+	// parent.
 	ChildIDGoType  string           // The child schema's own ID type (e.g. "int") —
 	// used as the map-key type in the eager-load
 	// result struct so the lookup is typed end-to-end.

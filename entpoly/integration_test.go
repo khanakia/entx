@@ -384,6 +384,137 @@ func typeWithID(name string, idType field.Type) *gen.Type {
 	}
 }
 
+// typeWithCustomID builds a *gen.Type with a custom Go-typed ID — used
+// to exercise the uuid.UUID branch (or any other non-builtin PK).
+func typeWithCustomID(name, ident, pkgPath string) *gen.Type {
+	return &gen.Type{
+		Name: name,
+		ID: &gen.Field{
+			Name: "id",
+			Type: &field.TypeInfo{
+				Type:    field.TypeUUID,
+				Ident:   ident,
+				PkgPath: pkgPath,
+			},
+		},
+	}
+}
+
+// TestIDGoType_Builtin verifies the helper returns the canonical
+// builtin name for int / int64 / string PKs and leaves PkgPath empty.
+func TestIDGoType_Builtin(t *testing.T) {
+	cases := []struct {
+		name string
+		t    field.Type
+		want string
+	}{
+		{"int", field.TypeInt, "int"},
+		{"int64", field.TypeInt64, "int64"},
+		{"string", field.TypeString, "string"},
+	}
+	for _, c := range cases {
+		gt, pkg := idGoType(typeWithID("X", c.t))
+		if gt != c.want {
+			t.Errorf("%s: goType = %q, want %q", c.name, gt, c.want)
+		}
+		if pkg != "" {
+			t.Errorf("%s: pkg = %q, want empty (builtin)", c.name, pkg)
+		}
+	}
+}
+
+// TestIDGoType_UUID verifies the helper returns the Ident ("uuid.UUID")
+// and the PkgPath ("github.com/google/uuid") for a UUID PK — the two
+// pieces the template needs to render the right Go type AND emit the
+// import.
+func TestIDGoType_UUID(t *testing.T) {
+	gt, pkg := idGoType(typeWithCustomID("Document", "uuid.UUID", "github.com/google/uuid"))
+	if gt != "uuid.UUID" {
+		t.Errorf("UUID goType = %q, want uuid.UUID", gt)
+	}
+	if pkg != "github.com/google/uuid" {
+		t.Errorf("UUID pkgPath = %q, want github.com/google/uuid", pkg)
+	}
+}
+
+// TestIDGoType_NilDefensiveDefault verifies the helper returns the
+// pass-through string default when t is nil or has no ID — the
+// downstream resolver branches on the string default for non-int
+// non-int64 PKs.
+func TestIDGoType_NilDefensiveDefault(t *testing.T) {
+	gt, pkg := idGoType(nil)
+	if gt != "string" {
+		t.Errorf("nil: goType = %q, want string", gt)
+	}
+	if pkg != "" {
+		t.Errorf("nil: pkg = %q, want empty", pkg)
+	}
+
+	emptyType := &gen.Type{Name: "Empty"}
+	gt, pkg = idGoType(emptyType)
+	if gt != "string" || pkg != "" {
+		t.Errorf("empty type: got (%q, %q), want (string, \"\")", gt, pkg)
+	}
+}
+
+// Case #13 — non-builtin parent ID type (uuid.UUID). TestPreprocess_RecordsTargetUUIDIDType verifies that when a MorphTo's
+// allowed parent uses uuid.UUID, preprocess captures BOTH the Go-type
+// identifier ("uuid.UUID") and the import path so the generated file
+// can render both correctly.
+func TestPreprocess_RecordsTargetUUIDIDType(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "target", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "target",
+		AllowedTypes: []string{"Document"},
+		IDType:       "string",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Annotation"}, "target")
+	comment.Edges = []*gen.Edge{commentEdge}
+	doc := typeWithCustomID("Document", "uuid.UUID", "github.com/google/uuid")
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, doc},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	rt := e.state.Children[0].ResolveTargets
+	if rt[0].IDGoType != "uuid.UUID" {
+		t.Errorf("ResolveTargets[0].IDGoType = %q, want uuid.UUID", rt[0].IDGoType)
+	}
+	if rt[0].IDPkgPath != "github.com/google/uuid" {
+		t.Errorf("ResolveTargets[0].IDPkgPath = %q, want github.com/google/uuid", rt[0].IDPkgPath)
+	}
+}
+
+// Case #14 — Cascade() propagates through preprocess. TestPreprocess_CascadeFlagFlowsThrough verifies the .Cascade()
+// builder option lands in childInfo so the template's cascade-hook
+// emission picks it up.
+func TestPreprocess_CascadeFlagFlowsThrough(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+		Cascade:      true,
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, {Name: "Post"}},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if !e.state.Children[0].Cascade {
+		t.Error("Cascade flag did not flow through to childInfo")
+	}
+}
+
 // Case #11 — Ghost FK columns left behind by ent's edge processor
 // after our edge strip. TestPreprocess_StripsGhostForeignKeys verifies
 // that the ForeignKeys

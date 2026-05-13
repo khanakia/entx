@@ -140,6 +140,15 @@ type markerAnnotation struct {
 	// call and compile fails clearly if the parent is missing the
 	// field.
 	TouchField string `json:"touch_field,omitempty"`
+
+	// Cascade enables application-level cascade-delete behaviour: when
+	// a parent listed in AllowedTypes is deleted, every child row
+	// pointing at it via this MorphTo is also deleted in the same
+	// logical operation. Polymorphic columns cannot carry FK
+	// constraints (the discriminator column references multiple
+	// tables), so the database itself does not cascade — this hook
+	// fills the gap. Pair with RegisterPolyHooks(client) at startup.
+	Cascade bool `json:"cascade,omitempty"`
 }
 
 // MarkerName identifies the annotation key for polymorphic edges. Exported
@@ -332,6 +341,25 @@ func (b *MorphToBuilder) Touch(fieldName ...string) *MorphToBuilder {
 	if len(fieldName) > 0 && fieldName[0] != "" {
 		b.ann.TouchField = fieldName[0]
 	}
+	b.syncAnnotation()
+	return b
+}
+
+// Cascade enables application-level cascade-delete: every parent listed
+// in AllowedTypes runs a pre-delete hook (registered by
+// RegisterPolyHooks) that deletes every child row pointing at the
+// parent via this MorphTo. Without Cascade, deleting a parent leaves
+// orphan child rows whose discriminator references a now-missing row.
+//
+//	entpoly.MorphTo("commentable", Post.Type, Video.Type).Cascade()
+//	  // Post.DeleteOneID(p.ID).Save(ctx) now also deletes every Comment
+//	  // with commentable_type='post' AND commentable_id=p.ID.
+//
+// Cascade does NOT change the SQL schema — there is still no FK
+// constraint. The hook runs the cascade in application code, so it
+// works on every dialect ent supports.
+func (b *MorphToBuilder) Cascade() *MorphToBuilder {
+	b.ann.Cascade = true
 	b.syncAnnotation()
 	return b
 }

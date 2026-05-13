@@ -86,6 +86,9 @@ import (
 {{- range .SubpackageImports }}
 	"{{ $.ImportPath }}/{{ . }}"
 {{- end }}
+{{- range .ExtraImports }}
+	"{{ . }}"
+{{- end }}
 )
 
 {{- if .HasTouch }}
@@ -306,6 +309,12 @@ func (c *{{ .Type }}) Query{{ .RelationCap }}(ctx context.Context) ({{ .Type }}{
 			return nil, fmt.Errorf("entpoly: parse {{ $rc.Type }} id %q: %w", *c.{{ $c.IDField }}, err)
 		}
 		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
+		{{- else if eq $rc.IDGoType "uuid.UUID" }}
+		id, err := uuid.Parse(*c.{{ $c.IDField }})
+		if err != nil {
+			return nil, fmt.Errorf("entpoly: parse {{ $rc.Type }} id %q: %w", *c.{{ $c.IDField }}, err)
+		}
+		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
 		{{- else }}
 		return New{{ $rc.Type }}Client(c.config).Get(ctx, *c.{{ $c.IDField }})
 		{{- end }}
@@ -364,6 +373,18 @@ func (h *{{ .HolderName }}) Query{{ .FieldCap }}(ctx context.Context) ([]*{{ .Ta
 		}
 		ids = append(ids, id)
 	}
+	{{- else if eq .TargetIDGoType "uuid.UUID" }}
+	ids := make([]uuid.UUID, 0, len(pivots))
+	for _, p := range pivots {
+		if p.{{ .PivotIDField }} == nil {
+			continue
+		}
+		id, perr := uuid.Parse(*p.{{ .PivotIDField }})
+		if perr != nil {
+			return nil, fmt.Errorf("entpoly: parse {{ .Target }} id %q in {{ .Pivot }} pivot: %w", *p.{{ .PivotIDField }}, perr)
+		}
+		ids = append(ids, id)
+	}
 	{{- else }}
 	ids := make([]string, 0, len(pivots))
 	for _, p := range pivots {
@@ -403,6 +424,8 @@ func (p *{{ .Target }}) Query{{ .InverseFieldCap }}(ctx context.Context) ([]*{{ 
 	ids := make([]int, 0, len(pivots))
 	{{- else if eq .HolderIDGoType "int64" }}
 	ids := make([]int64, 0, len(pivots))
+	{{- else if eq .HolderIDGoType "uuid.UUID" }}
+	ids := make([]uuid.UUID, 0, len(pivots))
 	{{- else }}
 	ids := make([]string, 0, len(pivots))
 	{{- end }}
@@ -499,6 +522,9 @@ func (l *{{ $c.Type }}{{ $c.RelationCap }}Loader) All(ctx context.Context) (*{{ 
 	{{- else if eq $rc.IDGoType "int64" }}
 	var {{ $rc.IDent }}IDs []int64
 	{{ $rc.IDent }}ToChildren := map[int64][]*{{ $c.Type }}{}
+	{{- else if eq $rc.IDGoType "uuid.UUID" }}
+	var {{ $rc.IDent }}IDs []uuid.UUID
+	{{ $rc.IDent }}ToChildren := map[uuid.UUID][]*{{ $c.Type }}{}
 	{{- else }}
 	var {{ $rc.IDent }}IDs []string
 	{{ $rc.IDent }}ToChildren := map[string][]*{{ $c.Type }}{}
@@ -521,6 +547,13 @@ func (l *{{ $c.Type }}{{ $c.RelationCap }}Loader) All(ctx context.Context) (*{{ 
 			{{ $rc.IDent }}ToChildren[pid] = append({{ $rc.IDent }}ToChildren[pid], ch)
 			{{- else if eq $rc.IDGoType "int64" }}
 			pid, perr := strconv.ParseInt(*ch.{{ $c.IDField }}, 10, 64)
+			if perr != nil {
+				return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: parse {{ $rc.Type }} id %q: %w", *ch.{{ $c.IDField }}, perr)
+			}
+			{{ $rc.IDent }}IDs = append({{ $rc.IDent }}IDs, pid)
+			{{ $rc.IDent }}ToChildren[pid] = append({{ $rc.IDent }}ToChildren[pid], ch)
+			{{- else if eq $rc.IDGoType "uuid.UUID" }}
+			pid, perr := uuid.Parse(*ch.{{ $c.IDField }})
 			if perr != nil {
 				return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: parse {{ $rc.Type }} id %q: %w", *ch.{{ $c.IDField }}, perr)
 			}
@@ -642,6 +675,14 @@ func RegisterPolyHooks(c *Client) {
 {{- range .TouchedChildren }}
 	c.{{ .Type }}.Use({{ .IDent }}{{ .RelationCap }}TouchHook())
 {{- end }}
+{{- /* Cascade hooks land on each ALLOWED PARENT, not on the child:
+     they fire when the parent is deleted, deleting the child rows.
+     One Use(...) per (child, allowed-parent) pair. */ -}}
+{{- range $c := .CascadedChildren }}
+{{- range $rc := $c.ResolveCases }}
+	c.{{ $rc.Type }}.Use({{ $c.IDent }}{{ $c.RelationCap }}CascadeOn{{ $rc.Type }}DeleteHook())
+{{- end }}
+{{- end }}
 }
 {{ end }}
 
@@ -754,6 +795,14 @@ func {{ $c.IDent }}{{ $c.RelationCap }}TouchHook() Hook {
 				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(pid).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
 					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %d: %w", pid, terr)
 				}
+				{{- else if eq $rc.IDGoType "uuid.UUID" }}
+				pid, perr := uuid.Parse(idStr)
+				if perr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }}: parse id %q: %w", idStr, perr)
+				}
+				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(pid).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
+					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %v: %w", pid, terr)
+				}
 				{{- else }}
 				if _, terr := cm.Client().{{ $rc.Type }}.UpdateOneID(idStr).Set{{ $c.TouchFieldCap }}(now).Save(ctx); terr != nil {
 					return v, fmt.Errorf("entpoly: touch {{ $rc.Type }} id %q: %w", idStr, terr)
@@ -765,6 +814,56 @@ func {{ $c.IDent }}{{ $c.RelationCap }}TouchHook() Hook {
 		})
 	}
 }
+{{ end }}
+{{ end }}
+
+{{- /* ─── Cascade hooks ────────────────────────────────────────────
+For every MorphTo declared with .Cascade(), emit a pre-delete hook on
+each allowed parent type. The hook reads the parent IDs being deleted,
+then deletes every child row whose discriminator points at those
+parents. Runs BEFORE the parent delete (matches SQL ON DELETE
+CASCADE semantics — children gone first). */ -}}
+{{ if .HasCascade }}
+{{ range $c := .CascadedChildren }}
+{{ range $rc := $c.ResolveCases }}
+// {{ $c.IDent }}{{ $c.RelationCap }}CascadeOn{{ $rc.Type }}DeleteHook returns the
+// pre-delete hook installed on {{ $rc.Type }} by RegisterPolyHooks when
+// MorphTo("{{ $c.Relation }}").Cascade() was declared on {{ $c.Type }}.
+// Deletes every {{ $c.Type }} row whose "{{ $c.Relation }}" discriminator
+// points at the {{ $rc.Type }} being deleted, in the same logical op.
+//
+// Polymorphic columns cannot carry FK constraints, so the database
+// will not cascade for us; this hook fills the gap. Order matters:
+// children are removed BEFORE the parent so no orphan window opens.
+func {{ $c.IDent }}{{ $c.RelationCap }}CascadeOn{{ $rc.Type }}DeleteHook() Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
+			switch m.Op() {
+			case OpDelete, OpDeleteOne:
+			default:
+				return next.Mutate(ctx, m)
+			}
+			pm, ok := m.(*{{ $rc.Type }}Mutation)
+			if !ok {
+				return next.Mutate(ctx, m)
+			}
+			ids, err := pm.IDs(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("entpoly: cascade {{ $c.Type }}.{{ $c.Relation }}: enumerate {{ $rc.Type }} ids: %w", err)
+			}
+			for _, pid := range ids {
+				if _, derr := pm.Client().{{ $c.Type }}.Delete().Where(
+					{{ $c.IDent }}.{{ $c.TypeField }}EQ({{ $c.IDent }}.{{ $c.TypeField }}(string({{ $rc.MorphConst }}))),
+					{{ $c.IDent }}.{{ $c.IDField }}EQ(fmt.Sprint(pid)),
+				).Exec(ctx); derr != nil {
+					return nil, fmt.Errorf("entpoly: cascade {{ $c.Type }}.{{ $c.Relation }} for {{ $rc.Type }} id %v: %w", pid, derr)
+				}
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+}
+{{ end }}
 {{ end }}
 {{ end }}
 {{ end }}

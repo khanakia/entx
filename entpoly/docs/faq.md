@@ -22,7 +22,38 @@ No, not automatically. Because there is no FK constraint, the database will not 
 2. Pair `entpoly` with the [`entcascade`](../../entcascade) extension, which generates application-level cascade-delete helpers driven by schema annotations.
 3. Add a `BEFORE DELETE` trigger or a dedicated background job to sweep orphans.
 
-`entpoly` v2 will optionally generate the cascade helpers itself when `entcascade` is also registered. For now, prefer option 1 or option 2.
+`entpoly` ships its own cascade in v1 via the `.Cascade()` builder option:
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).Cascade()
+```
+
+Wire it once at startup with `ent.RegisterPolyHooks(client)`. From then on, deleting any allowed parent (e.g. `client.Post.DeleteOneID(p.ID).Save(ctx)`) also deletes every polymorphic child pointing at it, in the same logical operation. Works on every dialect — the cascade runs in application code via an ent pre-delete hook, no FK constraint required (FKs are impossible for polymorphic columns).
+
+You can still pair with [`entcascade`](../../entcascade) for non-polymorphic edges in the same project; the two extensions coexist without interference.
+
+## Can parents use UUID primary keys?
+
+Yes. ent's `field.UUID("id", uuid.UUID{})` works without any entpoly-specific configuration:
+
+```go
+type Document struct{ ent.Schema }
+func (Document) Fields() []ent.Field {
+    return []ent.Field{
+        field.UUID("id", uuid.UUID{}).Default(uuid.New),
+        field.String("title"),
+    }
+}
+```
+
+entpoly's preprocess pass detects the custom Go-typed PK via `gen.Type.ID.Type.Ident` and:
+
+- Adds `import "github.com/google/uuid"` to the generated `polymorphic.go`
+- Emits a `uuid.Parse(*c.TargetID)` branch in the resolver / eager-load / cascade switches
+- Types the eager-load result map as `map[uuid.UUID]...` (when the CHILD also has a UUID PK)
+- Same Set/Clear ergonomics — `client.Annotation.Create().SetTarget(doc).Save(ctx)` stringifies via `MorphID()`
+
+See `examples/uuid/` for a runnable end-to-end example (Document + Report parents, Annotation child, all UUID-keyed).
 
 ## Can I store ints in the morph id column?
 

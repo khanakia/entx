@@ -199,6 +199,8 @@ Every "did the user do something wrong, and if so do we tell them clearly?" deci
 | 10 | No-op when graph has no polymorphic edges | `generate` — `hasParticipants` check short-circuits the sidecar emit entirely | `TestGenerate_NoParticipantsSkipsEmit` |
 | 11 | Ghost FK columns left behind by ent's edge processor after our strip | `preprocess` tail — walk every type's `ForeignKeys`, drop entries whose `Edge` has our marker; also drop the FK field from `t.Fields` | `TestPreprocess_StripsGhostForeignKeys` + `TestPreprocess_KeepsNonPolyForeignKeys` |
 | 12 | `AllowedTypes` drift between `MixinAllowed` enum values and `MorphTo`'s parent list | `preprocess.handleMorphTo` — cross-checks the typeCol's `Enums` against `AllowedTypes`; reports symmetric diff with remediation hint | `TestPreprocess_DriftBetweenMixinAndEdgeErrors` + `_AgreementBetweenMixinAndEdgePasses` |
+| 13 | Non-builtin parent ID Go type (e.g. `uuid.UUID`) | `preprocess` via `idGoType` helper — captures both the Ident ("uuid.UUID") and PkgPath ("github.com/google/uuid"); template emits the `uuid.Parse` branch + adds the import | `TestIDGoType_UUID` + `TestPreprocess_RecordsTargetUUIDIDType` + `examples/uuid/runtime_test.go` |
+| 14 | `Cascade()` opt-in propagates through preprocess to per-parent pre-delete hook emission | `preprocess.handleMorphTo` records the flag; template emits `<child><Rel>CascadeOn<Parent>DeleteHook` and wires it into `RegisterPolyHooks` | `TestMorphTo_Cascade` + `TestPreprocess_CascadeFlagFlowsThrough` + `TestCascadeDeletesPolymorphicChildren` |
 
 The case-numbered header in `preprocess.go` is the source of truth — when adding a new case, update both the code header AND this table.
 
@@ -252,6 +254,7 @@ Everything listed below is generated end-to-end and verified by the runtime test
 | `Set<Morph>` / `Clear<Morph>` on Create / Update / UpdateOne / Mutation builders | ✅ |
 | `Required()` runtime enforcement hook (reject Save w/ unset or cleared discriminator) | ✅ wired via `RegisterPolyHooks(client)` |
 | `Touch(field)` runtime hook — Laravel `$touches` semantics (bump parent's column) | ✅ wired via `RegisterPolyHooks(client)`; custom field name supported |
+| `Cascade()` runtime hook — delete polymorphic children when parent is deleted | ✅ pre-delete hook on every allowed parent; SQL-CASCADE-equivalent on every dialect |
 
 ### Reads
 
@@ -266,6 +269,7 @@ Everything listed below is generated end-to-end and verified by the runtime test
 | Eager-load batching `client.Comment.Query().WithCommentable().All(ctx)` | ✅ ent-native chain, returns typed result struct |
 | ID conversion in resolvers — `int`, `int64`, `string` | ✅ per-parent at codegen time (`gen.Type.ID.Type`) |
 | Set-diff helpers `Toggle` / `Sync` / `SyncWithoutDetach` for M2M | ✅ in `helper/` |
+| Custom Go-typed parent IDs (`uuid.UUID`, ULID, etc.) | ✅ codegen detects via `gen.Type.ID.Type.Ident` + emits `uuid.Parse` branch + adds `github.com/google/uuid` to imports |
 
 ## v2 roadmap
 
@@ -274,9 +278,7 @@ What is still ahead (all p2):
 | Deferred | Reason |
 |---|---|
 | GraphQL union resolver helper for entgql consumers | Optional emit — wires the `<rel>_type` discriminator to a GraphQL union type. |
-| entcascade auto-wire integration | When `entcascade` is also registered, emit the cascade-delete helpers automatically for polymorphic relations. |
 | `whereMorphRelation`-style closure pattern | Compose a per-type sub-predicate over the child query — equivalent to Laravel's `Comment::whereHasMorph('commentable', [Post::class], fn ($q) => $q->where(...))`. |
 | Soft-delete-aware reverse resolve | When parents declare a `deleted_at` mixin, skip soft-deleted rows in `QueryCommentable` and in eager-load batches. |
-| UUID / custom Go-typed parent IDs | Codegen branch is parameterised on `IDGoType` but lacks the `uuid.UUID` import emission + the `uuid.Parse` strconv replacement. Mechanical addition. |
 
 None of these are blocked by upstream ent. v1 covers the typed write + read surface, runtime enforcement, and the index/migration mechanics. v2 will round out the platform-integration items.

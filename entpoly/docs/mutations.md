@@ -229,3 +229,28 @@ The generated hook (also wired by `RegisterPolyHooks`) rejects:
 - Update / UpdateOne that calls `ClearCommentable()` — relation is required
 
 Pairs with `.Touch()` cleanly — install both in the same `RegisterPolyHooks` call.
+
+## Cascade delete
+
+Polymorphic columns cannot carry FK constraints, so the database will not cascade for us. `.Cascade()` installs a pre-delete hook on every allowed parent that removes the child rows pointing at it:
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).Cascade()
+```
+
+When a `Post` is deleted, every `Comment` with `commentable_type='post'` is deleted in the same logical operation. The hook runs BEFORE the parent delete so no orphan window opens. Child errors propagate and abort the parent delete.
+
+Combines with `.Required()` and `.Touch()` on the same edge — register all three hooks via the single `RegisterPolyHooks(client)` call:
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).
+    Required().
+    Touch("updated_at").
+    Cascade()
+```
+
+```go
+// main.go
+client := ent.NewClient(...)
+ent.RegisterPolyHooks(client)   // installs every hook declared above
+```
