@@ -25,6 +25,9 @@ func (Post) Fields() []ent.Field {
 		// sets it explicitly when a child saves, so the timestamp
 		// advances even when the parent itself is unchanged.
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
+		// deleted_at is the column Comment.MorphTo(...).SoftDelete()
+		// filters on. Optional + Nillable → IS NULL filter possible.
+		field.Time("deleted_at").Optional().Nillable(),
 	}
 }
 

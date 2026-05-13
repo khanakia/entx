@@ -56,6 +56,7 @@ var (
 		{Name: "title", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
 	}
 	// PostsTable holds the schema information for the "posts" table.
 	PostsTable = &schema.Table{

@@ -320,6 +320,76 @@ func TestMorphedByManyHolderBackRef(t *testing.T) {
 	}
 }
 
+// TestSoftDeleteSkipsParentInReverseResolve verifies the
+// .SoftDelete() option on MorphTo: a parent whose deleted_at column
+// is set is treated as "not found" by the typed reverse resolver
+// (returns nil) and excluded from the eager-load batch result map.
+// Auto-detection per-parent — only types declaring the column are
+// filtered; Video (no deleted_at field) is untouched.
+func TestSoftDeleteSkipsParentInReverseResolve(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	post := client.Post.Create().SetTitle("P").SaveX(ctx)
+	c := client.Comment.Create().SetBody("hi").SetCommentable(post).SaveX(ctx)
+
+	// Sanity: parent resolvable before soft-delete.
+	parent, err := c.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable pre-soft-delete: %v", err)
+	}
+	if parent == nil {
+		t.Fatal("parent nil before soft-delete")
+	}
+
+	// Soft-delete the post — set deleted_at, do not Delete().
+	now := time.Now()
+	client.Post.UpdateOneID(post.ID).SetDeletedAt(now).SaveX(ctx)
+
+	// Reverse resolve now returns (nil, nil) — soft-deleted parents
+	// are filtered out of the query and IsNotFound maps to nil.
+	parent, err = c.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable post-soft-delete: %v", err)
+	}
+	if parent != nil {
+		t.Errorf("expected nil after soft-delete, got %+v", parent)
+	}
+
+	// Eager-load batch result: soft-deleted parent missing from map.
+	r, err := client.Comment.Query().WithCommentable().All(ctx)
+	if err != nil {
+		t.Fatalf("WithCommentable: %v", err)
+	}
+	if _, ok := r.Commentable[c.ID]; ok {
+		t.Errorf("eager-load map should NOT contain soft-deleted parent for comment %d", c.ID)
+	}
+}
+
+// TestSoftDeleteAutoDetectsPerParent verifies the per-target detection
+// — Video does NOT declare deleted_at in this example's schema, so
+// even though Comment.MorphTo("commentable", ...).SoftDelete() is
+// declared, Video reverse-resolves continue to work normally.
+func TestSoftDeleteAutoDetectsPerParent(t *testing.T) {
+	ctx := context.Background()
+	client := openTestClient(t)
+
+	video := client.Video.Create().SetTitle("V").SetURL("u").SaveX(ctx)
+	c := client.Comment.Create().SetBody("on video").SetCommentable(video).SaveX(ctx)
+
+	parent, err := c.QueryCommentable(ctx)
+	if err != nil {
+		t.Fatalf("QueryCommentable: %v", err)
+	}
+	v, ok := parent.(*ent.Video)
+	if !ok {
+		t.Fatalf("expected *ent.Video, got %T", parent)
+	}
+	if v.ID != video.ID {
+		t.Errorf("resolved video id = %d, want %d", v.ID, video.ID)
+	}
+}
+
 // TestCascadeDeletesPolymorphicChildren verifies the runtime
 // pre-delete hook generated for MorphTo("commentable").Cascade() —
 // when a polymorphic parent is deleted, every Comment pointing at it

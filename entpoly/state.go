@@ -107,6 +107,11 @@ type childInfo struct {
 	// pre-delete hook on every allowed parent that
 	// deletes all polymorphic children pointing at
 	// the parent. Application-level cascade.
+	SoftDelete     bool               // True when MorphTo(...).SoftDelete() was set —
+	// reverse resolves filter parents whose
+	// SoftDeleteField is non-null. Per-target
+	// detection in ResolveTargets[i].HasSoftDelete.
+	SoftDeleteField string            // Parent column name to check (default "deleted_at").
 	ChildIDGoType  string             // The child's own ID Go type — used as the
 	// eager-load result-map key type. Builtin or
 	// custom Ident (e.g. "uuid.UUID").
@@ -129,6 +134,10 @@ type resolveTargetRef struct {
 	// "github.com/google/uuid"). Empty for builtin
 	// types. Collected into tmplData.ExtraImports so
 	// the generated polymorphic.go imports the package.
+	HasSoftDelete bool // True when this target actually has the
+	// soft-delete field declared (detected in
+	// preprocess). Template skips the IsNil filter
+	// when false even if MorphTo.SoftDelete is set.
 }
 
 // parentInfo describes one MorphOne / MorphMany back-reference.

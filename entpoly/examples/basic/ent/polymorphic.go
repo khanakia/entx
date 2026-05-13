@@ -274,7 +274,20 @@ func (c *Comment) QueryCommentable(ctx context.Context) (CommentCommentableParen
 		if err != nil {
 			return nil, fmt.Errorf("entpoly: parse Post id %q: %w", *c.CommentableID, err)
 		}
-		return NewPostClient(c.config).Get(ctx, id)
+		// Soft-delete filter: skip parents with non-null
+		// DeletedAt; IsNotFound is the "soft-deleted or
+		// genuinely missing" path — return (nil, nil) so the caller
+		// can null-check without unwrapping the error type.
+		res, qerr := NewPostClient(c.config).Query().
+			Where(post.IDEQ(id), post.DeletedAtIsNil()).
+			First(ctx)
+		if qerr != nil {
+			if IsNotFound(qerr) {
+				return nil, nil
+			}
+			return nil, qerr
+		}
+		return res, nil
 	case comment.CommentableType(string(VideoMorphKey)):
 		id, err := strconv.Atoi(*c.CommentableID)
 		if err != nil {
@@ -720,7 +733,9 @@ func (l *CommentCommentableLoader) All(ctx context.Context) (*CommentCommentable
 		}
 	}
 	if len(postIDs) > 0 {
-		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		parents, perr := NewPostClient(l.q.config).Query().
+			Where(post.IDIn(postIDs...), post.DeletedAtIsNil()).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWithCommentable: batch-load Post: %w", perr)
 		}
@@ -731,7 +746,9 @@ func (l *CommentCommentableLoader) All(ctx context.Context) (*CommentCommentable
 		}
 	}
 	if len(videoIDs) > 0 {
-		parents, perr := NewVideoClient(l.q.config).Query().Where(video.IDIn(videoIDs...)).All(ctx)
+		parents, perr := NewVideoClient(l.q.config).Query().
+			Where(video.IDIn(videoIDs...)).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWithCommentable: batch-load Video: %w", perr)
 		}
@@ -821,7 +838,9 @@ func (l *ImageImageableLoader) All(ctx context.Context) (*ImageImageablePreloadR
 		}
 	}
 	if len(postIDs) > 0 {
-		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		parents, perr := NewPostClient(l.q.config).Query().
+			Where(post.IDIn(postIDs...)).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWithImageable: batch-load Post: %w", perr)
 		}
@@ -921,7 +940,9 @@ func (l *TaggableTaggableLoader) All(ctx context.Context) (*TaggableTaggablePrel
 		}
 	}
 	if len(postIDs) > 0 {
-		parents, perr := NewPostClient(l.q.config).Query().Where(post.IDIn(postIDs...)).All(ctx)
+		parents, perr := NewPostClient(l.q.config).Query().
+			Where(post.IDIn(postIDs...)).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWithTaggable: batch-load Post: %w", perr)
 		}
@@ -932,7 +953,9 @@ func (l *TaggableTaggableLoader) All(ctx context.Context) (*TaggableTaggablePrel
 		}
 	}
 	if len(videoIDs) > 0 {
-		parents, perr := NewVideoClient(l.q.config).Query().Where(video.IDIn(videoIDs...)).All(ctx)
+		parents, perr := NewVideoClient(l.q.config).Query().
+			Where(video.IDIn(videoIDs...)).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWithTaggable: batch-load Video: %w", perr)
 		}

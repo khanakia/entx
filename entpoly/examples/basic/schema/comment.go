@@ -53,6 +53,7 @@ func (Comment) Edges() []ent.Edge {
 		entpoly.MorphTo("commentable", Post.Type, Video.Type).
 			Required().
 			Touch().
-			Cascade(),
+			Cascade().
+			SoftDelete(),
 	}
 }

@@ -1213,6 +1213,7 @@ type PostMutation struct {
 	title         *string
 	body          *string
 	updated_at    *time.Time
+	deleted_at    *time.Time
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Post, error)
@@ -1438,6 +1439,55 @@ func (m *PostMutation) ResetUpdatedAt() {
 	m.updated_at = nil
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (m *PostMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *PostMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the Post entity.
+// If the Post object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PostMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *PostMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[post.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *PostMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[post.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *PostMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, post.FieldDeletedAt)
+}
+
 // Where appends a list predicates to the PostMutation builder.
 func (m *PostMutation) Where(ps ...predicate.Post) {
 	m.predicates = append(m.predicates, ps...)
@@ -1472,7 +1522,7 @@ func (m *PostMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PostMutation) Fields() []string {
-	fields := make([]string, 0, 3)
+	fields := make([]string, 0, 4)
 	if m.title != nil {
 		fields = append(fields, post.FieldTitle)
 	}
@@ -1481,6 +1531,9 @@ func (m *PostMutation) Fields() []string {
 	}
 	if m.updated_at != nil {
 		fields = append(fields, post.FieldUpdatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, post.FieldDeletedAt)
 	}
 	return fields
 }
@@ -1496,6 +1549,8 @@ func (m *PostMutation) Field(name string) (ent.Value, bool) {
 		return m.Body()
 	case post.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case post.FieldDeletedAt:
+		return m.DeletedAt()
 	}
 	return nil, false
 }
@@ -1511,6 +1566,8 @@ func (m *PostMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldBody(ctx)
 	case post.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case post.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Post field %s", name)
 }
@@ -1540,6 +1597,13 @@ func (m *PostMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case post.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Post field %s", name)
@@ -1574,6 +1638,9 @@ func (m *PostMutation) ClearedFields() []string {
 	if m.FieldCleared(post.FieldBody) {
 		fields = append(fields, post.FieldBody)
 	}
+	if m.FieldCleared(post.FieldDeletedAt) {
+		fields = append(fields, post.FieldDeletedAt)
+	}
 	return fields
 }
 
@@ -1591,6 +1658,9 @@ func (m *PostMutation) ClearField(name string) error {
 	case post.FieldBody:
 		m.ClearBody()
 		return nil
+	case post.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
 	}
 	return fmt.Errorf("unknown Post nullable field %s", name)
 }
@@ -1607,6 +1677,9 @@ func (m *PostMutation) ResetField(name string) error {
 		return nil
 	case post.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case post.FieldDeletedAt:
+		m.ResetDeletedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Post field %s", name)

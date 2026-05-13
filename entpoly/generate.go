@@ -123,13 +123,16 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 		return sortedChildren[i].TypeName < sortedChildren[j].TypeName
 	})
 	for _, c := range sortedChildren {
+		softDelFieldCap := pascalGoFieldName(c.SoftDeleteField)
 		cases := make([]resolveCaseData, 0, len(c.ResolveTargets))
 		for _, rt := range c.ResolveTargets {
 			cases = append(cases, resolveCaseData{
-				Type:       rt.SchemaName,
-				IDent:      lower(rt.SchemaName),
-				MorphConst: rt.SchemaName + "MorphKey",
-				IDGoType:   rt.IDGoType,
+				Type:               rt.SchemaName,
+				IDent:              lower(rt.SchemaName),
+				MorphConst:         rt.SchemaName + "MorphKey",
+				IDGoType:           rt.IDGoType,
+				HasSoftDelete:      rt.HasSoftDelete,
+				SoftDeleteFieldCap: softDelFieldCap,
 			})
 		}
 		touchField := c.TouchField
@@ -483,10 +486,12 @@ type childData struct {
 // carries everything the template needs to emit the case body without
 // inspecting the runtime config.
 type resolveCaseData struct {
-	Type       string // Parent schema name (e.g. "Post").
-	IDent      string // Parent's lowercase predicate-package name (e.g. "post").
-	MorphConst string // The morph-key constant name (e.g. "PostMorphKey").
-	IDGoType   string // Parent's ID Go type ("int", "int64", "string", ...).
+	Type             string // Parent schema name (e.g. "Post").
+	IDent            string // Parent's lowercase predicate-package name (e.g. "post").
+	MorphConst       string // The morph-key constant name (e.g. "PostMorphKey").
+	IDGoType         string // Parent's ID Go type ("int", "int64", "string", ...).
+	HasSoftDelete    bool   // This parent declares the soft-delete column.
+	SoftDeleteFieldCap string // PascalCase column name → ent's predicate fn (e.g. "DeletedAt" → `<ident>.DeletedAtIsNil()`).
 }
 
 // ──────────────────────────────────────────────────────────────────────────

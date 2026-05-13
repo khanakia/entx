@@ -86,6 +86,14 @@
 //                                                       so children leave before
 //                                                       parent.
 //
+//   15  SoftDelete() per-parent auto-detection         handleMorphTo scans each
+//                                                       allowed parent's Fields for
+//                                                       the configured soft-delete
+//                                                       column; HasSoftDelete on
+//                                                       resolveTargetRef drives a
+//                                                       per-target IsNil filter in
+//                                                       the resolver + eager-load.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly
@@ -386,14 +394,33 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 	// id string back to the parent's real PK type. We record both the
 	// Go type name (for rendering) and the import path (for the import
 	// block) per allowed parent so each branch picks the right parse.
+	//
+	// SoftDelete is auto-detected per-target: scan the target's
+	// Fields for the configured soft-delete column. Targets without
+	// the column pass through unfiltered (HasSoftDelete=false) even
+	// when MorphTo.SoftDelete is enabled.
+	softField := m.SoftDeleteField
+	if softField == "" {
+		softField = "deleted_at"
+	}
 	targets := make([]resolveTargetRef, 0, len(m.AllowedTypes))
 	for _, name := range m.AllowedTypes {
-		gt, pkg := idGoType(e.findTypeByName(g, name))
-		targets = append(targets, resolveTargetRef{
+		tt := e.findTypeByName(g, name)
+		gt, pkg := idGoType(tt)
+		ref := resolveTargetRef{
 			SchemaName: name,
 			IDGoType:   gt,
 			IDPkgPath:  pkg,
-		})
+		}
+		if m.SoftDelete && tt != nil {
+			for _, f := range tt.Fields {
+				if f.Name == softField {
+					ref.HasSoftDelete = true
+					break
+				}
+			}
+		}
+		targets = append(targets, ref)
 	}
 
 	e.state.Children = append(e.state.Children, childInfo{
@@ -404,12 +431,14 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		IDType:         m.IDType,
 		AllowedTypes:   m.AllowedTypes,
 		Required:       m.Required,
-		Touch:          m.Touch,
-		TouchField:     m.TouchField,
-		Cascade:        m.Cascade,
-		ChildIDGoType:  childIDType,
-		ChildIDPkgPath: childIDPkg,
-		ResolveTargets: targets,
+		Touch:           m.Touch,
+		TouchField:      m.TouchField,
+		Cascade:         m.Cascade,
+		SoftDelete:      m.SoftDelete,
+		SoftDeleteField: softField,
+		ChildIDGoType:   childIDType,
+		ChildIDPkgPath:  childIDPkg,
+		ResolveTargets:  targets,
 	})
 
 	// MorphTo's allowed parents implicitly participate in the morph map.

@@ -149,6 +149,20 @@ type markerAnnotation struct {
 	// tables), so the database itself does not cascade — this hook
 	// fills the gap. Pair with RegisterPolyHooks(client) at startup.
 	Cascade bool `json:"cascade,omitempty"`
+
+	// SoftDelete makes reverse resolves (QueryCommentable, eager-load,
+	// any read path that resolves the parent) skip parents whose
+	// SoftDeleteField is non-null. Auto-detected per allowed parent
+	// at codegen time: targets without the field are passed through
+	// unfiltered; targets that have it get an additional <field>IsNil
+	// predicate.
+	SoftDelete bool `json:"soft_delete,omitempty"`
+
+	// SoftDeleteField names the parent timestamp column that signals
+	// soft-deletion. Defaults to "deleted_at". The column must be
+	// nullable; the generated filter is `<Field>IsNil()` (i.e.,
+	// SELECT rows where the column IS NULL).
+	SoftDeleteField string `json:"soft_delete_field,omitempty"`
 }
 
 // MarkerName identifies the annotation key for polymorphic edges. Exported
@@ -360,6 +374,30 @@ func (b *MorphToBuilder) Touch(fieldName ...string) *MorphToBuilder {
 // works on every dialect ent supports.
 func (b *MorphToBuilder) Cascade() *MorphToBuilder {
 	b.ann.Cascade = true
+	b.syncAnnotation()
+	return b
+}
+
+// SoftDelete filters soft-deleted parents out of every reverse resolve
+// path (QueryCommentable, eager-load WithCommentable, M2M holder).
+// Auto-detects per allowed parent: only targets that actually declare
+// the field gain the `<field>IsNil()` filter — other targets pass
+// through unchanged.
+//
+// Default field name is "deleted_at". Override:
+//
+//	entpoly.MorphTo("commentable", Post.Type).SoftDelete()                // → deleted_at
+//	entpoly.MorphTo("commentable", Post.Type).SoftDelete("removed_at")    // override
+//
+// The field must be nullable on the parent. SoftDelete does not delete;
+// it only filters reads. Pair with whatever soft-delete mixin / hook
+// your parents already use.
+func (b *MorphToBuilder) SoftDelete(fieldName ...string) *MorphToBuilder {
+	b.ann.SoftDelete = true
+	b.ann.SoftDeleteField = "deleted_at"
+	if len(fieldName) > 0 && fieldName[0] != "" {
+		b.ann.SoftDeleteField = fieldName[0]
+	}
 	b.syncAnnotation()
 	return b
 }

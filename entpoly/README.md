@@ -290,7 +290,8 @@ Three runtime behaviours opt in per relation. All install through a single `ent.
 entpoly.MorphTo("commentable", Post.Type, Video.Type).
     Required().              // reject Save with discriminator unset / cleared
     Touch("updated_at").     // bump parent.updated_at on every child Save (Laravel $touches)
-    Cascade()                // delete polymorphic children when parent is deleted
+    Cascade().               // delete polymorphic children when parent is deleted
+    SoftDelete()             // skip parents whose deleted_at is non-null in reverse resolves
 ```
 
 ```go

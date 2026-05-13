@@ -237,13 +237,41 @@ func TestMorphTo_CascadeDefaultOff(t *testing.T) {
 	}
 }
 
+func TestMorphTo_SoftDelete(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).SoftDelete()
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if !m.SoftDelete {
+		t.Error("SoftDelete flag not set")
+	}
+	if m.SoftDeleteField != "deleted_at" {
+		t.Errorf("default SoftDeleteField = %q, want deleted_at", m.SoftDeleteField)
+	}
+}
+
+func TestMorphTo_SoftDeleteCustomField(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).SoftDelete("removed_at")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.SoftDeleteField != "removed_at" {
+		t.Errorf("SoftDeleteField = %q, want removed_at", m.SoftDeleteField)
+	}
+}
+
+func TestMorphTo_SoftDeleteEmptyArgKeepsDefault(t *testing.T) {
+	b := MorphTo("commentable", Post.Type).SoftDelete("")
+	m, _ := decodeMarker(b.Descriptor().Annotations)
+	if m.SoftDeleteField != "deleted_at" {
+		t.Errorf("empty SoftDelete arg → field = %q, want deleted_at", m.SoftDeleteField)
+	}
+}
+
 func TestMorphTo_AllOptionsCompose(t *testing.T) {
 	// Required + Touch + Cascade should all coexist on the same edge —
 	// the runtime registers all three hooks via RegisterPolyHooks.
 	b := MorphTo("commentable", Post.Type, Video.Type).
 		Required().
 		Touch("modified_at").
-		Cascade()
+		Cascade().
+		SoftDelete("removed_at")
 	m, _ := decodeMarker(b.Descriptor().Annotations)
 	if !m.Required {
 		t.Error("Required not set")
@@ -253,6 +281,9 @@ func TestMorphTo_AllOptionsCompose(t *testing.T) {
 	}
 	if !m.Cascade {
 		t.Error("Cascade not set")
+	}
+	if !m.SoftDelete || m.SoftDeleteField != "removed_at" {
+		t.Errorf("SoftDelete/SoftDeleteField wrong: sd=%v field=%q", m.SoftDelete, m.SoftDeleteField)
 	}
 }
 

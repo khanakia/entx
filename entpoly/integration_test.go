@@ -489,6 +489,87 @@ func TestPreprocess_RecordsTargetUUIDIDType(t *testing.T) {
 	}
 }
 
+// Case #15 — SoftDelete() per-parent detection.
+// TestPreprocess_SoftDeleteAutoDetectsPerParent verifies that
+// HasSoftDelete is set on resolveTargetRef only for targets that
+// actually declare the soft-delete field, so the template emits the
+// IsNil filter for those parents and skips it for parents that don't
+// have the column.
+func TestPreprocess_SoftDeleteAutoDetectsPerParent(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:            "morphTo",
+		MorphName:       "commentable",
+		AllowedTypes:    []string{"Post", "Video"},
+		IDType:          "string",
+		SoftDelete:      true,
+		SoftDeleteField: "deleted_at",
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+
+	// Post HAS deleted_at, Video does NOT.
+	post := &gen.Type{
+		Name: "Post",
+		ID:   &gen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*gen.Field{
+			{Name: "title"},
+			{Name: "deleted_at"},
+		},
+	}
+	video := typeWithID("Video", field.TypeInt)
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, post, video},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	rt := e.state.Children[0].ResolveTargets
+	byName := map[string]bool{}
+	for _, r := range rt {
+		byName[r.SchemaName] = r.HasSoftDelete
+	}
+	if !byName["Post"] {
+		t.Error("Post has deleted_at, HasSoftDelete should be true")
+	}
+	if byName["Video"] {
+		t.Error("Video has NO deleted_at, HasSoftDelete should be false")
+	}
+}
+
+// TestPreprocess_SoftDeleteOffWhenFlagNotSet — even if a parent has
+// the field, no filter should activate unless .SoftDelete() was
+// explicitly opted into on the MorphTo.
+func TestPreprocess_SoftDeleteOffWhenFlagNotSet(t *testing.T) {
+	commentEdge := edgeWithMarker(t, "commentable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "commentable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+		// SoftDelete intentionally false
+	})
+	comment := withDiscriminatorFields(&gen.Type{Name: "Comment"}, "commentable")
+	comment.Edges = []*gen.Edge{commentEdge}
+	post := &gen.Type{
+		Name:   "Post",
+		ID:     &gen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt}},
+		Fields: []*gen.Field{{Name: "deleted_at"}},
+	}
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{comment, post},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if e.state.Children[0].ResolveTargets[0].HasSoftDelete {
+		t.Error("HasSoftDelete should be false when MorphTo.SoftDelete is not set")
+	}
+}
+
 // Case #14 — Cascade() propagates through preprocess. TestPreprocess_CascadeFlagFlowsThrough verifies the .Cascade()
 // builder option lands in childInfo so the template's cascade-hook
 // emission picks it up.

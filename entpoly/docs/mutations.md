@@ -249,6 +249,26 @@ entpoly.MorphTo("commentable", Post.Type, Video.Type).
     Cascade()
 ```
 
+## Soft-delete-aware reverse resolves
+
+If a parent's `deleted_at` column being non-null means "this row is gone", you don't want `QueryCommentable` or `WithCommentable` to surface those rows. Opt in:
+
+```go
+entpoly.MorphTo("commentable", Post.Type, Video.Type).SoftDelete()                 // default deleted_at
+entpoly.MorphTo("commentable", Post.Type, Video.Type).SoftDelete("removed_at")     // override column name
+```
+
+The filter is **auto-detected per allowed parent**. If only some of your allowed types declare the column, only those targets get the `<field>IsNil()` predicate; the rest pass through unfiltered. No need to make every parent share the same soft-delete shape.
+
+Where the filter kicks in:
+
+| Read path | Behaviour with `SoftDelete()` |
+|---|---|
+| `comment.QueryCommentable(ctx)` | Returns `(nil, nil)` when the parent is soft-deleted; `IsNotFound` from the underlying query maps to nil |
+| `client.Comment.Query().WithCommentable().All(ctx)` | Soft-deleted parents are excluded from the eager-load batch; the corresponding entry is absent from `r.Commentable` |
+
+The `_type`/`_id` columns on the child are NOT changed — the row still references the soft-deleted parent at the data level. The filter is purely read-side. If you want to also clear the discriminator, use a separate hook on the parent's soft-delete update.
+
 ```go
 // main.go
 client := ent.NewClient(...)

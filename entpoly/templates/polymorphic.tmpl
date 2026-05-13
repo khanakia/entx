@@ -302,21 +302,36 @@ func (c *{{ .Type }}) Query{{ .RelationCap }}(ctx context.Context) ({{ .Type }}{
 		if err != nil {
 			return nil, fmt.Errorf("entpoly: parse {{ $rc.Type }} id %q: %w", *c.{{ $c.IDField }}, err)
 		}
-		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
 		{{- else if eq $rc.IDGoType "int64" }}
 		id, err := strconv.ParseInt(*c.{{ $c.IDField }}, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("entpoly: parse {{ $rc.Type }} id %q: %w", *c.{{ $c.IDField }}, err)
 		}
-		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
 		{{- else if eq $rc.IDGoType "uuid.UUID" }}
 		id, err := uuid.Parse(*c.{{ $c.IDField }})
 		if err != nil {
 			return nil, fmt.Errorf("entpoly: parse {{ $rc.Type }} id %q: %w", *c.{{ $c.IDField }}, err)
 		}
-		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
 		{{- else }}
-		return New{{ $rc.Type }}Client(c.config).Get(ctx, *c.{{ $c.IDField }})
+		id := *c.{{ $c.IDField }}
+		{{- end }}
+		{{- if $rc.HasSoftDelete }}
+		// Soft-delete filter: skip parents with non-null
+		// {{ $rc.SoftDeleteFieldCap }}; IsNotFound is the "soft-deleted or
+		// genuinely missing" path — return (nil, nil) so the caller
+		// can null-check without unwrapping the error type.
+		res, qerr := New{{ $rc.Type }}Client(c.config).Query().
+			Where({{ $rc.IDent }}.IDEQ(id), {{ $rc.IDent }}.{{ $rc.SoftDeleteFieldCap }}IsNil()).
+			First(ctx)
+		if qerr != nil {
+			if IsNotFound(qerr) {
+				return nil, nil
+			}
+			return nil, qerr
+		}
+		return res, nil
+		{{- else }}
+		return New{{ $rc.Type }}Client(c.config).Get(ctx, id)
 		{{- end }}
 	{{- end }}
 	default:
@@ -569,7 +584,9 @@ func (l *{{ $c.Type }}{{ $c.RelationCap }}Loader) All(ctx context.Context) (*{{ 
 
 	{{- range $rc := $c.ResolveCases }}
 	if len({{ $rc.IDent }}IDs) > 0 {
-		parents, perr := New{{ $rc.Type }}Client(l.q.config).Query().Where({{ $rc.IDent }}.IDIn({{ $rc.IDent }}IDs...)).All(ctx)
+		parents, perr := New{{ $rc.Type }}Client(l.q.config).Query().
+			Where({{ $rc.IDent }}.IDIn({{ $rc.IDent }}IDs...){{ if $rc.HasSoftDelete }}, {{ $rc.IDent }}.{{ $rc.SoftDeleteFieldCap }}IsNil(){{ end }}).
+			All(ctx)
 		if perr != nil {
 			return nil, fmt.Errorf("entpoly: AllWith{{ $c.RelationCap }}: batch-load {{ $rc.Type }}: %w", perr)
 		}
