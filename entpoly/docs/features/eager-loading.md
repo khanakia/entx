@@ -72,4 +72,4 @@ The full assertion lives in [`testentpoly/eagerload_test.go`](../../../testentpo
 - [`testentpoly/tracer.go`](../../../testentpoly/tracer.go) — the query tracer used to verify batching
 - [Soft delete](./soft-delete.md)
 - [Predicates](./predicates.md) — forward resolve alternative
-- [Architecture](../architecture.md)
+- [Architecture](../internals/architecture.md)

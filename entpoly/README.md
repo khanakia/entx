@@ -1,10 +1,17 @@
 # entpoly
 
-**Laravel-style polymorphic relationships for [ent](https://entgo.io) — declared as schema-level edges, generated with the strongest type safety any Go ORM offers.**
+Laravel-style polymorphic relationships for [ent](https://entgo.io) — declared as schema-level edges, with a sealed Go interface, DB-enforced enum, Laravel-parity reads / writes, and an optional GraphQL union surface. Drop `MorphMixin` into a child schema and `MorphTo` into its edges; the codegen extension does the rest.
+
+## Quickstart
 
 ```go
+// ent/schema/post.go, video.go — regular ent schemas with .Type fields.
+// ent/schema/comment.go — the child carrying the discriminator:
+
 func (Comment) Mixin() []ent.Mixin {
-    return []ent.Mixin{entpoly.MorphMixin("commentable", entpoly.MixinAllowed(Post.Type, Video.Type))}
+    return []ent.Mixin{
+        entpoly.MorphMixin("commentable", entpoly.MixinAllowed(Post.Type, Video.Type)),
+    }
 }
 
 func (Comment) Edges() []ent.Edge {
@@ -13,101 +20,21 @@ func (Comment) Edges() []ent.Edge {
             Required().     // hook rejects unset / cleared writes
             Touch().        // bumps parent.updated_at on save
             Cascade().      // deletes children when parent dies
-            SoftDelete(),   // filters soft-deleted parents on read
+            SoftDelete().   // reverse resolves skip soft-deleted parents
+            GQL(),          // emit GraphQL union surface
     }
 }
+```
+
+```bash
+go get github.com/khanakia/entx/entpoly
+go generate ./ent
 ```
 
 ```go
 client := ent.NewClient(...)
 ent.RegisterPolyHooks(client)   // wires Required + Touch + Cascade hooks
 ```
-
----
-
-## Features
-
-### Schema declaration
-
-| Feature | Surface | Docs |
-|---|---|---|
-| Four relation shapes | `MorphTo` / `MorphOne` / `MorphMany` / `MorphedByMany` — all in `Edges()` | [Relationships reference](./docs/relationships.md) |
-| Mixin for discriminator columns | `MorphMixin(name)` adds `<rel>_id` + `<rel>_type` to a child schema | [getting-started](./docs/getting-started.md) |
-| DB-enforced enum on the type column | `MixinAllowed(Post.Type, Video.Type)` → `field.Enum(...)` w/ CHECK constraint | [ADR-001](./docs/adr-001-type-safety.md) |
-| Auto composite index on `(<type>, <id>)` | Emitted by default; opt out via `MixinNoIndex()` | [relationships#foreign-keys](./docs/relationships.md) |
-| Custom column names | `MixinIDColumn` / `MixinTypeColumn` + matching `IDColumn` / `TypeColumn` on the edge | [relationships#custom-column-names](./docs/relationships.md) |
-| `int` / `int64` / `string` / **`uuid.UUID`** parent PKs | Auto-detected per parent; codegen emits matching `strconv` / `uuid.Parse` branch | [examples/uuid/](./examples/uuid/) |
-| Multiple polymorphic relations per schema | One `MorphMixin` + one `MorphTo` per relation, side by side | [faq.md](./docs/faq.md) |
-| Self-referential polymorphic | List the host type in its own `AllowedTypes` | [relationships#shape-4](./docs/relationships.md) |
-
-### Compile-time type safety
-
-| Feature | What it catches | Where |
-|---|---|---|
-| Sealed parent interface per relation | `SetCommentable(article)` → compile error (Article not in AllowedTypes) | generated `CommentCommentableParent` interface |
-| Named `MorphKey` type + per-parent constants | Raw string literals in predicates fail to compile | `ent.PostMorphKey`, `ent.VideoMorphKey` |
-| Typed forward resolver (no `any`) | Type-switch only accepts AllowedTypes | `comment.QueryCommentable(ctx)` returns sealed iface |
-| Mixin / edge `AllowedTypes` drift linter | Mismatched lists fail at codegen time with a precise diff | [docs/architecture.md § Edge cases](./docs/architecture.md) |
-| Typed predicate constructors | `ent.CommentCommentableIs(post)` / `ent.CommentCommentableIsType(ent.PostMorphKey)` | generated in `polymorphic.go` |
-| Ghost-FK column suppression | No leftover `post_comments *int` cruft on the child struct | `entsql.Skip()` + preprocess Field cleanup |
-
-### Reads (Laravel parity)
-
-| Laravel | entpoly | Notes |
-|---|---|---|
-| `$comment->commentable` | `comment.QueryCommentable(ctx)` | Returns sealed interface — type-switch on `*Post`/`*Video`/`nil` only |
-| `$post->comments` (MorphMany) | `post.QueryComments()` | `*CommentQuery` — composable, chain `.Where()`/`.Limit()`/`.All()` |
-| `$post->image` (MorphOne) | `post.QueryFeaturedImage(ctx)` | `(*Image, error)`; `(nil, nil)` for unset |
-| `$tag->posts` (MorphedByMany) | `tag.QueryPosts(ctx)` | `[]*Post` via batched pivot lookup |
-| `$post->tags` (auto-emitted M2M inverse) | `post.QueryTags(ctx)` | derived from same `MorphedByMany` declaration |
-| `Comment::with('commentable')->get()` | `cq.WithCommentable().All(ctx)` | Typed eager-load batched per parent type → 1+N queries, not N+1 |
-| Typed predicates | `ent.CommentCommentableIs(post)` / `ent.CommentCommentableIsType(ent.PostMorphKey)` | typed; no `"post"` string literals |
-| `Comment::whereHasMorph('commentable', [Post], fn ($q) => ...)` | `ent.CommentCommentableOnPost(post.PublishedEQ(true))` | per-parent sub-query helper; compose multi-type via `comment.Or` |
-
-### Writes (Laravel parity)
-
-| Laravel | entpoly |
-|---|---|
-| `$c->commentable()->associate($post)` | `c.Update().SetCommentable(post).Save(ctx)` |
-| `$c->commentable()->dissociate()` | `c.Update().ClearCommentable().Save(ctx)` |
-| `$post->comments()->save($c)` | `client.Comment.Create().SetBody(...).SetCommentable(post).Save(ctx)` |
-| Attach / detach / sync (M2M) | `client.Taggable.Create()...` + `helper.Toggle` / `helper.Sync` / `helper.SyncWithoutDetach` |
-
-[Mutations reference →](./docs/mutations.md)
-
-### Runtime hooks (opt-in per relation)
-
-| Option | What it does |
-|---|---|
-| `.Required()` | Rejects Save when discriminator is unset on Create OR cleared on Update |
-| `.Touch()` / `.Touch("modified_at")` | Bumps parent's timestamp column on every child Save (Laravel `$touches`) |
-| `.Cascade()` | Pre-delete hook on every allowed parent — deletes polymorphic children when the parent dies |
-| `.SoftDelete()` / `.SoftDelete("removed_at")` | Reverse resolves skip parents whose soft-delete column is non-null; per-parent auto-detection |
-| `.GQL()` / `.GQL("CustomName")` | Emits a GraphQL union surface — Go type alias + exported `Is<Union>()` markers + `GQL<Rel>(ctx)` resolver-helper. Optional `.graphql` schema fragment via `entpoly.WithGQLSchemaFile(...)` |
-
-All four wire through one call: `ent.RegisterPolyHooks(client)` at startup. [Mutations reference →](./docs/mutations.md)
-
-### GraphQL union surface (`.GQL()`)
-
-Adding `.GQL()` to a `MorphTo` emits everything gqlgen needs to expose the relation as a GraphQL union:
-
-| Emission | Purpose |
-|---|---|
-| Go type alias `type Commentable = CommentCommentableParent` | gqlgen recognises the union by Go type identity |
-| Exported markers `func (*Post) IsCommentable() {}` on every allowed parent | gqlgen union-member contract — every member type must declare the interface marker |
-| Resolver helper `c.GQLCommentable(ctx) (Commentable, error)` | One-liner for gqlgen resolvers — same result as `c.QueryCommentable(ctx)` |
-| Optional `.graphql` fragment via `entpoly.WithGQLSchemaFile("./graph/poly.graphql")` | `union Commentable = Post \| Video \| Image` lands in your schema directory ready for gqlgen codegen |
-
-End-to-end queries (paste-ready) live in [`testentpoly/QUERIES.md`](../testentpoly/QUERIES.md). Spin up a real server with `cd testentpoly && task serve`.
-
-### What we DON'T do
-
-| Thing | Why |
-|---|---|
-| Foreign-key constraints on polymorphic columns | SQL FKs target exactly one table; the discriminator column references multiple tables. No FK is possible. We compensate w/ `Cascade()` + DB-enforced enum. |
-| Modify ent's struct codegen | Our sidecar `polymorphic.go` lives in the ent package and adds methods, never fields. Keeps the integration shallow + version-portable. |
-
----
 
 ## Install
 
@@ -119,93 +46,83 @@ Register in `ent/entc.go`:
 
 ```go
 opts := []entc.Option{
-    entc.Extensions(entpoly.NewExtension(
-        // Optional — every parent gets a snake_case morph key by
-        // default. Pass an explicit map to lock aliases across renames.
-        entpoly.WithMorphMap(map[string]string{
-            "post":  "Post",
-            "video": "Video",
-        }),
-    )),
+    entc.Extensions(entpoly.NewExtension()),
 }
 entc.Generate("./schema", config, opts...)
 ```
 
+`WithMorphMap(...)` is optional — every parent gets a snake_case morph key by default. Pass an explicit map to lock aliases across renames. See [docs/morph-map.md](./docs/morph-map.md).
+
 Run `go generate ./ent`. A sidecar `ent/polymorphic.go` is emitted alongside ent's normal output containing the `Morphable` interface, per-parent constants, sealed parent interfaces, typed setters, typed predicates, typed resolver, typed back-refs, eager-load helpers, and the runtime hooks.
 
-[Getting started →](./docs/getting-started.md)
+## How do I…
 
----
-
-## Three layers of type safety
-
-| Layer | Catches |
+| Task | Doc |
 |---|---|
-| **Sealed Go interface** (compile time) | `SetCommentable(article)` — wrong parent type |
-| **ent runtime enum validator** | `SetCommentableType("psot")` — typo'd morph key |
-| **DB CHECK / native ENUM** | `INSERT ... commentable_type='random'` — raw SQL bypass |
+| Add a polymorphic relation (Comment → Post / Video) | [getting-started](./docs/getting-started.md) |
+| Reject saves when the parent is unset | [features/required.md](./docs/features/required.md) |
+| Bump the parent's `updated_at` on child save | [features/touch.md](./docs/features/touch.md) |
+| Delete children when the parent is deleted | [features/cascade.md](./docs/features/cascade.md) |
+| Hide soft-deleted parents from reverse resolves | [features/soft-delete.md](./docs/features/soft-delete.md) |
+| Expose the relation as a GraphQL union | [features/graphql.md](./docs/features/graphql.md) |
+| Use UUID-PK parents | [features/uuid-parents.md](./docs/features/uuid-parents.md) |
+| Build a polymorphic many-to-many (tags) | [features/m2m-polymorphic.md](./docs/features/m2m-polymorphic.md) |
+| Eager-load the parent without N+1 | [features/eager-loading.md](./docs/features/eager-loading.md) |
+| Rename the `<rel>_id` / `<rel>_type` columns | [features/custom-columns.md](./docs/features/custom-columns.md) |
+| List the host type in its own `AllowedTypes` | [features/self-referential.md](./docs/features/self-referential.md) |
+| Filter children by typed parent predicates | [features/predicates.md](./docs/features/predicates.md) |
+| Model exactly-one back-reference (MorphOne) | [features/morph-one.md](./docs/features/morph-one.md) |
+| Lock morph-key aliases across renames | [morph-map.md](./docs/morph-map.md) |
+| Translate a Laravel verb to entpoly | [laravel-parity.md](./docs/laravel-parity.md) |
 
-See [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) for the design rationale, the three alternatives we considered, and the trade-offs.
+## Core concepts
 
----
+**Schema-level edges.** Polymorphic relations are declared in `Edges()` the same way as regular ent edges. No annotations, no field-spread API. The mixin contributes the discriminator columns; the edge builder carries the options.
 
-## Documentation index
+**Sealed parent interface.** The forward resolver returns a generated Go interface (`CommentCommentableParent`) sealed to the types listed in `AllowedTypes`. Type-switches on that interface reject parents not in the set at compile time.
+
+**Three-layer type safety.** Sealed Go interface (compile time) + ent runtime enum validator (typo'd morph key) + DB CHECK / native ENUM (raw SQL bypass). See [ADR-001](./docs/internals/adr-001-type-safety.md).
+
+**No foreign keys.** Polymorphic columns can't carry SQL FKs — the type column references multiple tables. `Cascade()` + DB-enforced enum compensate. See [internals/architecture.md](./docs/internals/architecture.md).
+
+## Documentation map
+
+### Using entpoly
 
 | Doc | Use when |
 |---|---|
-| [Getting started](./docs/getting-started.md) | Adding entpoly to a fresh project |
-| [Relationships reference](./docs/relationships.md) | Choosing a shape for your domain |
-| [Mutations reference](./docs/mutations.md) | Translating from Laravel verbs to ent builders |
-| [Laravel parity](./docs/laravel-parity.md) | Full Laravel → entpoly mapping |
-| [Morph map](./docs/morph-map.md) | Stable aliases + the rename workflow |
-| [Architecture](./docs/architecture.md) | How the codegen extension is built; how to contribute |
-| [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) | Why sealed interface + enum column (Approach C) — diagrams, tradeoffs, alternatives rejected |
-| [ADR-002: `whereMorphRelation` API](./docs/adr-002-where-morph-relation.md) | Why per-parent predicate constructors (`OnPost`/`OnVideo`) over closures or builder objects |
-| [FAQ](./docs/faq.md) | Common questions about FKs, cascades, dialects, GraphQL |
+| [Getting started](./docs/getting-started.md) | First-time setup |
+| [Per-feature how-tos](./docs/features/) | Recipe per feature (`.Required()`, `.Touch()`, `.GQL()`, …) |
+| [Relationships reference](./docs/relationships.md) | Choosing a shape |
+| [Mutations reference](./docs/mutations.md) | Translating Laravel verbs |
+| [Laravel parity](./docs/laravel-parity.md) | Full Laravel → entpoly map |
+| [Morph map](./docs/morph-map.md) | Stable aliases for type-column values |
+| [FAQ](./docs/faq.md) | Common questions |
+| [Feature matrix](./docs/feature-matrix.md) | Dense reference of every surface |
 
-### Per-feature how-to guides
+### Examples + tests
 
-Step-by-step guides for each feature, with the same shape — when to use, setup, wiring, usage, verification, gotchas. Index: [`docs/features/`](./docs/features/).
-
-| Guide | What it covers |
+| Path | What it is |
 |---|---|
-| [GraphQL](./docs/features/graphql.md) | `.GQL()` end-to-end — schema → entc.go → gqlgen.yml → resolver → curl |
-| [Required](./docs/features/required.md) | `.Required()` hook — reject unset / cleared writes |
-| [Touch](./docs/features/touch.md) | `.Touch()` hook — bump parent timestamp on child save |
-| [Cascade](./docs/features/cascade.md) | `.Cascade()` hook — delete children with the parent |
-| [Soft delete](./docs/features/soft-delete.md) | `.SoftDelete()` — hide soft-deleted parents from reverse resolves |
-| [UUID parents](./docs/features/uuid-parents.md) | UUID PK setup — codegen detects per-parent shape |
-| [M2M polymorphic](./docs/features/m2m-polymorphic.md) | `MorphedByMany` + pivot + auto-inverse + `helper.Sync`/`Toggle` |
-| [Eager loading](./docs/features/eager-loading.md) | `WithCommentable()` 1+N(types) batching |
-| [Custom columns](./docs/features/custom-columns.md) | `MixinIDColumn` / `MixinTypeColumn` + matching edge overrides |
-| [Self-referential](./docs/features/self-referential.md) | Host type listed in its own `AllowedTypes` |
-| [Predicates](./docs/features/predicates.md) | Typed predicate constructors + per-parent sub-query helpers |
-| [MorphOne](./docs/features/morph-one.md) | Exactly-one parent-side back-reference |
-| [Morph map](./docs/morph-map.md) | Stable aliases via `entpoly.WithMorphMap(...)` |
+| [examples/basic/](./examples/basic/) | Int-PK runnable example |
+| [examples/uuid/](./examples/uuid/) | UUID-PK runnable example |
+| [../testentpoly/](../testentpoly/) | Integration harness — every feature, real GraphQL HTTP |
 
----
+### Internals / contributing
 
-## Examples
-
-| Example | Demonstrates |
+| Doc | What it covers |
 |---|---|
-| [examples/basic/](./examples/basic/) | Int-PK parents (Post, Video, Image), Comment child w/ all options (`Required`, `Touch`, `Cascade`, `SoftDelete`, `GQL`), Tag/Taggable M2M, eager-load |
-| [examples/uuid/](./examples/uuid/) | UUID-PK parents (Document, Report), Annotation child — full UUID round-trip |
-| [../testentpoly/](../testentpoly/) | **Full integration harness** — every feature, real HTTP GraphQL server, drift-linter negative tests, query tracer for eager-load batching. 27-row scenario matrix in [testentpoly/SCENARIOS.md](../testentpoly/SCENARIOS.md), paste-ready GraphQL queries in [testentpoly/QUERIES.md](../testentpoly/QUERIES.md). |
-
-The two `examples/` are minimal runnable docs (`go test ./examples/...`). `testentpoly/` is the kitchen-sink integration suite — schema variants, hook combinations, polymorphic M2M, self-ref, custom column names, morph-map rename, drift-linter negatives, structural artifact assertions, and a real gqlgen HTTP server (`task serve`).
-
----
+| [Architecture](./docs/internals/architecture.md) | Codegen pipeline, edge cases, v2 roadmap |
+| [ADR-001: type safety](./docs/internals/adr-001-type-safety.md) | Sealed iface + enum design |
+| [ADR-002: whereMorphRelation](./docs/internals/adr-002-where-morph-relation.md) | Per-parent sub-query helper design |
 
 ## Status
 
 | State | Items |
 |---|---|
-| ✅ Shipped | 13 of 13 roadmap items — see [docs/architecture.md § What v1 ships](./docs/architecture.md) |
-| ⏳ Backlog | 2 follow-up gaps surfaced by `testentpoly` — see [docs/architecture.md § v2 roadmap](./docs/architecture.md#v2-roadmap) (dup `MorphKey` constants under aliased `WithMorphMap`; mixed-PK drift linter) |
-| 🧪 Test coverage | `entpoly/` core: 6 codegen GQL tests + integration tests. `examples/basic/` + `examples/uuid/`: runtime tests against in-memory SQLite. `testentpoly/`: 28 PASS / 2 SKIP / 0 FAIL across 5 phases — real ent codegen + real gqlgen + real HTTP + query tracer |
-
----
+| Shipped | 13 of 13 roadmap items — see [feature-matrix.md](./docs/feature-matrix.md) |
+| Backlog | 2 follow-up gaps surfaced by testentpoly — see [internals/architecture.md § v2 roadmap](./docs/internals/architecture.md#v2-roadmap) |
+| Tests | 28 PASS / 2 SKIP / 0 FAIL across 5 phases in [testentpoly/](../testentpoly/) |
 
 ## License
 

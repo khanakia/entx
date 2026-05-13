@@ -76,5 +76,5 @@ Full assertions live in [`testentpoly/hooks_test.go`](../../../testentpoly/hooks
 
 - [Touch](./touch.md) — pairs cleanly via `RegisterPolyHooks`
 - [Mutations reference](../mutations.md) — full Laravel-to-ent mutation table
-- [Architecture](../architecture.md) — hook ordering details
+- [Architecture](../internals/architecture.md) — hook ordering details
 - [Getting started](../getting-started.md)

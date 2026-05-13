@@ -197,7 +197,7 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 
 | Laravel | Status in entpoly |
 |---|---|
-| `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | `ent.CommentCommentableOnPost(post.PublishedEQ(true))` — per-parent helper; multi-type via `comment.Or(...)`. See [ADR-002](./adr-002-where-morph-relation.md). |
+| `whereMorphRelation('commentable', ...)` w/ closure over per-type sub-queries | `ent.CommentCommentableOnPost(post.PublishedEQ(true))` — per-parent helper; multi-type via `comment.Or(...)`. See [ADR-002](./internals/adr-002-where-morph-relation.md). |
 | `union Commentable = Post \| Video` GraphQL surface | `MorphTo(...).GQL()` — emits Go-side type alias + exported `Is<Union>()` markers + resolver helper. `.graphql` fragment via `entpoly.WithGQLSchemaFile(...)`. Compatible with gqlgen / entgql. |
 
 ## What entpoly has that Laravel doesn't
@@ -215,5 +215,5 @@ The codegen-emitted `ent.CommentCommentableIs(parent)` takes the sealed-interfac
 - [docs/relationships.md](./relationships.md) — schema patterns per shape
 - [docs/mutations.md](./mutations.md) — per-verb write API
 - [docs/morph-map.md](./morph-map.md) — alias / rename workflow
-- [docs/adr-001-type-safety.md](./adr-001-type-safety.md) — design rationale, alternatives, tradeoffs
+- [docs/internals/adr-001-type-safety.md](./internals/adr-001-type-safety.md) — design rationale, alternatives, tradeoffs
 - [examples/basic/](../examples/basic) — runnable example w/ tests

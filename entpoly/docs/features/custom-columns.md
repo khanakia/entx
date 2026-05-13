@@ -98,4 +98,4 @@ SELECT sql FROM sqlite_master WHERE name = 'events';
 - [`testentpoly/schema/event.go`](../../../testentpoly/schema/event.go)
 - [`testentpoly/customcols_test.go`](../../../testentpoly/customcols_test.go)
 - [Relationships reference § custom column names](../relationships.md)
-- [Architecture](../architecture.md)
+- [Architecture](../internals/architecture.md)

@@ -116,7 +116,7 @@ A runnable end-to-end example is at [`entpoly/examples/uuid/`](../../examples/uu
 
 ## Gotchas
 
-1. **Mixed-PK `AllowedTypes` is a runtime gotcha.** Listing both an int-PK parent and a UUID-PK parent in one `MorphTo(...)` succeeds at codegen, but reverse-resolve hits a parse error at runtime when the discriminator value cannot be coerced to the expected type. A drift linter for this case is on the [v2 roadmap](../architecture.md#v2-roadmap) — for now, keep `AllowedTypes` PK-homogeneous, or ensure every reverse-resolve call site handles the parse error. The exception is **self-referential mixing** done deliberately in [`testentpoly/schema/folder.go`](../../../testentpoly/schema/folder.go), where Folder (int) + Document (uuid) work because each branch is parsed with its own decoder.
+1. **Mixed-PK `AllowedTypes` is a runtime gotcha.** Listing both an int-PK parent and a UUID-PK parent in one `MorphTo(...)` succeeds at codegen, but reverse-resolve hits a parse error at runtime when the discriminator value cannot be coerced to the expected type. A drift linter for this case is on the [v2 roadmap](../internals/architecture.md#v2-roadmap) — for now, keep `AllowedTypes` PK-homogeneous, or ensure every reverse-resolve call site handles the parse error. The exception is **self-referential mixing** done deliberately in [`testentpoly/schema/folder.go`](../../../testentpoly/schema/folder.go), where Folder (int) + Document (uuid) work because each branch is parsed with its own decoder.
 2. **The id column is `field.String`, not `field.UUID`.** entpoly stores UUIDs as strings in the discriminator column. This is on purpose — the same column has to host every parent's PK shape. Index it like any other string column.
 3. **`MixinIDType("int")` does not work with UUID parents.** That option promotes the discriminator column to `field.Int64`, which cannot hold UUID strings. Keep `MixinIDType` at the default (`"string"`) for UUID parents.
 
@@ -124,5 +124,5 @@ A runnable end-to-end example is at [`entpoly/examples/uuid/`](../../examples/uu
 
 - [`entpoly/examples/uuid/`](../../examples/uuid/) — full runnable example
 - [`testentpoly/uuid_test.go`](../../../testentpoly/uuid_test.go)
-- [Architecture § v2 roadmap](../architecture.md#v2-roadmap) — mixed-PK linter
+- [Architecture § v2 roadmap](../internals/architecture.md#v2-roadmap) — mixed-PK linter
 - [Relationships reference § choosing the id type](../relationships.md#choosing-the-id-type)

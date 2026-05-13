@@ -64,7 +64,7 @@ multi, _ := client.Comment.Query().
 all, _ := client.Comment.Query().Where(ent.CommentCommentableOnPost()).All(ctx)
 ```
 
-The `On<Parent>(...)` helper accepts zero or more typed predicates from the parent's predicate package (`ent/post`, `ent/video`). They are AND'd together inside the sub-query, then joined to the child via a `commentable_type = 'post' AND commentable_id IN (...)` clause. See [ADR-002](../adr-002-where-morph-relation.md) for the design rationale.
+The `On<Parent>(...)` helper accepts zero or more typed predicates from the parent's predicate package (`ent/post`, `ent/video`). They are AND'd together inside the sub-query, then joined to the child via a `commentable_type = 'post' AND commentable_id IN (...)` clause. See [ADR-002](../internals/adr-002-where-morph-relation.md) for the design rationale.
 
 ## Verification
 
@@ -99,7 +99,7 @@ pub := client.Comment.Query().
 
 ## See also
 
-- [ADR-002: whereMorphRelation API](../adr-002-where-morph-relation.md) — design rationale for the per-parent helpers
+- [ADR-002: whereMorphRelation API](../internals/adr-002-where-morph-relation.md) — design rationale for the per-parent helpers
 - [`testentpoly/predicates_test.go`](../../../testentpoly/predicates_test.go)
 - [Relationships reference § typed predicates](../relationships.md)
 - [Eager loading](./eager-loading.md) — alternative read path

@@ -69,4 +69,4 @@ if e, _ := client.Comment.Query().Where(comment.IDEQ(c3.ID)).Exist(ctx); !e {
 - [Required](./required.md)
 - [Soft delete](./soft-delete.md) — read-side filter; complementary, not a substitute
 - [Mutations reference § cascade deletes](../mutations.md)
-- [Architecture](../architecture.md) — why no FK
+- [Architecture](../internals/architecture.md) — why no FK

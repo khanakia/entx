@@ -200,5 +200,5 @@ postComments, _ := client.Comment.Query().
 - [Relationships reference](./relationships.md) — every polymorphic shape, with full schema + usage examples.
 - [Mutations reference](./mutations.md) — Laravel-to-ent translation table for every relationship verb.
 - [Morph map](./morph-map.md) — how the discriminator string is resolved and the renaming workflow.
-- [Architecture](./architecture.md) — how the codegen extension is structured.
+- [Architecture](./internals/architecture.md) — how the codegen extension is structured.
 - [FAQ](./faq.md) — answers to common questions about FKs, cascades, dialects, and GraphQL.

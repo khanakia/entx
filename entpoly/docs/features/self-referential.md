@@ -73,7 +73,7 @@ if !ok || got.ID != root.ID {
 
 1. **Cycles are not detected by entpoly.** Creating `A.parent = B` and `B.parent = A` succeeds at every layer — entpoly only enforces type membership, not graph shape. If your domain needs cycle-free hierarchies (folders, categories), add a validation hook on the child's create / update path.
 2. **Cascade with a self-referential parent recurses one level only.** `.Cascade()` deletes the children pointing at the parent that was just deleted; but if those children themselves have grandchildren via the same morph relation, those grandchildren are NOT deleted (the cascade hook fires on the original parent's delete, not on each cascaded child's delete). For true recursive deletion, write an application-level helper.
-3. **Mixed-PK `AllowedTypes` only works because each branch decodes its own column.** Folder is int-PK; Document is UUID-PK. The reverse resolver picks the decoder by morph key, so each branch is parsed independently. This is the same path the [v2 mixed-PK linter](../architecture.md#v2-roadmap) is tracking — works today, but adding a third parent with yet another PK shape stretches the pattern.
+3. **Mixed-PK `AllowedTypes` only works because each branch decodes its own column.** Folder is int-PK; Document is UUID-PK. The reverse resolver picks the decoder by morph key, so each branch is parsed independently. This is the same path the [v2 mixed-PK linter](../internals/architecture.md#v2-roadmap) is tracking — works today, but adding a third parent with yet another PK shape stretches the pattern.
 
 ## See also
 

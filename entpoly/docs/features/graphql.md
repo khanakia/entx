@@ -176,6 +176,6 @@ Each parent type satisfies the union by virtue of the generated `func (*Post) Is
 
 - [`testentpoly/QUERIES.md`](../../../testentpoly/QUERIES.md) — paste-ready queries against the running server
 - [`testentpoly/cmd/serve/main.go`](../../../testentpoly/cmd/serve/main.go) — end-to-end server wiring
-- [Architecture](../architecture.md) — how `.GQL()` plugs into the codegen pipeline
+- [Architecture](../internals/architecture.md) — how `.GQL()` plugs into the codegen pipeline
 - [Getting started](../getting-started.md) — adding entpoly to a fresh ent project
 - [Laravel parity](../laravel-parity.md) — Laravel `morphTo` → entpoly verb mapping

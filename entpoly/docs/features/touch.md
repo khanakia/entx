@@ -86,4 +86,4 @@ if !afterCreate.UpdatedAt.After(original) {
 - [Required](./required.md) — pairs via the same `RegisterPolyHooks` call
 - [Cascade](./cascade.md) — same hook entry point, opposite direction
 - [Mutations reference](../mutations.md)
-- [Architecture](../architecture.md) — hook ordering and registration
+- [Architecture](../internals/architecture.md) — hook ordering and registration

@@ -124,5 +124,5 @@ Same split as `testent` ↔ `entcascade/examples` and `testentgqlmulti` ↔ `ent
 - [`SCENARIOS.md`](./SCENARIOS.md) — every scenario, every test name
 - [`QUERIES.md`](./QUERIES.md) — paste-ready GraphQL queries
 - [`../entpoly/README.md`](../entpoly/README.md) — entpoly user docs
-- [`../entpoly/docs/architecture.md`](../entpoly/docs/architecture.md) — how the codegen pipeline is built
+- [`../entpoly/docs/internals/architecture.md`](../entpoly/docs/internals/architecture.md) — how the codegen pipeline is built
 - [`../testentgqlmulti/`](../testentgqlmulti/) — sibling harness (entgqlmulti integration tests)
