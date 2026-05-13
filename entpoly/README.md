@@ -163,6 +163,26 @@ See [ADR-001: Type-safety strategy](./docs/adr-001-type-safety.md) for the desig
 | [ADR-002: `whereMorphRelation` API](./docs/adr-002-where-morph-relation.md) | Why per-parent predicate constructors (`OnPost`/`OnVideo`) over closures or builder objects |
 | [FAQ](./docs/faq.md) | Common questions about FKs, cascades, dialects, GraphQL |
 
+### Per-feature how-to guides
+
+Step-by-step guides for each feature, with the same shape — when to use, setup, wiring, usage, verification, gotchas. Index: [`docs/features/`](./docs/features/).
+
+| Guide | What it covers |
+|---|---|
+| [GraphQL](./docs/features/graphql.md) | `.GQL()` end-to-end — schema → entc.go → gqlgen.yml → resolver → curl |
+| [Required](./docs/features/required.md) | `.Required()` hook — reject unset / cleared writes |
+| [Touch](./docs/features/touch.md) | `.Touch()` hook — bump parent timestamp on child save |
+| [Cascade](./docs/features/cascade.md) | `.Cascade()` hook — delete children with the parent |
+| [Soft delete](./docs/features/soft-delete.md) | `.SoftDelete()` — hide soft-deleted parents from reverse resolves |
+| [UUID parents](./docs/features/uuid-parents.md) | UUID PK setup — codegen detects per-parent shape |
+| [M2M polymorphic](./docs/features/m2m-polymorphic.md) | `MorphedByMany` + pivot + auto-inverse + `helper.Sync`/`Toggle` |
+| [Eager loading](./docs/features/eager-loading.md) | `WithCommentable()` 1+N(types) batching |
+| [Custom columns](./docs/features/custom-columns.md) | `MixinIDColumn` / `MixinTypeColumn` + matching edge overrides |
+| [Self-referential](./docs/features/self-referential.md) | Host type listed in its own `AllowedTypes` |
+| [Predicates](./docs/features/predicates.md) | Typed predicate constructors + per-parent sub-query helpers |
+| [MorphOne](./docs/features/morph-one.md) | Exactly-one parent-side back-reference |
+| [Morph map](./docs/morph-map.md) | Stable aliases via `entpoly.WithMorphMap(...)` |
+
 ---
 
 ## Examples

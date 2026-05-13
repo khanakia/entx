@@ -105,6 +105,17 @@ If two relations need different alias schemes for the same parent type (rare), y
 
 In practice, a single project-wide map is what you want — the morph key identifies the *parent table*, not the *relation*, so the same `Post` plays the same role in every relation.
 
+## Per-feature how-to
+
+`WithMorphMap` is the only extension option that controls the persisted `*_type` value. Other features (custom column names, GraphQL union name, M2M pivot table name) operate on different layers and compose independently:
+
+| Concern | Knob | Where |
+|---|---|---|
+| Persisted `*_type` value | `entpoly.WithMorphMap(...)` (extension option) | This page |
+| Column name on the child | `MixinTypeColumn(...)` + `.TypeColumn(...)` | [Custom columns](./features/custom-columns.md) |
+| GraphQL union name | `.GQL("CustomName")` on the edge | [GraphQL](./features/graphql.md) |
+| Pivot table name (M2M) | `.Through("custom_pivots", Pivot.Type)` | [M2M](./features/m2m-polymorphic.md) |
+
 ## Backward-compatible renames
 
 Want to rename the morph key itself (not the Go type)? You have to migrate data. There is no in-place rename — `commentable_type = 'post'` is the literal value in the column. Two approaches:
