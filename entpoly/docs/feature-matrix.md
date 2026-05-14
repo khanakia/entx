@@ -10,6 +10,7 @@ Dense reference of every surface entpoly emits. This is the lookup table; for ta
 | Mixin for discriminator columns | `MorphMixin(name)` adds `<rel>_id` + `<rel>_type` to a child schema | [getting-started](./getting-started.md) |
 | DB-enforced enum on the type column | `MixinAllowed(Post.Type, Video.Type)` → `field.Enum(...)` w/ CHECK constraint | [ADR-001](./internals/adr-001-type-safety.md) |
 | Auto composite index on `(<type>, <id>)` | Emitted by default; opt out via `MixinNoIndex()` | [relationships#foreign-keys](./relationships.md) |
+| Override the composite-index storage key | `MixinIndexName("media_tags_taggable_type_taggable_id")` — needed when two ent modules sharing a DB declare an entity with the same Go name and the same morph relation (Postgres index names are schema-global). | [getting-started.md § cross-module index-name override](./getting-started.md#optional-cross-module-index-name-override) |
 | Custom column names | `MixinIDColumn` / `MixinTypeColumn` + matching `IDColumn` / `TypeColumn` on the edge | [relationships#custom-column-names](./relationships.md) |
 | `int` / `int64` / `string` / **`uuid.UUID`** parent PKs | Auto-detected per parent; codegen emits matching `strconv` / `uuid.Parse` branch | [examples/uuid/](../examples/uuid/) |
 | Multiple polymorphic relations per schema | One `MorphMixin` + one `MorphTo` per relation, side by side | [faq.md](./faq.md) |

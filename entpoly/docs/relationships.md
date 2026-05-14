@@ -203,7 +203,13 @@ func (Tag) Edges() []ent.Edge {
 }
 ```
 
-`Through(pivotTable, pivotType)` auto-derives the morph relation name from the singular form of the table name (`taggables` → `taggable`). Override via `.MorphName("...")` when the singular form is irregular.
+`Through(pivotTable, pivotType)` defers morph-name resolution to preprocess. The resolution order is:
+
+1. An explicit `.MorphName("...")` on the holder builder (always wins).
+2. The pivot type's own `MorphTo` declaration — its `MorphName` is the source of truth for the discriminator columns. This is the right answer whenever the pivot table name doesn't share a stem with the morph noun, e.g. `Through("source_links", SourceLink.Type)` against a pivot whose `MorphTo` is `"sourceable"`.
+3. `singularise(pivotTable)` — Laravel `"taggables"` → `"taggable"` convention; covers `ies → y` and trailing `s`. Used only when the pivot has no `MorphTo` to consult.
+
+In practice you almost never need `.MorphName(...)` — the pivot's `MorphTo` resolves the right name.
 
 ### Usage
 

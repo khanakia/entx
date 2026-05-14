@@ -12,7 +12,7 @@ Step-by-step guides for each entpoly feature. Each guide follows the same shape 
 | [UUID parents](./uuid-parents.md) | UUID PK setup — codegen detects per-parent shape |
 | [M2M polymorphic](./m2m-polymorphic.md) | `MorphedByMany` + pivot + auto-inverse + `helper.Sync`/`Toggle` |
 | [Eager loading](./eager-loading.md) | `WithCommentable()` 1+N(types) batching |
-| [Custom columns](./custom-columns.md) | `MixinIDColumn` / `MixinTypeColumn` + matching edge overrides |
+| [Custom columns](./custom-columns.md) | `MixinIDColumn` / `MixinTypeColumn` + matching edge overrides; covers `MixinIndexName` for cross-module collisions |
 | [Self-referential](./self-referential.md) | Host type listed in its own `AllowedTypes` |
 | [Predicates](./predicates.md) | Typed predicate constructors + per-parent sub-query helpers |
 | [MorphOne](./morph-one.md) | Exactly-one parent-side back-reference |

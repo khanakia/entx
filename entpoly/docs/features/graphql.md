@@ -48,6 +48,8 @@ func (Comment) Edges() []ent.Edge {
 
 To rename the GraphQL union without renaming the morph relation, pass an argument: `.GQL("PostOrVideo")`.
 
+`.GQL()` works with either discriminator mode — `MixinAllowed(...)` (the type column is `field.Enum`) **or** plain `MorphMixin("commentable")` (the type column is `field.String`). The Go-level surface and the emitted `.graphql` fragment are identical; the generated cast in `polymorphic.go` adapts to the column type internally. The enum mode is still recommended for end-to-end DB integrity (a CHECK / native ENUM rejects invalid morph keys at the storage layer), but it is not required to opt the relation into GraphQL.
+
 ## Wiring
 
 `ent/entc.go` — register the extension and point it at the `.graphql` schema file you want the union fragment emitted into:

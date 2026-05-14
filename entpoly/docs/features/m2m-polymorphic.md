@@ -136,7 +136,12 @@ postTags, _ := post.QueryTags(ctx)      // auto-inverse (no declaration on Post)
 
 ## Gotchas
 
-1. **`Through(tableName, pivot)` defaults the morph name to the singular of the table name.** `"taggables"` → `"taggable"`. If your pivot table name is irregular (`categories` → `category`? `feet`?), call `.MorphName("...")` explicitly. The handler covers `ies → y` and trailing `s`; anything else passes through unchanged.
+1. **`Through(tableName, pivot)` morph-name resolution order.** entpoly picks the morph relation in this order, first hit wins:
+   1. An explicit `.MorphName("...")` call on the holder builder.
+   2. The pivot type's own `MorphTo` declaration — its `MorphName` is the source of truth for the discriminator columns, so this is the right answer whenever the pivot table name doesn't share a stem with the morph noun (e.g. `Through("source_links", SourceLink.Type)` against a pivot whose `MorphTo` is `"sourceable"`).
+   3. `singularise(tableName)` — Laravel `"taggables"` → `"taggable"` convention. Only correct when the table name shares a stem with the morph noun; covers `ies → y` and trailing `s` and otherwise passes through unchanged.
+
+   In practice you almost never need to call `.MorphName(...)` explicitly — the pivot's own `MorphTo` resolves the right name. Reach for it only when one pivot supports more than one morph relation simultaneously (rare).
 2. **The pivot must declare its own `MorphTo`.** Without `entpoly.MorphTo("taggable", Post.Type, Video.Type)` in `Taggable.Edges()`, the M2M back-ref has nowhere to read the discriminator from. The `MorphedByMany(...).Through(...)` declaration on Tag is wired to the pivot's MorphTo by name.
 3. **Auto-inverse plural defaults to `<HolderType>s`.** `MorphedByMany("posts", Post.Type)` with Tag as the holder emits `post.QueryTags(ctx)`. For irregular plurals (Category → Categories), use `.InverseName("categories")`. See the builder docs in [`edge.go`](../../edge.go) for the full option set.
 4. **Attaching uses the typed pivot builder, not a method on the holder.** Laravel's `$tag->posts()->attach($post)` has no direct equivalent on `*Tag` — write a `Taggable` row instead. This is the same pattern as ent's own M2M edges with extras: the pivot is a first-class entity.

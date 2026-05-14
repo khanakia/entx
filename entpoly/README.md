@@ -99,6 +99,7 @@ Run `go generate ./ent`. A sidecar `ent/polymorphic.go` is emitted alongside ent
 | Build a polymorphic many-to-many (tags) | [features/m2m-polymorphic.md](./docs/features/m2m-polymorphic.md) |
 | Eager-load the parent without N+1 | [features/eager-loading.md](./docs/features/eager-loading.md) |
 | Rename the `<rel>_id` / `<rel>_type` columns | [features/custom-columns.md](./docs/features/custom-columns.md) |
+| Avoid composite-index name collisions across ent modules sharing a DB | [getting-started.md § cross-module index-name override](./docs/getting-started.md#optional-cross-module-index-name-override) |
 | List the host type in its own `AllowedTypes` | [features/self-referential.md](./docs/features/self-referential.md) |
 | Filter children by typed parent predicates | [features/predicates.md](./docs/features/predicates.md) |
 | Model exactly-one back-reference (MorphOne) | [features/morph-one.md](./docs/features/morph-one.md) |
@@ -149,7 +150,8 @@ Full mapping: [docs/laravel-parity.md](./docs/laravel-parity.md).
 
 | Path | What it is |
 |---|---|
-| [examples/basic/](./examples/basic/) | Int-PK runnable example |
+| [examples/basic/](./examples/basic/) | Int-PK runnable example with `MixinAllowed` enum mode + every feature flag |
+| [examples/morphstring/](./examples/morphstring/) | Bare `MorphMixin` example — plain `field.String` discriminator (no `MixinAllowed`); covers stem-matching and divergent-name child schemas |
 | [examples/uuid/](./examples/uuid/) | UUID-PK runnable example |
 | [../testentpoly/](../testentpoly/) | Integration harness — every feature, real GraphQL HTTP |
 
@@ -177,7 +179,7 @@ Full mapping: [docs/laravel-parity.md](./docs/laravel-parity.md).
 
 **Does this work with PostgreSQL / MySQL / SQLite?** Yes — all three. The type column is a `field.Enum`, which lands as a native ENUM on MySQL, a `text` + CHECK on PostgreSQL/SQLite, with the same runtime validator regardless.
 
-**Does it support UUID parent IDs?** Yes — `field.UUID("id", uuid.UUID{})` on parents is auto-detected per parent type. Mixed PK types in one AllowedTypes set is on the roadmap (see [internals/architecture.md § v2 roadmap](./docs/internals/architecture.md#v2-roadmap)).
+**Does it support UUID parent IDs?** Yes — `field.UUID("id", uuid.UUID{})` on parents is auto-detected per parent type. Mixed PK types across the parent set are supported too (`int` + `int64` + `string` + `uuid.UUID` all in the same `AllowedTypes`) — the template emits the right `strconv` / `uuid.Parse` branch per parent. Render-matrix tests in `entpoly/integration_test.go` cover the combinations.
 
 **Does it integrate with gqlgen / entgql for GraphQL?** Yes — `.GQL()` emits the Go-side markers gqlgen needs (`Is<Union>()` on each parent + a type alias), plus an optional `.graphql` schema fragment via `entpoly.WithGQLSchemaFile(...)`. See [features/graphql.md](./docs/features/graphql.md) and [testentpoly/QUERIES.md](../testentpoly/QUERIES.md) for end-to-end examples.
 
