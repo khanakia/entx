@@ -14,9 +14,9 @@ import (
 
 // registerReminder wires *ent.Reminder into the enttui runtime.
 //
-// Scope filtering: this entity has a `project_id` field so the generated
-// Fetch closure looks up ListOpts.Scope["project_id"] and applies it as a
-// predicate when present. Caller sets the scope via app.SetScope("project_id", id).
+// Scope filtering: for every scope key configured in enttui.Config.ScopeFields
+// that exists on this schema, the Fetch closure below reads opts.Scope[key]
+// and applies a predicate when set. Caller drives this via app.SetScope(key, value).
 func registerReminder(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Reminder]{
 		Kind:           "reminder",
@@ -34,8 +34,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Reminder, int, error) {
 			q := client.Reminder.Query()
-			// Project scope — looked up generically via ListOpts.Scope so
-			// the runtime stays decoupled from any specific field name.
+			// Scope predicate — keyed generically via ListOpts.Scope so the
+			// runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entReminder.ProjectID(v))
 			}

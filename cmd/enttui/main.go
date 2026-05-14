@@ -25,6 +25,7 @@ func main() {
 	pkg := flag.String("package", "enttui", "package name declared in generated files")
 	entPkg := flag.String("ent-pkg", "dbent/gen/ent", "import path of the generated ent client package")
 	skipCSV := flag.String("skip", "", "comma-separated list of ent Type names to skip")
+	scopeCSV := flag.String("scope", "", "comma-separated list of snake_case field names to wire as scope predicates (e.g. project_id,tenant_id)")
 	flag.Parse()
 
 	if *schema == "" || *out == "" {
@@ -40,12 +41,21 @@ func main() {
 		}
 	}
 
+	var scope []string
+	for _, s := range strings.Split(*scopeCSV, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			scope = append(scope, s)
+		}
+	}
+
 	if err := codegen.Generate(codegen.Options{
-		SchemaPath: *schema,
-		OutDir:     *out,
-		Package:    *pkg,
-		EntPkgPath: *entPkg,
-		Skip:       skip,
+		SchemaPath:  *schema,
+		OutDir:      *out,
+		Package:     *pkg,
+		EntPkgPath:  *entPkg,
+		Skip:        skip,
+		ScopeFields: scope,
 	}); err != nil {
 		log.Fatalf("enttui: %v", err)
 	}

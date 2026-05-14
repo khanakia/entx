@@ -32,11 +32,7 @@ import (
 //go:embed templates/*.tmpl
 var tmplFS embed.FS
 
-var templates = template.Must(template.New("").
-	Funcs(template.FuncMap{
-		"title": strings.Title, //nolint:staticcheck
-	}).
-	ParseFS(tmplFS, "templates/*.tmpl"))
+var templates = template.Must(template.New("").ParseFS(tmplFS, "templates/*.tmpl"))
 
 // Options configure a generator run.
 type Options struct {
@@ -51,6 +47,13 @@ type Options struct {
 	EntPkgPath string
 	// Skip excludes specific entity Names (ent type names) from generation.
 	Skip map[string]bool
+	// ScopeFields lists ent field names (snake_case, e.g. "project_id",
+	// "tenant_id", "org_id") that should be wired as scope predicates in
+	// the generated Fetch closures. For each scope field an entity has,
+	// the closure reads opts.Scope["<field>"] and applies a predicate.
+	// Entities without the field skip the predicate (still browsable, just
+	// unscoped). Leave empty for a fully un-scoped generic install.
+	ScopeFields []string
 }
 
 // EntityMeta is the per-entity context passed to the entity template.
@@ -70,7 +73,9 @@ type EntityMeta struct {
 	Icon             string
 	PredPkg          string // task (lowercase, package-name for predicates)
 	PredAlias        string // entTask (import alias)
-	HasProjectID     bool
+	// ScopeFields are the subset of Options.ScopeFields this entity
+	// actually has on its schema. Template emits one predicate per entry.
+	ScopeFields      []ScopeFieldMeta
 	HasCreated       bool
 	HasUpdated       bool
 	FilterPredicates []string // legacy substring predicates for ListOpts.Filter
@@ -125,6 +130,15 @@ type FieldMeta struct {
 type ChipEntry struct {
 	Value string
 	Tone  string
+}
+
+// ScopeFieldMeta describes one (snake_case, GoName) pair for a scope
+// field present on this entity. Key is the lookup key in opts.Scope;
+// GoName is the predicate method on the entity's `*.Type` predicate
+// package (e.g. ProjectID, TenantID).
+type ScopeFieldMeta struct {
+	Key    string
+	GoName string
 }
 
 // EdgeMeta describes one ent edge for template emission.
@@ -288,11 +302,23 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			em.StatusField = &m
 		}
 
+		// Generic scope match: if this field name is in opts.ScopeFields,
+		// record the (key, GoName) pair so the template can emit the
+		// predicate. No project-specific hardcoding — works for any
+		// tenant_id / org_id / workspace_id convention.
+		for _, sk := range opts.ScopeFields {
+			if f.Name == sk {
+				em.ScopeFields = append(em.ScopeFields, ScopeFieldMeta{
+					Key:    sk,
+					GoName: f.StructField(),
+				})
+				break
+			}
+		}
+
 		switch f.Name {
 		case "id":
 			// id is always rendered via the columns block too.
-		case "project_id":
-			em.HasProjectID = true
 		case "created_at":
 			em.HasCreated = true
 			if !fm.Sortable {
@@ -364,10 +390,9 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		return em, false
 	}
 
-	// Convention: only emit entities scoped to a project for the v1 POC.
-	if !em.HasProjectID {
-		return em, false
-	}
+	// Convention: every entity with an ID + not in the internal blocklist
+	// + not passed via --skip is browsable. Scope predicates are emitted
+	// only for fields the entity actually has (see em.ScopeFields above).
 
 	// Edges.
 	used := map[string]bool{}

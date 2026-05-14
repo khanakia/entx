@@ -4,23 +4,24 @@ package enttuigen
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"dbent/gen/ent"
-	entTag "dbent/gen/ent/tag"
+	entUser "dbent/gen/ent/user"
 
 	"enttui/runtime"
 )
 
-// registerTag wires *ent.Tag into the enttui runtime.
+// registerUser wires *ent.User into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerTag(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.Tag]{
-		Kind:           "tag",
-		Display:        "Tags",
+func registerUser(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.User]{
+		Kind:           "user",
+		Display:        "Users",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,21 +33,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Tag, int, error) {
-			q := client.Tag.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entTag.ProjectID(v))
-			}
-			// Legacy substring filter — used by the list+preview browser's
-			// global `/` prompt. Phase E (Filters slice) supersedes this
-			// in the table view but both can coexist.
-			if opts.Filter != "" {
-				q = q.Where(entTag.Or(
-					entTag.NameContainsFold(opts.Filter),
-				))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.User, int, error) {
+			q := client.User.Query()
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.
@@ -55,42 +43,47 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.IDEQ(f.Value))
+						q = q.Where(entUser.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.IDNEQ(f.Value))
+						q = q.Where(entUser.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.IDContainsFold(f.Value))
+						q = q.Where(entUser.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "first_name":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.ProjectIDEQ(f.Value))
+						q = q.Where(entUser.FirstNameEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.ProjectIDNEQ(f.Value))
+						q = q.Where(entUser.FirstNameNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.ProjectIDContainsFold(f.Value))
+						q = q.Where(entUser.FirstNameContainsFold(f.Value))
 					}
-				case "name":
+				case "last_name":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.NameEQ(f.Value))
+						q = q.Where(entUser.LastNameEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.NameNEQ(f.Value))
+						q = q.Where(entUser.LastNameNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.NameContainsFold(f.Value))
+						q = q.Where(entUser.LastNameContainsFold(f.Value))
 					}
-				case "color":
+				case "email":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.ColorEQ(f.Value))
+						q = q.Where(entUser.EmailEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.ColorNEQ(f.Value))
+						q = q.Where(entUser.EmailNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.ColorContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTag.ColorIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTag.ColorNotNil())
+						q = q.Where(entUser.EmailContainsFold(f.Value))
+					}
+				case "password":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entUser.PasswordEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entUser.PasswordNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entUser.PasswordContainsFold(f.Value))
 					}
 				}
 			}
@@ -101,39 +94,45 @@ func registerTag(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldID))
+							q = q.Order(ent.Asc(entUser.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldID))
+							q = q.Order(ent.Desc(entUser.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Asc(entUser.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Desc(entUser.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entUser.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entUser.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "first_name":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldProjectID))
+							q = q.Order(ent.Asc(entUser.FieldFirstName))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldProjectID))
+							q = q.Order(ent.Desc(entUser.FieldFirstName))
 						}
-					case "name":
+					case "last_name":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldName))
+							q = q.Order(ent.Asc(entUser.FieldLastName))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldName))
+							q = q.Order(ent.Desc(entUser.FieldLastName))
 						}
-					case "color":
+					case "email":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldColor))
+							q = q.Order(ent.Asc(entUser.FieldEmail))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldColor))
+							q = q.Order(ent.Desc(entUser.FieldEmail))
+						}
+					case "password":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entUser.FieldPassword))
+						} else {
+							q = q.Order(ent.Desc(entUser.FieldPassword))
 						}
 					}
 				}
@@ -141,9 +140,9 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Asc(entUser.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Desc(entUser.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -153,13 +152,10 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Tag) string {
-			return r.Name
-		},
-		CreatedAt: func(r *ent.Tag) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Tag) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.User) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.User) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.Tag]{
+		Columns: []runtime.Column[*ent.User]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -168,7 +164,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.User) string {
 					return r.ID
 				},
 			},
@@ -180,7 +176,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.User) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -195,7 +191,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.User) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -203,42 +199,63 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "first_name",
+				Label:      "First Name",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.ProjectID
+				Get: func(r *ent.User) string {
+					return r.FirstName
 				},
 			},
 			{
-				Key:        "name",
-				Label:      "Name",
+				Key:        "last_name",
+				Label:      "Last Name",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.Name
+				Get: func(r *ent.User) string {
+					return r.LastName
 				},
 			},
 			{
-				Key:        "color",
-				Label:      "Color",
+				Key:        "email",
+				Label:      "Email",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					if r.Color == nil {
-						return ""
-					}
-					return *r.Color
+				Get: func(r *ent.User) string {
+					return r.Email
+				},
+			},
+			{
+				Key:        "password",
+				Label:      "Password",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.User) string {
+					return r.Password
+				},
+			},
+			{
+				Key:        "is_active",
+				Label:      "Is Active",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.User) string {
+					return fmt.Sprintf("%v", r.IsActive)
 				},
 			},
 		},

@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entTag "dbent/gen/ent/tag"
+	entMemoryCodeRef "dbent/gen/ent/memorycoderef"
 
 	"enttui/runtime"
 )
 
-// registerTag wires *ent.Tag into the enttui runtime.
+// registerMemoryCodeRef wires *ent.MemoryCodeRef into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerTag(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.Tag]{
-		Kind:           "tag",
-		Display:        "Tags",
+func registerMemoryCodeRef(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.MemoryCodeRef]{
+		Kind:           "memorycoderef",
+		Display:        "MemoryCodeRefs",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,21 +32,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Tag, int, error) {
-			q := client.Tag.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entTag.ProjectID(v))
-			}
-			// Legacy substring filter — used by the list+preview browser's
-			// global `/` prompt. Phase E (Filters slice) supersedes this
-			// in the table view but both can coexist.
-			if opts.Filter != "" {
-				q = q.Where(entTag.Or(
-					entTag.NameContainsFold(opts.Filter),
-				))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.MemoryCodeRef, int, error) {
+			q := client.MemoryCodeRef.Query()
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.
@@ -55,42 +42,36 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.IDEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.IDNEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.IDContainsFold(f.Value))
+						q = q.Where(entMemoryCodeRef.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "memory_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.ProjectIDEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.MemoryIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.ProjectIDNEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.MemoryIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.ProjectIDContainsFold(f.Value))
+						q = q.Where(entMemoryCodeRef.MemoryIDContainsFold(f.Value))
 					}
-				case "name":
+				case "code_file_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.NameEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.CodeFileIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.NameNEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.CodeFileIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.NameContainsFold(f.Value))
+						q = q.Where(entMemoryCodeRef.CodeFileIDContainsFold(f.Value))
 					}
-				case "color":
+				case "relation":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.ColorEQ(f.Value))
+						q = q.Where(entMemoryCodeRef.RelationEQ(entMemoryCodeRef.Relation(f.Value)))
 					case runtime.OpNeq:
-						q = q.Where(entTag.ColorNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTag.ColorContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTag.ColorIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTag.ColorNotNil())
+						q = q.Where(entMemoryCodeRef.RelationNEQ(entMemoryCodeRef.Relation(f.Value)))
 					}
 				}
 			}
@@ -101,39 +82,39 @@ func registerTag(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldID))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldID))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "memory_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldProjectID))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldMemoryID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldProjectID))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldMemoryID))
 						}
-					case "name":
+					case "code_file_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldName))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldCodeFileID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldName))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldCodeFileID))
 						}
-					case "color":
+					case "relation":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldColor))
+							q = q.Order(ent.Asc(entMemoryCodeRef.FieldRelation))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldColor))
+							q = q.Order(ent.Desc(entMemoryCodeRef.FieldRelation))
 						}
 					}
 				}
@@ -141,9 +122,9 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Asc(entMemoryCodeRef.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Desc(entMemoryCodeRef.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -153,13 +134,10 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Tag) string {
-			return r.Name
-		},
-		CreatedAt: func(r *ent.Tag) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Tag) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.MemoryCodeRef) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.MemoryCodeRef) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.Tag]{
+		Columns: []runtime.Column[*ent.MemoryCodeRef]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -168,7 +146,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MemoryCodeRef) string {
 					return r.ID
 				},
 			},
@@ -180,7 +158,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MemoryCodeRef) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -195,7 +173,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MemoryCodeRef) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -203,42 +181,39 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "memory_id",
+				Label:      "Memory Id",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.ProjectID
+				Get: func(r *ent.MemoryCodeRef) string {
+					return r.MemoryID
 				},
 			},
 			{
-				Key:        "name",
-				Label:      "Name",
+				Key:        "code_file_id",
+				Label:      "Code File Id",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.Name
+				Get: func(r *ent.MemoryCodeRef) string {
+					return r.CodeFileID
 				},
 			},
 			{
-				Key:        "color",
-				Label:      "Color",
+				Key:        "relation",
+				Label:      "Relation",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					if r.Color == nil {
-						return ""
-					}
-					return *r.Color
+				Get: func(r *ent.MemoryCodeRef) string {
+					return string(r.Relation)
 				},
 			},
 		},

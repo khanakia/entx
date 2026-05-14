@@ -8,20 +8,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entExternalSource "dbent/gen/ent/externalsource"
+	entDraft "dbent/gen/ent/draft"
 
 	"enttui/runtime"
 )
 
-// registerExternalSource wires *ent.ExternalSource into the enttui runtime.
+// registerDraft wires *ent.Draft into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerExternalSource(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.ExternalSource]{
-		Kind:           "externalsource",
-		Display:        "ExternalSources",
+func registerDraft(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.Draft]{
+		Kind:           "draft",
+		Display:        "Drafts",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -33,19 +33,14 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ExternalSource, int, error) {
-			q := client.ExternalSource.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entExternalSource.ProjectID(v))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Draft, int, error) {
+			q := client.Draft.Query()
 			// Legacy substring filter — used by the list+preview browser's
 			// global `/` prompt. Phase E (Filters slice) supersedes this
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
-				q = q.Where(entExternalSource.Or(
-					entExternalSource.NameContainsFold(opts.Filter),
+				q = q.Where(entDraft.Or(
+					entDraft.BodyContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.
@@ -56,51 +51,55 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entExternalSource.IDEQ(f.Value))
+						q = q.Where(entDraft.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entExternalSource.IDNEQ(f.Value))
+						q = q.Where(entDraft.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entExternalSource.IDContainsFold(f.Value))
+						q = q.Where(entDraft.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "target_table":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entExternalSource.ProjectIDEQ(f.Value))
+						q = q.Where(entDraft.TargetTableEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entExternalSource.ProjectIDNEQ(f.Value))
+						q = q.Where(entDraft.TargetTableNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entExternalSource.ProjectIDContainsFold(f.Value))
+						q = q.Where(entDraft.TargetTableContainsFold(f.Value))
 					}
-				case "kind":
+				case "target_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entExternalSource.KindEQ(f.Value))
+						q = q.Where(entDraft.TargetIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entExternalSource.KindNEQ(f.Value))
+						q = q.Where(entDraft.TargetIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entExternalSource.KindContainsFold(f.Value))
-					}
-				case "name":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entExternalSource.NameEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entExternalSource.NameNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entExternalSource.NameContainsFold(f.Value))
-					}
-				case "config_json":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entExternalSource.ConfigJSONEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entExternalSource.ConfigJSONNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entExternalSource.ConfigJSONContainsFold(f.Value))
+						q = q.Where(entDraft.TargetIDContainsFold(f.Value))
 					case runtime.OpIsNull:
-						q = q.Where(entExternalSource.ConfigJSONIsNil())
+						q = q.Where(entDraft.TargetIDIsNil())
 					case runtime.OpNotNull:
-						q = q.Where(entExternalSource.ConfigJSONNotNil())
+						q = q.Where(entDraft.TargetIDNotNil())
+					}
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDraft.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDraft.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDraft.BodyContainsFold(f.Value))
+					}
+				case "actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDraft.ActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDraft.ActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDraft.ActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entDraft.ActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entDraft.ActorIDNotNil())
 					}
 				}
 			}
@@ -111,45 +110,51 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldID))
+							q = q.Order(ent.Asc(entDraft.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldID))
+							q = q.Order(ent.Desc(entDraft.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
+							q = q.Order(ent.Asc(entDraft.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+							q = q.Order(ent.Desc(entDraft.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entDraft.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entDraft.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "target_table":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldProjectID))
+							q = q.Order(ent.Asc(entDraft.FieldTargetTable))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldProjectID))
+							q = q.Order(ent.Desc(entDraft.FieldTargetTable))
 						}
-					case "kind":
+					case "target_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldKind))
+							q = q.Order(ent.Asc(entDraft.FieldTargetID))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldKind))
+							q = q.Order(ent.Desc(entDraft.FieldTargetID))
 						}
-					case "name":
+					case "body":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldName))
+							q = q.Order(ent.Asc(entDraft.FieldBody))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldName))
+							q = q.Order(ent.Desc(entDraft.FieldBody))
 						}
-					case "config_json":
+					case "actor_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entExternalSource.FieldConfigJSON))
+							q = q.Order(ent.Asc(entDraft.FieldActorID))
 						} else {
-							q = q.Order(ent.Desc(entExternalSource.FieldConfigJSON))
+							q = q.Order(ent.Desc(entDraft.FieldActorID))
+						}
+					case "started_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDraft.FieldStartedAt))
+						} else {
+							q = q.Order(ent.Desc(entDraft.FieldStartedAt))
 						}
 					}
 				}
@@ -157,9 +162,9 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
+					q = q.Order(ent.Asc(entDraft.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+					q = q.Order(ent.Desc(entDraft.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -169,13 +174,13 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.ExternalSource) string {
-			return r.Name
+		Body: func(r *ent.Draft) string {
+			return r.Body
 		},
-		CreatedAt: func(r *ent.ExternalSource) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.ExternalSource) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.Draft) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.Draft) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.ExternalSource]{
+		Columns: []runtime.Column[*ent.Draft]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -184,7 +189,7 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
+				Get: func(r *ent.Draft) string {
 					return r.ID
 				},
 			},
@@ -196,7 +201,7 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
+				Get: func(r *ent.Draft) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -211,7 +216,7 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
+				Get: func(r *ent.Draft) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -219,66 +224,75 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "target_table",
+				Label:      "Target Table",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
-					return r.ProjectID
+				Get: func(r *ent.Draft) string {
+					return r.TargetTable
 				},
 			},
 			{
-				Key:        "kind",
-				Label:      "Kind",
+				Key:        "target_id",
+				Label:      "Target Id",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
-					return r.Kind
-				},
-			},
-			{
-				Key:        "name",
-				Label:      "Name",
-				Sortable:   true,
-				Filterable: true,
-				Hidden:     false,
-				Width:      0,
-				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
-					return r.Name
-				},
-			},
-			{
-				Key:        "config_json",
-				Label:      "Config Json",
-				Sortable:   true,
-				Filterable: true,
-				Hidden:     false,
-				Width:      0,
-				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
-					if r.ConfigJSON == nil {
+				Get: func(r *ent.Draft) string {
+					if r.TargetID == nil {
 						return ""
 					}
-					return *r.ConfigJSON
+					return *r.TargetID
 				},
 			},
 			{
-				Key:        "enabled",
-				Label:      "Enabled",
+				Key:        "actor_id",
+				Label:      "Actor Id",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Draft) string {
+					if r.ActorID == nil {
+						return ""
+					}
+					return *r.ActorID
+				},
+			},
+			{
+				Key:        "started_at",
+				Label:      "Started At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Draft) string {
+					if r.StartedAt.IsZero() {
+						return ""
+					}
+					return r.StartedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "pid",
+				Label:      "Pid",
 				Sortable:   false,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ExternalSource) string {
-					return fmt.Sprintf("%v", r.Enabled)
+				Get: func(r *ent.Draft) string {
+					if r.Pid == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.Pid)
 				},
 			},
 		},

@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entTag "dbent/gen/ent/tag"
+	entMountAlias "dbent/gen/ent/mountalias"
 
 	"enttui/runtime"
 )
 
-// registerTag wires *ent.Tag into the enttui runtime.
+// registerMountAlias wires *ent.MountAlias into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerTag(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.Tag]{
-		Kind:           "tag",
-		Display:        "Tags",
+func registerMountAlias(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.MountAlias]{
+		Kind:           "mountalias",
+		Display:        "MountAlias",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,21 +32,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Tag, int, error) {
-			q := client.Tag.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entTag.ProjectID(v))
-			}
-			// Legacy substring filter — used by the list+preview browser's
-			// global `/` prompt. Phase E (Filters slice) supersedes this
-			// in the table view but both can coexist.
-			if opts.Filter != "" {
-				q = q.Where(entTag.Or(
-					entTag.NameContainsFold(opts.Filter),
-				))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.MountAlias, int, error) {
+			q := client.MountAlias.Query()
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.
@@ -55,42 +42,29 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.IDEQ(f.Value))
+						q = q.Where(entMountAlias.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.IDNEQ(f.Value))
+						q = q.Where(entMountAlias.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.IDContainsFold(f.Value))
+						q = q.Where(entMountAlias.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "repo_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.ProjectIDEQ(f.Value))
+						q = q.Where(entMountAlias.RepoIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.ProjectIDNEQ(f.Value))
+						q = q.Where(entMountAlias.RepoIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.ProjectIDContainsFold(f.Value))
+						q = q.Where(entMountAlias.RepoIDContainsFold(f.Value))
 					}
-				case "name":
+				case "old_name":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entTag.NameEQ(f.Value))
+						q = q.Where(entMountAlias.OldNameEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entTag.NameNEQ(f.Value))
+						q = q.Where(entMountAlias.OldNameNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entTag.NameContainsFold(f.Value))
-					}
-				case "color":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTag.ColorEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTag.ColorNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTag.ColorContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTag.ColorIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTag.ColorNotNil())
+						q = q.Where(entMountAlias.OldNameContainsFold(f.Value))
 					}
 				}
 			}
@@ -101,39 +75,45 @@ func registerTag(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldID))
+							q = q.Order(ent.Asc(entMountAlias.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldID))
+							q = q.Order(ent.Desc(entMountAlias.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Asc(entMountAlias.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+							q = q.Order(ent.Desc(entMountAlias.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entMountAlias.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entMountAlias.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "repo_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldProjectID))
+							q = q.Order(ent.Asc(entMountAlias.FieldRepoID))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldProjectID))
+							q = q.Order(ent.Desc(entMountAlias.FieldRepoID))
 						}
-					case "name":
+					case "old_name":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldName))
+							q = q.Order(ent.Asc(entMountAlias.FieldOldName))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldName))
+							q = q.Order(ent.Desc(entMountAlias.FieldOldName))
 						}
-					case "color":
+					case "renamed_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTag.FieldColor))
+							q = q.Order(ent.Asc(entMountAlias.FieldRenamedAt))
 						} else {
-							q = q.Order(ent.Desc(entTag.FieldColor))
+							q = q.Order(ent.Desc(entMountAlias.FieldRenamedAt))
+						}
+					case "expires_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMountAlias.FieldExpiresAt))
+						} else {
+							q = q.Order(ent.Desc(entMountAlias.FieldExpiresAt))
 						}
 					}
 				}
@@ -141,9 +121,9 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Asc(entMountAlias.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+					q = q.Order(ent.Desc(entMountAlias.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -153,13 +133,10 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Tag) string {
-			return r.Name
-		},
-		CreatedAt: func(r *ent.Tag) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Tag) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.MountAlias) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.MountAlias) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.Tag]{
+		Columns: []runtime.Column[*ent.MountAlias]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -168,7 +145,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MountAlias) string {
 					return r.ID
 				},
 			},
@@ -180,7 +157,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MountAlias) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -195,7 +172,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
+				Get: func(r *ent.MountAlias) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -203,42 +180,57 @@ func registerTag(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "repo_id",
+				Label:      "Repo Id",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.ProjectID
+				Get: func(r *ent.MountAlias) string {
+					return r.RepoID
 				},
 			},
 			{
-				Key:        "name",
-				Label:      "Name",
+				Key:        "old_name",
+				Label:      "Old Name",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					return r.Name
+				Get: func(r *ent.MountAlias) string {
+					return r.OldName
 				},
 			},
 			{
-				Key:        "color",
-				Label:      "Color",
+				Key:        "renamed_at",
+				Label:      "Renamed At",
 				Sortable:   true,
-				Filterable: true,
+				Filterable: false,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.Tag) string {
-					if r.Color == nil {
+				Get: func(r *ent.MountAlias) string {
+					if r.RenamedAt.IsZero() {
 						return ""
 					}
-					return *r.Color
+					return r.RenamedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "expires_at",
+				Label:      "Expires At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.MountAlias) string {
+					if r.ExpiresAt.IsZero() {
+						return ""
+					}
+					return r.ExpiresAt.Format("2006-01-02 15:04:05")
 				},
 			},
 		},

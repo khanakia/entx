@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entProjectConfig "dbent/gen/ent/projectconfig"
+	entIdentityProfile "dbent/gen/ent/identityprofile"
 
 	"enttui/runtime"
 )
 
-// registerProjectConfig wires *ent.ProjectConfig into the enttui runtime.
+// registerIdentityProfile wires *ent.IdentityProfile into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerProjectConfig(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.ProjectConfig]{
-		Kind:           "projectconfig",
-		Display:        "ProjectConfigs",
+func registerIdentityProfile(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.IdentityProfile]{
+		Kind:           "identityprofile",
+		Display:        "IdentityProfiles",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,13 +32,8 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ProjectConfig, int, error) {
-			q := client.ProjectConfig.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entProjectConfig.ProjectID(v))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.IdentityProfile, int, error) {
+			q := client.IdentityProfile.Query()
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.
@@ -47,42 +42,51 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entProjectConfig.IDEQ(f.Value))
+						q = q.Where(entIdentityProfile.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entProjectConfig.IDNEQ(f.Value))
+						q = q.Where(entIdentityProfile.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entProjectConfig.IDContainsFold(f.Value))
+						q = q.Where(entIdentityProfile.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "stable_key":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entProjectConfig.ProjectIDEQ(f.Value))
+						q = q.Where(entIdentityProfile.StableKeyEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entProjectConfig.ProjectIDNEQ(f.Value))
+						q = q.Where(entIdentityProfile.StableKeyNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entProjectConfig.ProjectIDContainsFold(f.Value))
+						q = q.Where(entIdentityProfile.StableKeyContainsFold(f.Value))
 					}
-				case "key":
+				case "display_name":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entProjectConfig.KeyEQ(f.Value))
+						q = q.Where(entIdentityProfile.DisplayNameEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entProjectConfig.KeyNEQ(f.Value))
+						q = q.Where(entIdentityProfile.DisplayNameNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entProjectConfig.KeyContainsFold(f.Value))
+						q = q.Where(entIdentityProfile.DisplayNameContainsFold(f.Value))
 					}
-				case "value":
+				case "kind":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entProjectConfig.ValueEQ(f.Value))
+						q = q.Where(entIdentityProfile.KindEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entProjectConfig.ValueNEQ(f.Value))
+						q = q.Where(entIdentityProfile.KindNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entProjectConfig.ValueContainsFold(f.Value))
+						q = q.Where(entIdentityProfile.KindContainsFold(f.Value))
+					}
+				case "notes":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entIdentityProfile.NotesEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entIdentityProfile.NotesNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entIdentityProfile.NotesContainsFold(f.Value))
 					case runtime.OpIsNull:
-						q = q.Where(entProjectConfig.ValueIsNil())
+						q = q.Where(entIdentityProfile.NotesIsNil())
 					case runtime.OpNotNull:
-						q = q.Where(entProjectConfig.ValueNotNil())
+						q = q.Where(entIdentityProfile.NotesNotNil())
 					}
 				}
 			}
@@ -93,45 +97,45 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldID))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldID))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "stable_key":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldProjectID))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldStableKey))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldProjectID))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldStableKey))
 						}
-					case "key":
+					case "display_name":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldKey))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldDisplayName))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldKey))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldDisplayName))
 						}
-					case "value":
+					case "kind":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldValue))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldKind))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldValue))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldKind))
 						}
-					case "setting_updated_at":
+					case "notes":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entProjectConfig.FieldSettingUpdatedAt))
+							q = q.Order(ent.Asc(entIdentityProfile.FieldNotes))
 						} else {
-							q = q.Order(ent.Desc(entProjectConfig.FieldSettingUpdatedAt))
+							q = q.Order(ent.Desc(entIdentityProfile.FieldNotes))
 						}
 					}
 				}
@@ -139,9 +143,9 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
+					q = q.Order(ent.Asc(entIdentityProfile.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+					q = q.Order(ent.Desc(entIdentityProfile.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -151,10 +155,10 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.ProjectConfig) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.ProjectConfig) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.IdentityProfile) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.IdentityProfile) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.ProjectConfig]{
+		Columns: []runtime.Column[*ent.IdentityProfile]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -163,7 +167,7 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
+				Get: func(r *ent.IdentityProfile) string {
 					return r.ID
 				},
 			},
@@ -175,7 +179,7 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
+				Get: func(r *ent.IdentityProfile) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -190,7 +194,7 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
+				Get: func(r *ent.IdentityProfile) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -198,57 +202,54 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "stable_key",
+				Label:      "Stable Key",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
-					return r.ProjectID
+				Get: func(r *ent.IdentityProfile) string {
+					return r.StableKey
 				},
 			},
 			{
-				Key:        "key",
-				Label:      "Key",
+				Key:        "display_name",
+				Label:      "Display Name",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
-					return r.Key
+				Get: func(r *ent.IdentityProfile) string {
+					return r.DisplayName
 				},
 			},
 			{
-				Key:        "value",
-				Label:      "Value",
+				Key:        "kind",
+				Label:      "Kind",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
-					if r.Value == nil {
+				Get: func(r *ent.IdentityProfile) string {
+					return r.Kind
+				},
+			},
+			{
+				Key:        "notes",
+				Label:      "Notes",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.IdentityProfile) string {
+					if r.Notes == nil {
 						return ""
 					}
-					return *r.Value
-				},
-			},
-			{
-				Key:        "setting_updated_at",
-				Label:      "Setting Updated At",
-				Sortable:   true,
-				Filterable: false,
-				Hidden:     false,
-				Width:      0,
-				Align:      "",
-				Get: func(r *ent.ProjectConfig) string {
-					if r.SettingUpdatedAt.IsZero() {
-						return ""
-					}
-					return r.SettingUpdatedAt.Format("2006-01-02 15:04:05")
+					return *r.Notes
 				},
 			},
 		},

@@ -42,7 +42,7 @@ tasks:
     deps: [cli]
     cmds:
       - find {{.GEN_OUT}} -name "register_*.go" -delete 2>/dev/null || true
-      - "{{.CLI_BIN}} --schema {{.SCHEMA_DIR}} --out {{.GEN_OUT}} --package {{.GEN_PKG}}"
+      - "{{.CLI_BIN}} --schema {{.SCHEMA_DIR}} --out {{.GEN_OUT}} --package {{.GEN_PKG}} --scope project_id"
       - echo "regenerated → {{.GEN_OUT}}"
 
   build:

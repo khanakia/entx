@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entActivityArchive "dbent/gen/ent/activityarchive"
+	entTrustedPlugin "dbent/gen/ent/trustedplugin"
 
 	"enttui/runtime"
 )
 
-// registerActivityArchive wires *ent.ActivityArchive into the enttui runtime.
+// registerTrustedPlugin wires *ent.TrustedPlugin into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerActivityArchive(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.ActivityArchive]{
-		Kind:           "activityarchive",
-		Display:        "ActivityArchives",
+func registerTrustedPlugin(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.TrustedPlugin]{
+		Kind:           "trustedplugin",
+		Display:        "TrustedPlugins",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,19 +32,14 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ActivityArchive, int, error) {
-			q := client.ActivityArchive.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entActivityArchive.ProjectID(v))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.TrustedPlugin, int, error) {
+			q := client.TrustedPlugin.Query()
 			// Legacy substring filter — used by the list+preview browser's
 			// global `/` prompt. Phase E (Filters slice) supersedes this
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
-				q = q.Where(entActivityArchive.Or(
-					entActivityArchive.BodyContainsFold(opts.Filter),
+				q = q.Where(entTrustedPlugin.Or(
+					entTrustedPlugin.NameContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.
@@ -55,42 +50,42 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.IDEQ(f.Value))
+						q = q.Where(entTrustedPlugin.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.IDNEQ(f.Value))
+						q = q.Where(entTrustedPlugin.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.IDContainsFold(f.Value))
+						q = q.Where(entTrustedPlugin.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "name":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.ProjectIDEQ(f.Value))
+						q = q.Where(entTrustedPlugin.NameEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.ProjectIDNEQ(f.Value))
+						q = q.Where(entTrustedPlugin.NameNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.ProjectIDContainsFold(f.Value))
+						q = q.Where(entTrustedPlugin.NameContainsFold(f.Value))
 					}
-				case "kind":
+				case "sha256":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.KindEQ(f.Value))
+						q = q.Where(entTrustedPlugin.Sha256EQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.KindNEQ(f.Value))
+						q = q.Where(entTrustedPlugin.Sha256NEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.KindContainsFold(f.Value))
+						q = q.Where(entTrustedPlugin.Sha256ContainsFold(f.Value))
 					}
-				case "body":
+				case "trusted_by_actor_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.BodyEQ(f.Value))
+						q = q.Where(entTrustedPlugin.TrustedByActorIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.BodyNEQ(f.Value))
+						q = q.Where(entTrustedPlugin.TrustedByActorIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.BodyContainsFold(f.Value))
+						q = q.Where(entTrustedPlugin.TrustedByActorIDContainsFold(f.Value))
 					case runtime.OpIsNull:
-						q = q.Where(entActivityArchive.BodyIsNil())
+						q = q.Where(entTrustedPlugin.TrustedByActorIDIsNil())
 					case runtime.OpNotNull:
-						q = q.Where(entActivityArchive.BodyNotNil())
+						q = q.Where(entTrustedPlugin.TrustedByActorIDNotNil())
 					}
 				}
 			}
@@ -101,45 +96,45 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldID))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldID))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "name":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldProjectID))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldName))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldProjectID))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldName))
 						}
-					case "kind":
+					case "sha256":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldKind))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldSha256))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldKind))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldSha256))
 						}
-					case "body":
+					case "trusted_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldBody))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldTrustedAt))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldBody))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldTrustedAt))
 						}
-					case "archived_at":
+					case "trusted_by_actor_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldArchivedAt))
+							q = q.Order(ent.Asc(entTrustedPlugin.FieldTrustedByActorID))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldArchivedAt))
+							q = q.Order(ent.Desc(entTrustedPlugin.FieldTrustedByActorID))
 						}
 					}
 				}
@@ -147,9 +142,9 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
+					q = q.Order(ent.Asc(entTrustedPlugin.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
+					q = q.Order(ent.Desc(entTrustedPlugin.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -159,16 +154,13 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.ActivityArchive) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
+		Title: func(r *ent.TrustedPlugin) string {
+			return r.Name
 		},
-		CreatedAt: func(r *ent.ActivityArchive) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.ActivityArchive) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.TrustedPlugin) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.TrustedPlugin) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.ActivityArchive]{
+		Columns: []runtime.Column[*ent.TrustedPlugin]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -177,7 +169,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.TrustedPlugin) string {
 					return r.ID
 				},
 			},
@@ -189,7 +181,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.TrustedPlugin) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -204,7 +196,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.TrustedPlugin) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -212,42 +204,57 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "name",
+				Label:      "Name",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					return r.ProjectID
+				Get: func(r *ent.TrustedPlugin) string {
+					return r.Name
 				},
 			},
 			{
-				Key:        "kind",
-				Label:      "Kind",
+				Key:        "sha256",
+				Label:      "Sha256",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					return r.Kind
+				Get: func(r *ent.TrustedPlugin) string {
+					return r.Sha256
 				},
 			},
 			{
-				Key:        "archived_at",
-				Label:      "Archived At",
+				Key:        "trusted_at",
+				Label:      "Trusted At",
 				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					if r.ArchivedAt.IsZero() {
+				Get: func(r *ent.TrustedPlugin) string {
+					if r.TrustedAt.IsZero() {
 						return ""
 					}
-					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+					return r.TrustedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "trusted_by_actor_id",
+				Label:      "Trusted By Actor Id",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TrustedPlugin) string {
+					if r.TrustedByActorID == nil {
+						return ""
+					}
+					return *r.TrustedByActorID
 				},
 			},
 		},

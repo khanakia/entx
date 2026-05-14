@@ -56,6 +56,18 @@ type Config struct {
 	// Skip lists ent type names to exclude from generation. Use for
 	// internal / audit / migration tables you don't want browsable.
 	Skip []string
+
+	// ScopeFields lists snake_case ent field names that should be wired
+	// as scope predicates in generated Fetch closures. Example:
+	//
+	//   ScopeFields: []string{"project_id"}        // single-tenant by project
+	//   ScopeFields: []string{"tenant_id", "org_id"} // multi-axis SaaS
+	//
+	// For each scope field an entity actually has, the generated code
+	// reads opts.Scope[<field>] and applies a predicate when set. Entities
+	// without the field stay browsable but unscoped. Drive at runtime via
+	// app.SetScope(key, value). Leave empty for a fully generic install.
+	ScopeFields []string
 }
 
 // Option mutates a Config — same pattern as entc's option funcs. Reserved
@@ -68,6 +80,14 @@ type Option func(*Config)
 //	enttui.Generate("./schema", &enttui.Config{...}, enttui.Skip("AuditLog", "QueryLog"))
 func Skip(names ...string) Option {
 	return func(c *Config) { c.Skip = append(c.Skip, names...) }
+}
+
+// ScopeFields is a convenience builder that adds scope field names to
+// Config.ScopeFields.
+//
+//	enttui.Generate("./schema", &enttui.Config{...}, enttui.ScopeFields("project_id"))
+func ScopeFields(names ...string) Option {
+	return func(c *Config) { c.ScopeFields = append(c.ScopeFields, names...) }
 }
 
 // Generate runs the enttui codegen pipeline once. Matches the shape of
@@ -90,10 +110,11 @@ func Generate(schemaPath string, cfg *Config, opts ...Option) error {
 	}
 
 	return codegen.Generate(codegen.Options{
-		SchemaPath: schemaPath,
-		OutDir:     cfg.Target,
-		Package:    cfg.Package,
-		EntPkgPath: cfg.EntPkg,
-		Skip:       skip,
+		SchemaPath:  schemaPath,
+		OutDir:      cfg.Target,
+		Package:     cfg.Package,
+		EntPkgPath:  cfg.EntPkg,
+		Skip:        skip,
+		ScopeFields: cfg.ScopeFields,
 	})
 }

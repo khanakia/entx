@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"dbent/gen/ent"
-	entActivityArchive "dbent/gen/ent/activityarchive"
+	entComment "dbent/gen/ent/comment"
 
 	"enttui/runtime"
 )
 
-// registerActivityArchive wires *ent.ActivityArchive into the enttui runtime.
+// registerComment wires *ent.Comment into the enttui runtime.
 //
 // Scope filtering: for every scope key configured in enttui.Config.ScopeFields
 // that exists on this schema, the Fetch closure below reads opts.Scope[key]
 // and applies a predicate when set. Caller drives this via app.SetScope(key, value).
-func registerActivityArchive(app *runtime.App, client *ent.Client) {
-	runtime.Register(app, runtime.EntitySpec[*ent.ActivityArchive]{
-		Kind:           "activityarchive",
-		Display:        "ActivityArchives",
+func registerComment(app *runtime.App, client *ent.Client) {
+	runtime.Register(app, runtime.EntitySpec[*ent.Comment]{
+		Kind:           "comment",
+		Display:        "Comments",
 		Group:          "data",
 		Icon:           "•",
 		PageSize:       200,
@@ -32,19 +32,14 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			Mode:      "",
 		},
 
-		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ActivityArchive, int, error) {
-			q := client.ActivityArchive.Query()
-			// Scope predicate — keyed generically via ListOpts.Scope so the
-			// runtime stays decoupled from any specific field name.
-			if v := opts.Scope["project_id"]; v != "" {
-				q = q.Where(entActivityArchive.ProjectID(v))
-			}
+		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Comment, int, error) {
+			q := client.Comment.Query()
 			// Legacy substring filter — used by the list+preview browser's
 			// global `/` prompt. Phase E (Filters slice) supersedes this
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
-				q = q.Where(entActivityArchive.Or(
-					entActivityArchive.BodyContainsFold(opts.Filter),
+				q = q.Where(entComment.Or(
+					entComment.BodyContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.
@@ -55,42 +50,51 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				case "id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.IDEQ(f.Value))
+						q = q.Where(entComment.IDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.IDNEQ(f.Value))
+						q = q.Where(entComment.IDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.IDContainsFold(f.Value))
+						q = q.Where(entComment.IDContainsFold(f.Value))
 					}
-				case "project_id":
+				case "entity_table":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.ProjectIDEQ(f.Value))
+						q = q.Where(entComment.EntityTableEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.ProjectIDNEQ(f.Value))
+						q = q.Where(entComment.EntityTableNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.ProjectIDContainsFold(f.Value))
+						q = q.Where(entComment.EntityTableContainsFold(f.Value))
 					}
-				case "kind":
+				case "entity_id":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.KindEQ(f.Value))
+						q = q.Where(entComment.EntityIDEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.KindNEQ(f.Value))
+						q = q.Where(entComment.EntityIDNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.KindContainsFold(f.Value))
+						q = q.Where(entComment.EntityIDContainsFold(f.Value))
 					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
-						q = q.Where(entActivityArchive.BodyEQ(f.Value))
+						q = q.Where(entComment.BodyEQ(f.Value))
 					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.BodyNEQ(f.Value))
+						q = q.Where(entComment.BodyNEQ(f.Value))
 					case runtime.OpContains:
-						q = q.Where(entActivityArchive.BodyContainsFold(f.Value))
+						q = q.Where(entComment.BodyContainsFold(f.Value))
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entComment.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entComment.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entComment.CreatedByActorIDContainsFold(f.Value))
 					case runtime.OpIsNull:
-						q = q.Where(entActivityArchive.BodyIsNil())
+						q = q.Where(entComment.CreatedByActorIDIsNil())
 					case runtime.OpNotNull:
-						q = q.Where(entActivityArchive.BodyNotNil())
+						q = q.Where(entComment.CreatedByActorIDNotNil())
 					}
 				}
 			}
@@ -101,45 +105,45 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 					switch k.Field {
 					case "id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldID))
+							q = q.Order(ent.Asc(entComment.FieldID))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldID))
+							q = q.Order(ent.Desc(entComment.FieldID))
 						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
+							q = q.Order(ent.Asc(entComment.FieldCreatedAt))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
+							q = q.Order(ent.Desc(entComment.FieldCreatedAt))
 						}
 					case "updated_at":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldUpdatedAt))
+							q = q.Order(ent.Asc(entComment.FieldUpdatedAt))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldUpdatedAt))
+							q = q.Order(ent.Desc(entComment.FieldUpdatedAt))
 						}
-					case "project_id":
+					case "entity_table":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldProjectID))
+							q = q.Order(ent.Asc(entComment.FieldEntityTable))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldProjectID))
+							q = q.Order(ent.Desc(entComment.FieldEntityTable))
 						}
-					case "kind":
+					case "entity_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldKind))
+							q = q.Order(ent.Asc(entComment.FieldEntityID))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldKind))
+							q = q.Order(ent.Desc(entComment.FieldEntityID))
 						}
 					case "body":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldBody))
+							q = q.Order(ent.Asc(entComment.FieldBody))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldBody))
+							q = q.Order(ent.Desc(entComment.FieldBody))
 						}
-					case "archived_at":
+					case "created_by_actor_id":
 						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldArchivedAt))
+							q = q.Order(ent.Asc(entComment.FieldCreatedByActorID))
 						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldArchivedAt))
+							q = q.Order(ent.Desc(entComment.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -147,9 +151,9 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			// Legacy single-column sort (browser view default).
 			{
 				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
+					q = q.Order(ent.Asc(entComment.FieldCreatedAt))
 				} else {
-					q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
+					q = q.Order(ent.Desc(entComment.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -159,16 +163,13 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.ActivityArchive) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
+		Body: func(r *ent.Comment) string {
+			return r.Body
 		},
-		CreatedAt: func(r *ent.ActivityArchive) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.ActivityArchive) time.Time { return r.UpdatedAt },
+		CreatedAt: func(r *ent.Comment) time.Time { return r.CreatedAt },
+		UpdatedAt: func(r *ent.Comment) time.Time { return r.UpdatedAt },
 
-		Columns: []runtime.Column[*ent.ActivityArchive]{
+		Columns: []runtime.Column[*ent.Comment]{
 			{
 				Key:        "id",
 				Label:      "Id",
@@ -177,7 +178,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.Comment) string {
 					return r.ID
 				},
 			},
@@ -189,7 +190,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.Comment) string {
 					if r.CreatedAt.IsZero() {
 						return ""
 					}
@@ -204,7 +205,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
+				Get: func(r *ent.Comment) string {
 					if r.UpdatedAt.IsZero() {
 						return ""
 					}
@@ -212,42 +213,42 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Key:        "project_id",
-				Label:      "Project Id",
+				Key:        "entity_table",
+				Label:      "Entity Table",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					return r.ProjectID
+				Get: func(r *ent.Comment) string {
+					return r.EntityTable
 				},
 			},
 			{
-				Key:        "kind",
-				Label:      "Kind",
+				Key:        "entity_id",
+				Label:      "Entity Id",
 				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					return r.Kind
+				Get: func(r *ent.Comment) string {
+					return r.EntityID
 				},
 			},
 			{
-				Key:        "archived_at",
-				Label:      "Archived At",
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
 				Sortable:   true,
-				Filterable: false,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
-				Get: func(r *ent.ActivityArchive) string {
-					if r.ArchivedAt.IsZero() {
+				Get: func(r *ent.Comment) string {
+					if r.CreatedByActorID == nil {
 						return ""
 					}
-					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+					return *r.CreatedByActorID
 				},
 			},
 		},
