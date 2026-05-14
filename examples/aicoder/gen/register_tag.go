@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTag(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Tag]{
-		Kind:      "tag",
-		Display:   "Tags",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "tag",
+		Display:        "Tags",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -51,6 +52,24 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTag.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTag.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTag.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTag.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTag.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTag.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -60,6 +79,19 @@ func registerTag(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTag.NameContainsFold(f.Value))
 					}
+				case "color":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTag.ColorEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTag.ColorNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTag.ColorContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTag.ColorIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTag.ColorNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -67,11 +99,41 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTag.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTag.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTag.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTag.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTag.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTag.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTag.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTag.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTag.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entTag.FieldName))
+						}
+					case "color":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTag.FieldColor))
+						} else {
+							q = q.Order(ent.Desc(entTag.FieldColor))
 						}
 					}
 				}
@@ -101,8 +163,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,7 +190,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -143,8 +205,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,7 +217,7 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -167,8 +229,8 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "color",
 				Label:      "Color",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

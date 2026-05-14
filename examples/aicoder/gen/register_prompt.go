@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerPrompt(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Prompt]{
-		Kind:      "prompt",
-		Display:   "Prompts",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "prompt",
+		Display:        "Prompts",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -53,6 +54,24 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPrompt.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPrompt.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPrompt.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPrompt.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPrompt.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPrompt.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,6 +90,19 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPrompt.DescriptionContainsFold(f.Value))
 					}
+				case "args_schema":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPrompt.ArgsSchemaEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPrompt.ArgsSchemaNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPrompt.ArgsSchemaContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPrompt.ArgsSchemaIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPrompt.ArgsSchemaNotNil())
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -80,6 +112,19 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPrompt.BodyContainsFold(f.Value))
 					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPrompt.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPrompt.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPrompt.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPrompt.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPrompt.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -87,11 +132,65 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPrompt.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entPrompt.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldName))
+						}
+					case "description":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldDescription))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldDescription))
+						}
+					case "args_schema":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldArgsSchema))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldArgsSchema))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldBody))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldArchivedAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPrompt.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entPrompt.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -124,8 +223,8 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -151,7 +250,7 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -166,8 +265,8 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -178,7 +277,7 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -190,8 +289,8 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "args_schema",
 				Label:      "Args Schema",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -205,7 +304,7 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -220,8 +319,8 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

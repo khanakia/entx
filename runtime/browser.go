@@ -67,9 +67,46 @@ type browser struct {
 // itself to the Pages stack — the caller (App.pushBrowser / pushBrowserList)
 // does that. The newly-constructed browser is already refreshed once and
 // has the list pane focused.
+// state captures the current view state for handoff to the table view
+// (the `v` toggle preserves filter / sort / page / selection across modes).
+func (b *browser) state() viewState {
+	id := ""
+	if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
+		id = b.rows[idx].ID
+	}
+	return viewState{
+		Filter:     b.filter,
+		SortField:  b.sortField,
+		SortDir:    b.sortDir,
+		Page:       b.page,
+		PageSize:   b.pageSize,
+		SelectedID: id,
+	}
+}
+
+// applyState seeds this browser from a previous view's state. Refresh
+// runs once at the end; SelectedID is honored if the row exists.
+func (b *browser) applyState(s viewState) {
+	if s.Filter != "" {
+		b.filter = s.Filter
+	}
+	if s.SortField != "" {
+		b.sortField = s.SortField
+		b.sortDir = s.SortDir
+	}
+	if s.PageSize > 0 {
+		b.pageSize = s.PageSize
+	}
+	b.page = s.Page
+	b.refresh()
+	if s.SelectedID != "" {
+		b.focusID(s.SelectedID)
+	}
+}
+
 // pageSizesCycle is the set of page-size values + / - cycles through.
 // Annotation-driven custom sizes will land in Phase C.
-var pageSizesCycle = []int{50, 100, 200, 500, 1000}
+var pageSizesCycle = []int{10, 20, 50, 100, 200, 500, 1000}
 
 // nextPageSize advances cur to the next (or previous, if dir==-1) value
 // in pageSizesCycle. Snaps to the nearest cycle member if cur isn't in the
@@ -264,8 +301,21 @@ func (b *browser) refreshPreview() {
 		addField(c.label, v)
 	}
 
+	// When the spec was annotated with enttui.CountEdges(), fire each
+	// edge's Count closure for the current row and embed the result in
+	// the preview footer. One short-timeout context per edge — on local
+	// SQLite this is microseconds per call.
 	for _, e := range b.spec.edges {
-		data.Edges = append(data.Edges, previewEdge{Trigger: e.trigger, Display: e.display})
+		pe := previewEdge{Trigger: e.trigger, Display: e.display}
+		if b.spec.showEdgeCounts && e.count != nil {
+			ctx, cancel := context.WithTimeout(b.app.ctx, 2*time.Second)
+			n, err := e.count(ctx, r.ID)
+			cancel()
+			if err == nil {
+				pe.Count = fmt.Sprintf("%d", n)
+			}
+		}
+		data.Edges = append(data.Edges, pe)
 	}
 
 	b.prev.SetText(renderPreview(data))

@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBehaviour(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Behaviour]{
-		Kind:      "behaviour",
-		Display:   "Behaviours",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "behaviour",
+		Display:        "Behaviours",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBehaviour.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBehaviour.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBehaviour.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBehaviour.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBehaviour.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBehaviour.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,19 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entBehaviour.BodyContainsFold(f.Value))
 					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBehaviour.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBehaviour.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBehaviour.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBehaviour.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBehaviour.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +109,47 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entBehaviour.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entBehaviour.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldName))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldBody))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBehaviour.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entBehaviour.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +182,8 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +209,7 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +224,8 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +236,7 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +248,8 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

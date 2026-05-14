@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerActivityArchive(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ActivityArchive]{
-		Kind:      "activityarchive",
-		Display:   "ActivityArchives",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "activityarchive",
+		Display:        "ActivityArchives",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -51,6 +52,33 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entActivityArchive.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entActivityArchive.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entActivityArchive.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entActivityArchive.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entActivityArchive.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entActivityArchive.ProjectIDContainsFold(f.Value))
+					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entActivityArchive.KindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entActivityArchive.KindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entActivityArchive.KindContainsFold(f.Value))
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,11 +99,47 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldProjectID))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldKind))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldBody))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entActivityArchive.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entActivityArchive.FieldArchivedAt))
 						}
 					}
 				}
@@ -108,8 +172,8 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -135,7 +199,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -150,8 +214,8 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -162,8 +226,8 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -174,7 +238,7 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,

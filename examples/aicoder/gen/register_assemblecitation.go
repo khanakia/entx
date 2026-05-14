@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.AssembleCitation]{
-		Kind:      "assemblecitation",
-		Display:   "AssembleCitations",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "assemblecitation",
+		Display:        "AssembleCitations",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,104 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entAssembleCitation.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entAssembleCitation.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entAssembleCitation.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entAssembleCitation.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entAssembleCitation.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entAssembleCitation.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entAssembleCitation.ProjectIDContainsFold(f.Value))
+					}
+				case "assemble_run_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entAssembleCitation.AssembleRunIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entAssembleCitation.AssembleRunIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entAssembleCitation.AssembleRunIDContainsFold(f.Value))
+					}
+				case "entity_table":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entAssembleCitation.EntityTableEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entAssembleCitation.EntityTableNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entAssembleCitation.EntityTableContainsFold(f.Value))
+					}
+				case "entity_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entAssembleCitation.EntityIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entAssembleCitation.EntityIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entAssembleCitation.EntityIDContainsFold(f.Value))
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entAssembleCitation.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entAssembleCitation.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldProjectID))
+						}
+					case "assemble_run_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldAssembleRunID))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldAssembleRunID))
+						}
+					case "entity_table":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldEntityTable))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldEntityTable))
+						}
+					case "entity_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldEntityID))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldEntityID))
 						}
 					}
 				}
@@ -75,8 +164,8 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +191,7 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +206,8 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +218,8 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "assemble_run_id",
 				Label:      "Assemble Run Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,8 +230,8 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_table",
 				Label:      "Entity Table",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -153,8 +242,8 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_id",
 				Label:      "Entity Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -182,6 +271,12 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.AssembleCitation]{
 			{
 				Name: "assemble_run", Display: "→ AssembleRuns", Kind: runtime.EdgeUpward, Trigger: "a",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.AssembleCitation) (int, error) {
+					return client.AssembleCitation.QueryAssembleRun(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.AssembleCitation) (runtime.EntityRef, error) {
 					tgt, err := client.AssembleCitation.QueryAssembleRun(r).Only(ctx)
 					if err != nil {

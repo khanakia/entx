@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTastePref(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TastePref]{
-		Kind:      "tastepref",
-		Display:   "TastePrefs",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "tastepref",
+		Display:        "TastePrefs",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -51,6 +52,24 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTastePref.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTastePref.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTastePref.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTastePref.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTastePref.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTastePref.ProjectIDContainsFold(f.Value))
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -60,6 +79,32 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTastePref.BodyContainsFold(f.Value))
 					}
+				case "scope":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTastePref.ScopeEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTastePref.ScopeNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTastePref.ScopeContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTastePref.ScopeIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTastePref.ScopeNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTastePref.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTastePref.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTastePref.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTastePref.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTastePref.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -67,11 +112,47 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTastePref.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTastePref.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldProjectID))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldBody))
+						}
+					case "scope":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldScope))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldScope))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTastePref.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entTastePref.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -101,8 +182,8 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,7 +209,7 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -143,8 +224,8 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,8 +236,8 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "scope",
 				Label:      "Scope",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -170,8 +251,8 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

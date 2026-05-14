@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerSession(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Session]{
-		Kind:      "session",
-		Display:   "Sessions",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "session",
+		Display:        "Sessions",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,109 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entSession.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSession.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSession.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSession.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSession.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSession.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSession.ProjectIDContainsFold(f.Value))
+					}
+				case "actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSession.ActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSession.ActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSession.ActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSession.ActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSession.ActorIDNotNil())
+					}
+				case "agent_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSession.AgentKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSession.AgentKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSession.AgentKindContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSession.AgentKindIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSession.AgentKindNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entSession.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entSession.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldProjectID))
+						}
+					case "started_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldStartedAt))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldStartedAt))
+						}
+					case "ended_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldEndedAt))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldEndedAt))
+						}
+					case "actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldActorID))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldActorID))
+						}
+					case "agent_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldAgentKind))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldAgentKind))
 						}
 					}
 				}
@@ -74,8 +168,8 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -101,7 +195,7 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -116,8 +210,8 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,7 +222,7 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "started_at",
 				Label:      "Started At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -143,7 +237,7 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "ended_at",
 				Label:      "Ended At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -158,8 +252,8 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "actor_id",
 				Label:      "Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -173,8 +267,8 @@ func registerSession(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "agent_kind",
 				Label:      "Agent Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CookbookRecipe]{
-		Kind:      "cookbookrecipe",
-		Display:   "CookbookRecipes",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "cookbookrecipe",
+		Display:        "CookbookRecipes",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCookbookRecipe.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCookbookRecipe.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCookbookRecipe.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCookbookRecipe.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCookbookRecipe.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCookbookRecipe.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,32 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entCookbookRecipe.BodyContainsFold(f.Value))
 					}
+				case "language":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCookbookRecipe.LanguageEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCookbookRecipe.LanguageNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCookbookRecipe.LanguageContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCookbookRecipe.LanguageIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCookbookRecipe.LanguageNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCookbookRecipe.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCookbookRecipe.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCookbookRecipe.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCookbookRecipe.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCookbookRecipe.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +122,53 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCookbookRecipe.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entCookbookRecipe.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldBody))
+						}
+					case "language":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldLanguage))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldLanguage))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCookbookRecipe.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entCookbookRecipe.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +201,8 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +228,7 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +243,8 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +255,7 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +267,8 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "language",
 				Label:      "Language",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -195,8 +282,8 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

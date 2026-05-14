@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerMission(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Mission]{
-		Kind:      "mission",
-		Display:   "Missions",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "mission",
+		Display:        "Missions",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMission.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMission.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMission.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMission.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMission.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMission.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -74,6 +93,26 @@ func registerMission(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entMission.BodyNotNil())
 					}
+				case "status":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMission.StatusEQ(entMission.Status(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entMission.StatusNEQ(entMission.Status(f.Value)))
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMission.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMission.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMission.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMission.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMission.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -81,11 +120,65 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entMission.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entMission.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldBody))
+						}
+					case "status":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldStatus))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldStatus))
+						}
+					case "target_date":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldTargetDate))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldTargetDate))
+						}
+					case "completed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldCompletedAt))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldCompletedAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMission.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entMission.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -124,8 +217,8 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -151,7 +244,7 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -166,8 +259,8 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -178,7 +271,7 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -190,8 +283,8 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status",
 				Label:      "Status",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -202,7 +295,7 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_date",
 				Label:      "Target Date",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -217,7 +310,7 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "completed_at",
 				Label:      "Completed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -232,8 +325,8 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -249,6 +342,9 @@ func registerMission(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.Mission]{
 			{
 				Name: "tasks", Display: "Tasks", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.Mission) (int, error) {
 					return client.Mission.QueryTasks(r).Count(ctx)
 				},

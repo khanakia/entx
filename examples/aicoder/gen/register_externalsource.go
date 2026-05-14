@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerExternalSource(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ExternalSource]{
-		Kind:      "externalsource",
-		Display:   "ExternalSources",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "externalsource",
+		Display:        "ExternalSources",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,33 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entExternalSource.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entExternalSource.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entExternalSource.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entExternalSource.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entExternalSource.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entExternalSource.ProjectIDContainsFold(f.Value))
+					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entExternalSource.KindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entExternalSource.KindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entExternalSource.KindContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -61,6 +89,19 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entExternalSource.NameContainsFold(f.Value))
 					}
+				case "config_json":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entExternalSource.ConfigJSONEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entExternalSource.ConfigJSONNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entExternalSource.ConfigJSONContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entExternalSource.ConfigJSONIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entExternalSource.ConfigJSONNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -68,11 +109,47 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldProjectID))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldKind))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldName))
+						}
+					case "config_json":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldConfigJSON))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldConfigJSON))
 						}
 					}
 				}
@@ -102,8 +179,8 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,7 +206,7 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -144,8 +221,8 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -156,8 +233,8 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +245,7 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +257,8 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "config_json",
 				Label:      "Config Json",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

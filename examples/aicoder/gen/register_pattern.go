@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerPattern(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Pattern]{
-		Kind:      "pattern",
-		Display:   "Patterns",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "pattern",
+		Display:        "Patterns",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -53,6 +54,59 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPattern.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPattern.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPattern.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPattern.RepoIDNotNil())
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,6 +125,45 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPattern.BodyContainsFold(f.Value))
 					}
+				case "language":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.LanguageEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.LanguageNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.LanguageContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPattern.LanguageIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPattern.LanguageNotNil())
+					}
+				case "superseded_by_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.SupersededByIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.SupersededByIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.SupersededByIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPattern.SupersededByIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPattern.SupersededByIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPattern.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPattern.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPattern.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPattern.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPattern.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -78,11 +171,95 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPattern.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entPattern.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldRepoID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldBody))
+						}
+					case "language":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldLanguage))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldLanguage))
+						}
+					case "superseded_by_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldSupersededByID))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldSupersededByID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPattern.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entPattern.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -115,8 +292,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -142,7 +319,7 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -184,7 +361,7 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -199,7 +376,7 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -214,7 +391,7 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -229,8 +406,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -241,8 +418,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -256,8 +433,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -268,8 +445,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -283,7 +460,7 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -295,8 +472,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "language",
 				Label:      "Language",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -310,8 +487,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "superseded_by_id",
 				Label:      "Superseded By Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -325,8 +502,8 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

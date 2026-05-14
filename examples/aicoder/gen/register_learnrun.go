@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerLearnRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.LearnRun]{
-		Kind:      "learnrun",
-		Display:   "LearnRuns",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "learnrun",
+		Display:        "LearnRuns",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,89 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entLearnRun.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnRun.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnRun.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnRun.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnRun.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnRun.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnRun.ProjectIDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnRun.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnRun.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnRun.SourceKindContainsFold(f.Value))
+					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnRun.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnRun.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnRun.StatusStrContainsFold(f.Value))
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entLearnRun.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entLearnRun.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldProjectID))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldSourceKind))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldStatusStr))
 						}
 					}
 				}
@@ -75,8 +149,8 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +176,7 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +191,8 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +203,8 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -171,8 +245,8 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

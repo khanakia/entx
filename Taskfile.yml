@@ -58,8 +58,10 @@ tasks:
     vars:
       DB: '{{default "/Volumes/D/www/projects/khanakia/ai-coder-mini/ai_coder_mini_go/.aicoder/aicoder.db" .DB}}'
       PROJECT: '{{default "prj_019e16108e537324aa99b9132d96f7d9" .PROJECT}}'
+      VIEW: '{{default "table" .VIEW}}'
+      KIND: '{{default "task" .KIND}}'
     cmds:
-      - "{{.EXAMPLE_BIN}} --db {{.DB}} --project {{.PROJECT}}"
+      - "{{.EXAMPLE_BIN}} --db {{.DB}} --project {{.PROJECT}} --view {{.VIEW}} --kind {{.KIND}}"
 
   clean:
     desc: "Remove generated files + binaries"

@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerIncident(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Incident]{
-		Kind:      "incident",
-		Display:   "Incidents",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "incident",
+		Display:        "Incidents",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entIncident.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entIncident.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entIncident.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entIncident.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entIncident.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entIncident.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,32 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entIncident.BodyContainsFold(f.Value))
 					}
+				case "severity_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entIncident.SeverityStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entIncident.SeverityStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entIncident.SeverityStrContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entIncident.SeverityStrIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entIncident.SeverityStrNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entIncident.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entIncident.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entIncident.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entIncident.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entIncident.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +122,59 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entIncident.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entIncident.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldBody))
+						}
+					case "severity_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldSeverityStr))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldSeverityStr))
+						}
+					case "resolved_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldResolvedAt))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldResolvedAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entIncident.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entIncident.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +207,8 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +234,7 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +249,8 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +261,7 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +273,8 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "severity_str",
 				Label:      "Severity Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -195,7 +288,7 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "resolved_at",
 				Label:      "Resolved At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -210,8 +303,8 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

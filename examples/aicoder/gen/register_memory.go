@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerMemory(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Memory]{
-		Kind:      "memory",
-		Display:   "Memories",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "memory",
+		Display:        "Memories",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,66 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.RepoIDNotNil())
+					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.KindEQ(entMemory.Kind(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.KindNEQ(entMemory.Kind(f.Value)))
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -61,6 +122,58 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entMemory.BodyContainsFold(f.Value))
 					}
+				case "superseded_by_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.SupersededByIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.SupersededByIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.SupersededByIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.SupersededByIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.SupersededByIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.CreatedByActorIDNotNil())
+					}
+				case "validated_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.ValidatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.ValidatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.ValidatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.ValidatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.ValidatedByActorIDNotNil())
+					}
+				case "embedding_model_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entMemory.EmbeddingModelIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entMemory.EmbeddingModelIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entMemory.EmbeddingModelIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entMemory.EmbeddingModelIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entMemory.EmbeddingModelIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -68,11 +181,119 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entMemory.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entMemory.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldRepoID))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldKind))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldBody))
+						}
+					case "valid_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldValidAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldValidAt))
+						}
+					case "valid_until":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldValidUntil))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldValidUntil))
+						}
+					case "tx_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldTxAt))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldTxAt))
+						}
+					case "superseded_by_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldSupersededByID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldSupersededByID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldCreatedByActorID))
+						}
+					case "validated_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldValidatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldValidatedByActorID))
+						}
+					case "embedding_model_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entMemory.FieldEmbeddingModelID))
+						} else {
+							q = q.Order(ent.Desc(entMemory.FieldEmbeddingModelID))
 						}
 					}
 				}
@@ -105,8 +326,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -132,7 +353,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -174,7 +395,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -189,7 +410,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -204,7 +425,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -219,8 +440,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -231,8 +452,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -246,8 +467,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -258,8 +479,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -273,8 +494,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -285,7 +506,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "valid_at",
 				Label:      "Valid At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -300,7 +521,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "valid_until",
 				Label:      "Valid Until",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -315,7 +536,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "tx_at",
 				Label:      "Tx At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -330,8 +551,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "superseded_by_id",
 				Label:      "Superseded By Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -345,8 +566,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -360,8 +581,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "validated_by_actor_id",
 				Label:      "Validated By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -375,8 +596,8 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "embedding_model_id",
 				Label:      "Embedding Model Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -407,6 +628,12 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.Memory]{
 			{
 				Name: "project", Display: "→ Projects", Kind: runtime.EdgeUpward, Trigger: "p",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
+					return client.Memory.QueryProject(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Memory) (runtime.EntityRef, error) {
 					tgt, err := client.Memory.QueryProject(r).Only(ctx)
 					if err != nil {
@@ -417,6 +644,12 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "repo", Display: "→ Repos", Kind: runtime.EdgeUpward, Trigger: "e",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
+					return client.Memory.QueryRepo(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Memory) (runtime.EntityRef, error) {
 					tgt, err := client.Memory.QueryRepo(r).Only(ctx)
 					if err != nil {
@@ -427,6 +660,12 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "created_by", Display: "→ Actors", Kind: runtime.EdgeUpward, Trigger: "c",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
+					return client.Memory.QueryCreatedBy(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Memory) (runtime.EntityRef, error) {
 					tgt, err := client.Memory.QueryCreatedBy(r).Only(ctx)
 					if err != nil {
@@ -437,6 +676,12 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "validated_by", Display: "→ Actors", Kind: runtime.EdgeUpward, Trigger: "v",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
+					return client.Memory.QueryValidatedBy(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Memory) (runtime.EntityRef, error) {
 					tgt, err := client.Memory.QueryValidatedBy(r).Only(ctx)
 					if err != nil {
@@ -447,6 +692,12 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "supersedes", Display: "→ Memories", Kind: runtime.EdgeUpward, Trigger: "u",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
+					return client.Memory.QuerySupersedes(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Memory) (runtime.EntityRef, error) {
 					tgt, err := client.Memory.QuerySupersedes(r).Only(ctx)
 					if err != nil {
@@ -457,6 +708,9 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "superseded_by", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.Memory) (int, error) {
 					return client.Memory.QuerySupersededBy(r).Count(ctx)
 				},

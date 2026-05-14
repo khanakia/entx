@@ -82,9 +82,10 @@ type EntityMeta struct {
 	NeedsFmt         bool
 
 	// Phase C — schema annotation results.
-	MultiSort   bool   // enttui.MultiSort() — default true
-	DefaultView string // enttui.DefaultView("list" | "table"); default ""
-	PageSize    int    // enttui.PageSize(N); 0 → spec default (200)
+	MultiSort      bool   // enttui.MultiSort() — default true
+	DefaultView    string // enttui.DefaultView("list" | "table"); default ""
+	PageSize       int    // enttui.PageSize(N); 0 → spec default (200)
+	ShowEdgeCounts bool   // enttui.CountEdges() — enables count fetch in preview
 
 	// Phase C/D — fields the user marked Sortable() (in declaration order).
 	SortableFields []FieldMeta
@@ -214,16 +215,17 @@ func Generate(opts Options) error {
 
 func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (EntityMeta, bool) {
 	em := EntityMeta{
-		Package:    opts.Package,
-		EntPkgPath: opts.EntPkgPath,
-		Name:       n.Name,
-		Kind:       strings.ToLower(n.Name),
-		Display:    pluralize(n.Name),
-		Group:      "data",
-		Icon:       "•",
-		PredPkg:    strings.ToLower(n.Name),
-		PredAlias:  "ent" + n.Name,
-		MultiSort:  true, // default true per ADR-103
+		Package:        opts.Package,
+		EntPkgPath:     opts.EntPkgPath,
+		Name:           n.Name,
+		Kind:           strings.ToLower(n.Name),
+		Display:        pluralize(n.Name),
+		Group:          "data",
+		Icon:           "•",
+		PredPkg:        strings.ToLower(n.Name),
+		PredAlias:      "ent" + n.Name,
+		MultiSort:      true, // default true per ADR-103
+		ShowEdgeCounts: true, // default on; opt out with enttui.NoEdgeCounts (TBD)
 	}
 
 	// --- Schema-level annotations (enttui.Display, Group, Icon, …) ---
@@ -241,6 +243,9 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	}
 	if s, ok := annotString(n.Annotations, "EntTUI.DefaultView", "Value"); ok {
 		em.DefaultView = s
+	}
+	if hasAnnot(n.Annotations, "EntTUI.CountEdges") {
+		em.ShowEdgeCounts = true
 	}
 
 	// Iterate ID field separately — gen.Type stores it on .ID, not in .Fields.
@@ -313,11 +318,19 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			}
 		}
 
-		// Convention: title-ish + body-ish string fields are filterable
-		// even without the explicit annotation. Keeps existing behavior.
-		if !fm.Filterable && f.IsString() &&
-			(f.Name == "title" || f.Name == "name" || f.Name == "body" || f.Name == "description") {
+		// Convention: every string + enum field is filterable by default
+		// so the condition builder has plenty of columns to work with.
+		// Codegen emits actual predicates only for string/stringPtr in v1;
+		// enum filtering surfaces in the UI but falls through silently
+		// until Phase F2 lands typed predicates. Opt out via enttui.Hidden().
+		if !fm.Filterable && !fm.Hidden && (f.IsString() || f.IsEnum()) {
 			fm.Filterable = true
+		}
+		// Convention: also mark every enum + string field as sortable by
+		// default — feels natural for table columns. created_at is
+		// already marked sortable above. Opt out via enttui.Hidden().
+		if !fm.Sortable && !fm.Hidden && (f.IsString() || f.IsEnum() || f.IsTime()) {
+			fm.Sortable = true
 		}
 
 		// Legacy substring predicates list (still used for the global `/`

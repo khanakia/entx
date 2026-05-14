@@ -61,81 +61,132 @@ func (t *tableView) cycleSortOnFocused() {
 	t.refresh()
 }
 
-// openSortModal lists the current stack with reorder buttons. v1 keeps
-// the UX minimal: each row is "field ↑/↓ [↑move ↓move ✕remove]".
+// openSortModal lists the current stack with reorder shortcuts. Keys:
+//   K / J     move focused entry up / down
+//   d         delete focused entry
+//   enter     flip direction (asc ↔ desc)
+//   c         clear entire stack
+//   esc       close
+//
+// Rebuild is local — never re-opens the modal recursively (the previous
+// version stacked nested copies of itself on every keystroke).
 func (t *tableView) openSortModal() {
 	if len(t.sortStack) == 0 {
 		t.updateStatus("sort stack empty — press s on a column first")
 		return
 	}
 
-	list := tview.NewList().ShowSecondaryText(false)
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
 	rebuild := func() {
+		// Preserve selection across rebuilds so move-up/down feels stable.
+		cur := list.GetCurrentItem()
 		list.Clear()
 		for i, k := range t.sortStack {
 			dir := "↑"
 			if k.Dir == Desc {
 				dir = "↓"
 			}
-			label := fmt.Sprintf("%d. %s %s", i+1, k.Field, dir)
-			idx := i
-			list.AddItem(label, "", 0, func() {
-				// Click cycles the dir; long-press equivalents on
-				// key shortcuts below.
-				if t.sortStack[idx].Dir == Asc {
-					t.sortStack[idx].Dir = Desc
-				} else {
-					t.sortStack[idx].Dir = Asc
-				}
-				t.refresh()
-				// Refresh modal too.
-				t.openSortModal()
-			})
+			label := fmt.Sprintf("%d.  [orange::b]%s[-:-:-]  %s", i+1, k.Field, dir)
+			list.AddItem(label, "", 0, nil)
 		}
-		list.AddItem("[red]clear all", "", 'X', func() {
-			t.sortStack = nil
-			t.app.pages.RemovePage("sort-modal")
-			t.refresh()
-		})
-		list.AddItem("[gray]close", "", 0, func() {
-			t.app.pages.RemovePage("sort-modal")
-		})
+		if cur >= list.GetItemCount() {
+			cur = list.GetItemCount() - 1
+		}
+		if cur < 0 {
+			cur = 0
+		}
+		list.SetCurrentItem(cur)
 	}
 	rebuild()
 
+	// Enter on a row flips direction in place.
+	list.SetSelectedFunc(func(idx int, _, _ string, _ rune) {
+		if idx < 0 || idx >= len(t.sortStack) {
+			return
+		}
+		if t.sortStack[idx].Dir == Asc {
+			t.sortStack[idx].Dir = Desc
+		} else {
+			t.sortStack[idx].Dir = Asc
+		}
+		rebuild()
+		t.refresh()
+	})
+
+	// moveUp / moveDown encapsulate the reorder logic — bound to several
+	// keys below so users with terminals that mishandle capital letters
+	// or shift+arrow still have a working binding.
+	moveUp := func() {
+		idx := list.GetCurrentItem()
+		if idx > 0 && idx < len(t.sortStack) {
+			t.sortStack[idx], t.sortStack[idx-1] = t.sortStack[idx-1], t.sortStack[idx]
+			list.SetCurrentItem(idx - 1)
+			rebuild()
+			t.refresh()
+		}
+	}
+	moveDown := func() {
+		idx := list.GetCurrentItem()
+		if idx >= 0 && idx < len(t.sortStack)-1 {
+			t.sortStack[idx], t.sortStack[idx+1] = t.sortStack[idx+1], t.sortStack[idx]
+			list.SetCurrentItem(idx + 1)
+			rebuild()
+			t.refresh()
+		}
+	}
+
 	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		idx := list.GetCurrentItem()
-		if idx < 0 || idx >= len(t.sortStack) {
-			return ev
+		// Reorder bindings: ctrl+↑/↓ (primary, universal), shift+↑/↓
+		// (some terminals), and K/J as vim-style fallback.
+		switch ev.Key() {
+		case tcell.KeyEscape:
+			t.app.pages.RemovePage("sort-modal")
+			return nil
+		case tcell.KeyCtrlK:
+			moveUp()
+			return nil
+		case tcell.KeyCtrlJ:
+			moveDown()
+			return nil
+		}
+		// Shift / Ctrl + arrow detection.
+		if ev.Key() == tcell.KeyUp && (ev.Modifiers()&(tcell.ModCtrl|tcell.ModShift)) != 0 {
+			moveUp()
+			return nil
+		}
+		if ev.Key() == tcell.KeyDown && (ev.Modifiers()&(tcell.ModCtrl|tcell.ModShift)) != 0 {
+			moveDown()
+			return nil
 		}
 		switch ev.Rune() {
 		case 'K':
-			// Move up.
-			if idx > 0 {
-				t.sortStack[idx], t.sortStack[idx-1] = t.sortStack[idx-1], t.sortStack[idx]
-				rebuild()
-				list.SetCurrentItem(idx - 1)
-				t.refresh()
-			}
+			moveUp()
 			return nil
 		case 'J':
-			// Move down.
-			if idx < len(t.sortStack)-1 {
-				t.sortStack[idx], t.sortStack[idx+1] = t.sortStack[idx+1], t.sortStack[idx]
+			moveDown()
+			return nil
+		case 'd':
+			if idx >= 0 && idx < len(t.sortStack) {
+				t.sortStack = append(t.sortStack[:idx], t.sortStack[idx+1:]...)
+				if len(t.sortStack) == 0 {
+					t.app.pages.RemovePage("sort-modal")
+					t.refresh()
+					return nil
+				}
 				rebuild()
-				list.SetCurrentItem(idx + 1)
 				t.refresh()
 			}
 			return nil
-		case 'd':
-			// Delete.
-			t.sortStack = append(t.sortStack[:idx], t.sortStack[idx+1:]...)
-			rebuild()
-			t.refresh()
-			return nil
-		}
-		if ev.Key() == tcell.KeyEscape {
+		case 'c':
+			t.sortStack = nil
 			t.app.pages.RemovePage("sort-modal")
+			t.refresh()
 			return nil
 		}
 		return ev
@@ -144,7 +195,7 @@ func (t *tableView) openSortModal() {
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
 		AddItem(tview.NewTextView().
-			SetText(" K up · J down · d delete · enter flip dir · esc close ").
+			SetText(" ↑↓ nav · ctrl+↑/↓ or K/J move · enter flip · d delete · c clear · esc close ").
 			SetTextColor(tcell.ColorGray), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" sort stack ").
@@ -158,8 +209,9 @@ func (t *tableView) openSortModal() {
 // --- Phase F: condition builder ---
 
 // openConditionBuilder presents a modal of (column, operator, value) rows.
-// Add / edit / delete rows; apply builds a flat []FilterCondition list
-// AND-composed at the top level. (Nested groups planned but not in v1.)
+// Layout: scrollable list of conditions on top + explicit Add / Apply /
+// Cancel buttons below in a Form. Tab cycles between the list and the
+// buttons; ctrl+s = Apply from anywhere (escape hatch).
 func (t *tableView) openConditionBuilder() {
 	cols := t.filterableColumns()
 	if len(cols) == 0 {
@@ -170,112 +222,346 @@ func (t *tableView) openConditionBuilder() {
 	// Working copy so cancel reverts.
 	work := append([]FilterCondition(nil), t.colFilters...)
 
-	list := tview.NewList().ShowSecondaryText(false).SetHighlightFullLine(true)
-	var rebuild func() // forward declaration so the closure can reference itself
+	// Conditions list (display + delete).
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
+	apply := func() {
+		t.colFilters = work
+		t.page = 0
+		t.app.pages.RemovePage("condition-builder")
+		t.refresh()
+	}
+	cancel := func() {
+		t.app.pages.RemovePage("condition-builder")
+	}
+
+	var rebuild func()
 	rebuild = func() {
 		list.Clear()
+		if len(work) == 0 {
+			list.AddItem("[gray]no conditions yet — press 'a' to add[-]", "", 0, nil)
+		}
 		for i, c := range work {
-			label := fmt.Sprintf("%d. %s %s %q", i+1, c.Field, c.Op, c.Value)
+			label := fmt.Sprintf("%d.  [orange::b]%s[-:-:-]  [aqua]%s[-]  %q", i+1, c.Field, c.Op, c.Value)
 			list.AddItem(label, "", 0, nil)
 		}
-		list.AddItem("[green]+ add condition", "", 'a', func() {
-			t.openAddConditionRow(cols, &work, list, rebuild)
-		})
-		list.AddItem("[yellow]apply", "", 0, func() {
-			t.colFilters = work
-			t.page = 0
-			t.app.pages.RemovePage("condition-builder")
-			t.refresh()
-		})
-		list.AddItem("[gray]cancel", "", 0, func() {
-			t.app.pages.RemovePage("condition-builder")
-		})
 	}
 	rebuild()
 
+	// Enter on a condition row opens the picker chain in edit mode.
+	list.SetSelectedFunc(func(idx int, _, _ string, _ rune) {
+		if idx < 0 || idx >= len(work) {
+			return
+		}
+		t.openEditConditionRow(cols, &work, list, rebuild, idx)
+	})
+
+	// d = delete current condition, e = explicit edit (same as enter).
 	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		idx := list.GetCurrentItem()
-		switch ev.Key() {
-		case tcell.KeyEscape:
-			t.app.pages.RemovePage("condition-builder")
+		switch ev.Rune() {
+		case 'd':
+			if idx < len(work) {
+				work = append(work[:idx], work[idx+1:]...)
+				rebuild()
+			}
 			return nil
-		}
-		if ev.Rune() == 'd' && idx >= 0 && idx < len(work) {
-			work = append(work[:idx], work[idx+1:]...)
-			rebuild()
+		case 'e':
+			if idx < len(work) {
+				t.openEditConditionRow(cols, &work, list, rebuild, idx)
+			}
 			return nil
 		}
 		return ev
 	})
 
+	// Form with explicit buttons. tview.Form gives us proper Tab nav +
+	// visible button rendering, which the previous list-of-items approach
+	// faked badly (apply/cancel were just text rows).
+	form := tview.NewForm().
+		AddButton("+ Add condition", func() {
+			t.openAddConditionRow(cols, &work, list, rebuild)
+		}).
+		AddButton("Apply", apply).
+		AddButton("Cancel", cancel)
+	form.SetButtonsAlign(tview.AlignCenter).
+		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
+		SetButtonTextColor(tcell.ColorWhite)
+
+	// Wrap the conditions list + form in a vertical flex.
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
+		AddItem(form, 3, 0, false).
 		AddItem(tview.NewTextView().
-			SetText(" a add · d delete · enter pick · esc cancel ").
+			SetText(" a add · enter/e edit · d delete · s apply · esc cancel · tab cycle buttons ").
 			SetTextColor(tcell.ColorGray), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" filter — condition builder ").
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
 
-	t.app.pages.AddPage("condition-builder", centerModal(body, 70, 22), true, true)
+	// Page-wide hotkeys: ctrl+s = apply; esc = cancel; tab between regions.
+	page := centerModal(body, 80, 24)
+	t.app.pages.AddPage("condition-builder", page, true, true)
 	t.app.tv.SetFocus(list)
-}
 
-// openAddConditionRow is a sub-modal: pick a column, pick an operator,
-// type a value. On submit, appends to `work` and refreshes the parent.
-func (t *tableView) openAddConditionRow(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func()) {
-	colSel := tview.NewList().ShowSecondaryText(false).SetHighlightFullLine(true)
-	for _, c := range cols {
-		c := c
-		colSel.AddItem(c.label, c.key, 0, func() {
-			t.openPickOperator(c, work, parent, rebuild)
-		})
-	}
-	body := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(colSel, 0, 1, true)
-	body.SetBorder(true).
-		SetTitle(" 1/3 column ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
-	t.app.pages.AddPage("cb-col", centerModal(body, 40, 16), true, true)
-	t.app.tv.SetFocus(colSel)
-	colSel.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyEscape {
-			t.app.pages.RemovePage("cb-col")
+	// Bind page-level hotkeys via the body flex's InputCapture so they
+	// fire regardless of whether focus is on the list or the form buttons.
+	addFn := func() { t.openAddConditionRow(cols, &work, list, rebuild) }
+	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyEscape:
+			cancel()
+			return nil
+		case tcell.KeyTab:
+			// Tab cycles list ↔ form buttons.
+			if t.app.tv.GetFocus() == list {
+				t.app.tv.SetFocus(form)
+			} else {
+				t.app.tv.SetFocus(list)
+			}
+			return nil
+		}
+		switch ev.Rune() {
+		case 'a', '+', 'n':
+			// Direct shortcut: add a new condition without needing to
+			// tab to the button. Works whether focus is on the list or
+			// the buttons.
+			addFn()
+			return nil
+		case 's':
+			// Single-char Apply — faster than tabbing to the button.
+			// 's' would collide with the table's "sort on focused column"
+			// shortcut, but we're inside the modal so the outer table
+			// never sees it.
+			apply()
 			return nil
 		}
 		return ev
 	})
 }
 
+// openAddConditionRow is the column-picker sub-modal — step 1 of the
+// (column → operator → value) chain. fzf-style filter input at the top
+// drives the list below; pressing enter on a row advances to the
+// operator picker.
+//
+// editIdx >= 0 puts the picker in EDIT mode: instead of appending the
+// new condition to `work`, the result REPLACES `(*work)[editIdx]`.
+func (t *tableView) openAddConditionRow(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func()) {
+	t.openColumnPicker(cols, work, parent, rebuild, -1)
+}
+
+// openEditConditionRow opens the picker chain pre-filled with the
+// current condition at `idx` so the user can change column / operator /
+// value. Submitting REPLACES instead of appending.
+func (t *tableView) openEditConditionRow(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), idx int) {
+	t.openColumnPicker(cols, work, parent, rebuild, idx)
+}
+
+// openColumnPicker is the shared implementation used by both add + edit
+// flows. editIdx >= 0 means edit mode.
+func (t *tableView) openColumnPicker(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
+	// fzf-style: input at top, filtered list below.
+	input := tview.NewInputField().
+		SetLabel("filter › ").
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldWidth(40).
+		SetFieldBackgroundColor(tcell.ColorDefault)
+
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
+	// `shown` is the currently-filtered subset; the SelectedFunc indexes
+	// into it (not the full cols slice).
+	shown := append([]anyColumn(nil), cols...)
+
+	// Track which column should be pre-highlighted. In edit mode this is
+	// the existing condition's column so the user lands on it directly.
+	var preselectKey string
+	if editIdx >= 0 && editIdx < len(*work) {
+		preselectKey = (*work)[editIdx].Field
+	}
+
+	populate := func() {
+		list.Clear()
+		for _, c := range shown {
+			list.AddItem(c.label, c.key, 0, nil)
+		}
+		if list.GetItemCount() > 0 {
+			// Try to land on the preselected column (edit mode); else
+			// just highlight the first row.
+			start := 0
+			if preselectKey != "" {
+				for i, c := range shown {
+					if c.key == preselectKey {
+						start = i
+						break
+					}
+				}
+			}
+			list.SetCurrentItem(start)
+		}
+	}
+	populate()
+
+	input.SetChangedFunc(func(text string) {
+		q := strings.ToLower(strings.TrimSpace(text))
+		if q == "" {
+			shown = append([]anyColumn(nil), cols...)
+		} else {
+			shown = shown[:0]
+			for _, c := range cols {
+				hay := strings.ToLower(c.label + " " + c.key)
+				if strings.Contains(hay, q) {
+					shown = append(shown, c)
+				}
+			}
+		}
+		populate()
+	})
+
+	// Arrow keys from the input drive the list — fzf-like.
+	input.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyDown, tcell.KeyCtrlN:
+			if cur := list.GetCurrentItem() + 1; cur < list.GetItemCount() {
+				list.SetCurrentItem(cur)
+			}
+			return nil
+		case tcell.KeyUp, tcell.KeyCtrlP:
+			if cur := list.GetCurrentItem() - 1; cur >= 0 {
+				list.SetCurrentItem(cur)
+			}
+			return nil
+		case tcell.KeyPgDn:
+			list.SetCurrentItem(min(list.GetCurrentItem()+10, list.GetItemCount()-1))
+			return nil
+		case tcell.KeyPgUp:
+			list.SetCurrentItem(max(list.GetCurrentItem()-10, 0))
+			return nil
+		}
+		return ev
+	})
+
+	commit := func() {
+		idx := list.GetCurrentItem()
+		if idx < 0 || idx >= len(shown) {
+			return
+		}
+		col := shown[idx]
+		t.app.pages.RemovePage("cb-col")
+		t.openPickOperator(col, work, parent, rebuild, editIdx)
+	}
+	cancel := func() { t.app.pages.RemovePage("cb-col") }
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEnter:
+			commit()
+		case tcell.KeyEscape:
+			cancel()
+		}
+	})
+	list.SetSelectedFunc(func(int, string, string, rune) { commit() })
+	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyEscape {
+			cancel()
+			return nil
+		}
+		return ev
+	})
+
+	title := " 1/3 column "
+	if editIdx >= 0 {
+		title = " edit — column (1/3) "
+	}
+
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(input, 1, 0, true).
+		AddItem(list, 0, 1, false).
+		AddItem(tview.NewTextView().
+			SetText(" type to filter · ↑/↓ nav · enter pick · esc cancel ").
+			SetTextColor(tcell.ColorGray), 1, 0, false)
+	body.SetBorder(true).
+		SetTitle(title).
+		SetTitleColor(tcell.ColorYellow).
+		SetBorderColor(tcell.ColorDodgerBlue)
+
+	t.app.pages.AddPage("cb-col", centerModal(body, 50, 22), true, true)
+	t.app.tv.SetFocus(input)
+}
+
 // openPickOperator is step 2 — operator menu typed to the column kind.
-// v1: a fixed list. Future: type-aware via codegen metadata.
-func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func()) {
+// editIdx >= 0 means we're replacing (*work)[editIdx] on submit instead
+// of appending. v1: a fixed operator list.
+func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
 	t.app.pages.RemovePage("cb-col")
 
 	ops := []FilterOp{OpEq, OpNeq, OpContains, OpLt, OpLte, OpGt, OpGte, OpIn, OpNotIn, OpIsNull, OpNotNull}
-	opSel := tview.NewList().ShowSecondaryText(false).SetHighlightFullLine(true)
+	opSel := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
 	for _, op := range ops {
-		op := op
-		opSel.AddItem(string(op), col.key, 0, func() {
-			if op == OpIsNull || op == OpNotNull {
-				// No value needed — submit immediately.
-				*work = append(*work, FilterCondition{Field: col.key, Op: op})
-				t.app.pages.RemovePage("cb-op")
-				rebuild()
-				return
-			}
-			t.openEnterValue(col, op, work, rebuild)
-		})
+		opSel.AddItem(string(op), "", 0, nil)
 	}
+
+	// Edit mode → preselect the operator that matches the existing
+	// condition. New conditions land on OpEq (index 0).
+	if editIdx >= 0 && editIdx < len(*work) {
+		curOp := (*work)[editIdx].Op
+		for i, op := range ops {
+			if op == curOp {
+				opSel.SetCurrentItem(i)
+				break
+			}
+		}
+	}
+
+	opSel.SetSelectedFunc(func(idx int, _, _ string, _ rune) {
+		if idx < 0 || idx >= len(ops) {
+			return
+		}
+		op := ops[idx]
+		if op == OpIsNull || op == OpNotNull {
+			// No value needed — submit immediately.
+			newCond := FilterCondition{Field: col.key, Op: op}
+			if editIdx >= 0 && editIdx < len(*work) {
+				(*work)[editIdx] = newCond
+			} else {
+				*work = append(*work, newCond)
+			}
+			t.app.pages.RemovePage("cb-op")
+			rebuild()
+			return
+		}
+		t.openEnterValue(col, op, work, rebuild, editIdx)
+	})
+
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(opSel, 0, 1, true)
+		AddItem(opSel, 0, 1, true).
+		AddItem(tview.NewTextView().
+			SetText(" enter pick · esc cancel ").
+			SetTextColor(tcell.ColorGray), 1, 0, false)
+	title := " 2/3 operator (" + col.label + ") "
+	if editIdx >= 0 {
+		title = " edit — operator (" + col.label + ") "
+	}
 	body.SetBorder(true).
-		SetTitle(" 2/3 operator (" + col.label + ") ").
+		SetTitle(title).
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
-	t.app.pages.AddPage("cb-op", centerModal(body, 30, 16), true, true)
+	t.app.pages.AddPage("cb-op", centerModal(body, 30, 18), true, true)
 	t.app.tv.SetFocus(opSel)
 	opSel.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyEscape {
@@ -288,8 +574,8 @@ func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, par
 }
 
 // openEnterValue is step 3 — text input for the value. On enter, append
-// the condition and dismiss the chain of modals.
-func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func()) {
+// (or replace if editIdx >= 0) and dismiss the chain of modals.
+func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func(), editIdx int) {
 	t.app.pages.RemovePage("cb-op")
 
 	input := tview.NewInputField().
@@ -297,10 +583,21 @@ func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCon
 		SetLabelColor(tcell.ColorYellow).
 		SetFieldBackgroundColor(tcell.ColorDefault).
 		SetFieldWidth(40)
+
+	// Edit mode → pre-populate the input with the existing value.
+	if editIdx >= 0 && editIdx < len(*work) {
+		input.SetText((*work)[editIdx].Value)
+	}
+
 	input.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
-			*work = append(*work, FilterCondition{Field: col.key, Op: op, Value: input.GetText()})
+			newCond := FilterCondition{Field: col.key, Op: op, Value: input.GetText()}
+			if editIdx >= 0 && editIdx < len(*work) {
+				(*work)[editIdx] = newCond
+			} else {
+				*work = append(*work, newCond)
+			}
 			t.app.pages.RemovePage("cb-val")
 			rebuild()
 		case tcell.KeyEscape:
@@ -309,12 +606,19 @@ func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCon
 	})
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(input, 1, 0, true)
+		AddItem(input, 1, 0, true).
+		AddItem(tview.NewTextView().
+			SetText(" enter submit · esc cancel ").
+			SetTextColor(tcell.ColorGray), 1, 0, false)
+	title := " 3/3 value "
+	if editIdx >= 0 {
+		title = " edit — value "
+	}
 	body.SetBorder(true).
-		SetTitle(" 3/3 value ").
+		SetTitle(title).
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
-	t.app.pages.AddPage("cb-val", centerModal(body, 50, 5), true, true)
+	t.app.pages.AddPage("cb-val", centerModal(body, 50, 6), true, true)
 	t.app.tv.SetFocus(input)
 }
 

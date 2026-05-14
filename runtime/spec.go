@@ -162,9 +162,10 @@ type EntitySpec[T any] struct {
 	Icon    string // single rune, e.g. "✓"
 
 	// Behavior
-	PageSize  int  // initial page size; runtime caps at 1000
-	MultiSort bool // allow sort stack (true by default; false = single column only)
-	Default   DefaultView
+	PageSize       int  // initial page size; runtime caps at 1000
+	MultiSort      bool // allow sort stack (true by default; false = single column only)
+	ShowEdgeCounts bool // when true, the preview pane calls each edge's Count closure and renders the result next to the trigger label
+	Default        DefaultView
 
 	// Data
 	Fetch func(ctx context.Context, opts ListOpts) (rows []T, total int, err error)

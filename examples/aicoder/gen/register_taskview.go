@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTaskView(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TaskView]{
-		Kind:      "taskview",
-		Display:   "TaskViews",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "taskview",
+		Display:        "TaskViews",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -51,6 +52,24 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskView.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskView.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskView.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskView.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskView.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskView.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -60,6 +79,19 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTaskView.NameContainsFold(f.Value))
 					}
+				case "filter_json":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskView.FilterJSONEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskView.FilterJSONNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskView.FilterJSONContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTaskView.FilterJSONIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTaskView.FilterJSONNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -67,11 +99,41 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskView.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTaskView.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTaskView.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTaskView.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskView.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTaskView.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskView.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTaskView.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskView.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entTaskView.FieldName))
+						}
+					case "filter_json":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskView.FieldFilterJSON))
+						} else {
+							q = q.Order(ent.Desc(entTaskView.FieldFilterJSON))
 						}
 					}
 				}
@@ -101,8 +163,8 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,7 +190,7 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -143,8 +205,8 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,7 +217,7 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -167,8 +229,8 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "filter_json",
 				Label:      "Filter Json",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

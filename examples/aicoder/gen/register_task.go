@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTask(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Task]{
-		Kind:      "task",
-		Display:   "Tasks",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "task",
+		Display:        "Tasks",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,37 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.RepoIDNotNil())
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -74,6 +106,85 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entTask.BodyNotNil())
 					}
+				case "status":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.StatusEQ(entTask.Status(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entTask.StatusNEQ(entTask.Status(f.Value)))
+					}
+				case "priority":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.PriorityEQ(entTask.Priority(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entTask.PriorityNEQ(entTask.Priority(f.Value)))
+					}
+				case "mission_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.MissionIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.MissionIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.MissionIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.MissionIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.MissionIDNotNil())
+					}
+				case "tasklist_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.TasklistIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.TasklistIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.TasklistIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.TasklistIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.TasklistIDNotNil())
+					}
+				case "plan_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.PlanIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.PlanIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.PlanIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.PlanIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.PlanIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.CreatedByActorIDNotNil())
+					}
+				case "assigned_to_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.AssignedToActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTask.AssignedToActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTask.AssignedToActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTask.AssignedToActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTask.AssignedToActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -81,11 +192,107 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTask.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTask.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldRepoID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldBody))
+						}
+					case "status":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldStatus))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldStatus))
+						}
+					case "priority":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldPriority))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldPriority))
+						}
+					case "due_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldDueAt))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldDueAt))
+						}
+					case "started_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldStartedAt))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldStartedAt))
+						}
+					case "completed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldCompletedAt))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldCompletedAt))
+						}
+					case "mission_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldMissionID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldMissionID))
+						}
+					case "tasklist_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldTasklistID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldTasklistID))
+						}
+					case "plan_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldPlanID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldPlanID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldCreatedByActorID))
+						}
+					case "assigned_to_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTask.FieldAssignedToActorID))
+						} else {
+							q = q.Order(ent.Desc(entTask.FieldAssignedToActorID))
 						}
 					}
 				}
@@ -124,8 +331,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -151,7 +358,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -166,8 +373,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -178,8 +385,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -193,7 +400,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -205,8 +412,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status",
 				Label:      "Status",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -217,8 +424,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "priority",
 				Label:      "Priority",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -229,7 +436,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "due_at",
 				Label:      "Due At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -244,7 +451,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "started_at",
 				Label:      "Started At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -259,7 +466,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "completed_at",
 				Label:      "Completed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -274,8 +481,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "mission_id",
 				Label:      "Mission Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -289,8 +496,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "tasklist_id",
 				Label:      "Tasklist Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -304,8 +511,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "plan_id",
 				Label:      "Plan Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -319,8 +526,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -334,8 +541,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "assigned_to_actor_id",
 				Label:      "Assigned To Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -351,6 +558,12 @@ func registerTask(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.Task]{
 			{
 				Name: "mission", Display: "→ Missions", Kind: runtime.EdgeUpward, Trigger: "m",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Task) (int, error) {
+					return client.Task.QueryMission(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Task) (runtime.EntityRef, error) {
 					tgt, err := client.Task.QueryMission(r).Only(ctx)
 					if err != nil {
@@ -361,6 +574,12 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "tasklist", Display: "→ TaskLists", Kind: runtime.EdgeUpward, Trigger: "t",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Task) (int, error) {
+					return client.Task.QueryTasklist(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Task) (runtime.EntityRef, error) {
 					tgt, err := client.Task.QueryTasklist(r).Only(ctx)
 					if err != nil {
@@ -371,6 +590,12 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "plan", Display: "→ Plans", Kind: runtime.EdgeUpward, Trigger: "p",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Task) (int, error) {
+					return client.Task.QueryPlan(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Task) (runtime.EntityRef, error) {
 					tgt, err := client.Task.QueryPlan(r).Only(ctx)
 					if err != nil {

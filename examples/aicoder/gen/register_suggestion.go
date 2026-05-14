@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerSuggestion(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Suggestion]{
-		Kind:      "suggestion",
-		Display:   "Suggestions",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "suggestion",
+		Display:        "Suggestions",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSuggestion.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSuggestion.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSuggestion.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSuggestion.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSuggestion.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSuggestion.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,28 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entSuggestion.BodyContainsFold(f.Value))
 					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSuggestion.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSuggestion.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSuggestion.StatusStrContainsFold(f.Value))
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSuggestion.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSuggestion.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSuggestion.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSuggestion.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSuggestion.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +118,53 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entSuggestion.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entSuggestion.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldBody))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldStatusStr))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSuggestion.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entSuggestion.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +197,8 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +224,7 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +239,8 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +251,7 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +263,8 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -192,8 +275,8 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

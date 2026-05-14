@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerWorkflow(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Workflow]{
-		Kind:      "workflow",
-		Display:   "Workflows",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "workflow",
+		Display:        "Workflows",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkflow.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkflow.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkflow.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkflow.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkflow.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkflow.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -77,11 +96,41 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entWorkflow.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entWorkflow.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldName))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldBody))
 						}
 					}
 				}
@@ -114,8 +163,8 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +190,7 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +205,8 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +217,7 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,

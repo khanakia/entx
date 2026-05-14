@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCommitLink(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CommitLink]{
-		Kind:      "commitlink",
-		Display:   "CommitLinks",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "commitlink",
+		Display:        "CommitLinks",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,199 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCommitLink.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.ProjectIDContainsFold(f.Value))
+					}
+				case "entity_table":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.EntityTableEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.EntityTableNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.EntityTableContainsFold(f.Value))
+					}
+				case "entity_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.EntityIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.EntityIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.EntityIDContainsFold(f.Value))
+					}
+				case "sha":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.ShaEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.ShaNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.ShaContainsFold(f.Value))
+					}
+				case "message":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.MessageEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.MessageNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.MessageContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCommitLink.MessageIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCommitLink.MessageNotNil())
+					}
+				case "repo_path":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.RepoPathEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.RepoPathNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.RepoPathContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCommitLink.RepoPathIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCommitLink.RepoPathNotNil())
+					}
+				case "author":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.AuthorEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.AuthorNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.AuthorContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCommitLink.AuthorIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCommitLink.AuthorNotNil())
+					}
+				case "committed_at":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.CommittedAtEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.CommittedAtNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.CommittedAtContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCommitLink.CommittedAtIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCommitLink.CommittedAtNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCommitLink.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCommitLink.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCommitLink.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCommitLink.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCommitLink.CreatedByActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCommitLink.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entCommitLink.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldProjectID))
+						}
+					case "entity_table":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldEntityTable))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldEntityTable))
+						}
+					case "entity_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldEntityID))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldEntityID))
+						}
+					case "sha":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldSha))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldSha))
+						}
+					case "message":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldMessage))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldMessage))
+						}
+					case "repo_path":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldRepoPath))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldRepoPath))
+						}
+					case "author":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldAuthor))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldAuthor))
+						}
+					case "committed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldCommittedAt))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldCommittedAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -74,8 +258,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -101,7 +285,7 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -116,8 +300,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,8 +312,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_table",
 				Label:      "Entity Table",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -140,8 +324,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_id",
 				Label:      "Entity Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -152,8 +336,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "sha",
 				Label:      "Sha",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -164,8 +348,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "message",
 				Label:      "Message",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -179,8 +363,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_path",
 				Label:      "Repo Path",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -194,8 +378,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "author",
 				Label:      "Author",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -209,8 +393,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "committed_at",
 				Label:      "Committed At",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -224,8 +408,8 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchRun]{
-		Kind:      "benchrun",
-		Display:   "BenchRuns",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "benchrun",
+		Display:        "BenchRuns",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,171 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchRun.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.ProjectIDContainsFold(f.Value))
+					}
+				case "code":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.CodeEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.CodeNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.CodeContainsFold(f.Value))
+					}
+				case "model":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.ModelEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.ModelNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.ModelContainsFold(f.Value))
+					}
+				case "claude_md_sha256":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.ClaudeMdSha256EQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.ClaudeMdSha256NEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.ClaudeMdSha256ContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchRun.ClaudeMdSha256IsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchRun.ClaudeMdSha256NotNil())
+					}
+				case "status":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.StatusEQ(entBenchRun.Status(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.StatusNEQ(entBenchRun.Status(f.Value)))
+					}
+				case "notes":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.NotesEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.NotesNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.NotesContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchRun.NotesIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchRun.NotesNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchRun.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchRun.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchRun.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchRun.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchRun.CreatedByActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entBenchRun.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entBenchRun.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldProjectID))
+						}
+					case "code":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldCode))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldCode))
+						}
+					case "model":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldModel))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldModel))
+						}
+					case "claude_md_sha256":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldClaudeMdSha256))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldClaudeMdSha256))
+						}
+					case "started_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldStartedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldStartedAt))
+						}
+					case "completed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldCompletedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldCompletedAt))
+						}
+					case "status":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldStatus))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldStatus))
+						}
+					case "notes":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldNotes))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldNotes))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -78,8 +234,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -105,7 +261,7 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -120,8 +276,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -132,8 +288,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "code",
 				Label:      "Code",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -144,8 +300,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "model",
 				Label:      "Model",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -180,8 +336,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "claude_md_sha256",
 				Label:      "Claude Md Sha256",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -210,7 +366,7 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "started_at",
 				Label:      "Started At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -225,7 +381,7 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "completed_at",
 				Label:      "Completed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -240,8 +396,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status",
 				Label:      "Status",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -276,8 +432,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "notes",
 				Label:      "Notes",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -291,8 +447,8 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -308,6 +464,9 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.BenchRun]{
 			{
 				Name: "results", Display: "BenchResults", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.BenchRun) (int, error) {
 					return client.BenchRun.QueryResults(r).Count(ctx)
 				},

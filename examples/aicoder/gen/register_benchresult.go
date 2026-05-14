@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchResult(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchResult]{
-		Kind:      "benchresult",
-		Display:   "BenchResults",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "benchresult",
+		Display:        "BenchResults",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,202 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchResult.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.ProjectIDContainsFold(f.Value))
+					}
+				case "bench_run_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.BenchRunIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.BenchRunIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.BenchRunIDContainsFold(f.Value))
+					}
+				case "bench_eval_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.BenchEvalIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.BenchEvalIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.BenchEvalIDContainsFold(f.Value))
+					}
+				case "arm":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.ArmEQ(entBenchResult.Arm(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.ArmNEQ(entBenchResult.Arm(f.Value)))
+					}
+				case "prompt_sent":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.PromptSentEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.PromptSentNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.PromptSentContainsFold(f.Value))
+					}
+				case "output_received":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.OutputReceivedEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.OutputReceivedNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.OutputReceivedContainsFold(f.Value))
+					}
+				case "grade":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.GradeEQ(entBenchResult.Grade(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.GradeNEQ(entBenchResult.Grade(f.Value)))
+					}
+				case "judge_model":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.JudgeModelEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.JudgeModelNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.JudgeModelContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchResult.JudgeModelIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchResult.JudgeModelNotNil())
+					}
+				case "judge_rubric":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.JudgeRubricEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.JudgeRubricNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.JudgeRubricContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchResult.JudgeRubricIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchResult.JudgeRubricNotNil())
+					}
+				case "judge_response":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchResult.JudgeResponseEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchResult.JudgeResponseNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchResult.JudgeResponseContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchResult.JudgeResponseIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchResult.JudgeResponseNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entBenchResult.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entBenchResult.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldProjectID))
+						}
+					case "bench_run_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldBenchRunID))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldBenchRunID))
+						}
+					case "bench_eval_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldBenchEvalID))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldBenchEvalID))
+						}
+					case "arm":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldArm))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldArm))
+						}
+					case "prompt_sent":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldPromptSent))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldPromptSent))
+						}
+					case "output_received":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldOutputReceived))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldOutputReceived))
+						}
+					case "grade":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldGrade))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldGrade))
+						}
+					case "judge_model":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldJudgeModel))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldJudgeModel))
+						}
+					case "judge_rubric":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldJudgeRubric))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldJudgeRubric))
+						}
+					case "judge_response":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldJudgeResponse))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldJudgeResponse))
 						}
 					}
 				}
@@ -75,8 +262,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +289,7 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +304,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +316,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "bench_run_id",
 				Label:      "Bench Run Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,8 +328,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "bench_eval_id",
 				Label:      "Bench Eval Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -153,8 +340,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "arm",
 				Label:      "Arm",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -177,8 +364,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "prompt_sent",
 				Label:      "Prompt Sent",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -189,8 +376,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "output_received",
 				Label:      "Output Received",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -255,8 +442,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "grade",
 				Label:      "Grade",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -279,8 +466,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "judge_model",
 				Label:      "Judge Model",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -294,8 +481,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "judge_rubric",
 				Label:      "Judge Rubric",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -309,8 +496,8 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "judge_response",
 				Label:      "Judge Response",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -326,6 +513,12 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.BenchResult]{
 			{
 				Name: "bench_run", Display: "→ BenchRuns", Kind: runtime.EdgeUpward, Trigger: "b",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.BenchResult) (int, error) {
+					return client.BenchResult.QueryBenchRun(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.BenchResult) (runtime.EntityRef, error) {
 					tgt, err := client.BenchResult.QueryBenchRun(r).Only(ctx)
 					if err != nil {
@@ -336,6 +529,12 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "bench_eval", Display: "→ BenchEvals", Kind: runtime.EdgeUpward, Trigger: "e",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.BenchResult) (int, error) {
+					return client.BenchResult.QueryBenchEval(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.BenchResult) (runtime.EntityRef, error) {
 					tgt, err := client.BenchResult.QueryBenchEval(r).Only(ctx)
 					if err != nil {

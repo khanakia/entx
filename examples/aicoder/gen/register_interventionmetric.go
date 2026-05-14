@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.InterventionMetric]{
-		Kind:      "interventionmetric",
-		Display:   "InterventionMetrics",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "interventionmetric",
+		Display:        "InterventionMetrics",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,148 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entInterventionMetric.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.ProjectIDContainsFold(f.Value))
+					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.KindEQ(entInterventionMetric.Kind(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.KindNEQ(entInterventionMetric.Kind(f.Value)))
+					}
+				case "target_table":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.TargetTableEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.TargetTableNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.TargetTableContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entInterventionMetric.TargetTableIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entInterventionMetric.TargetTableNotNil())
+					}
+				case "target_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.TargetIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.TargetIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.TargetIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entInterventionMetric.TargetIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entInterventionMetric.TargetIDNotNil())
+					}
+				case "notes":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.NotesEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.NotesNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.NotesContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entInterventionMetric.NotesIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entInterventionMetric.NotesNotNil())
+					}
+				case "actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entInterventionMetric.ActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entInterventionMetric.ActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entInterventionMetric.ActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entInterventionMetric.ActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entInterventionMetric.ActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entInterventionMetric.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entInterventionMetric.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldProjectID))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldKind))
+						}
+					case "target_table":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldTargetTable))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldTargetTable))
+						}
+					case "target_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldTargetID))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldTargetID))
+						}
+					case "notes":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldNotes))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldNotes))
+						}
+					case "actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldActorID))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldActorID))
 						}
 					}
 				}
@@ -77,8 +210,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -104,7 +237,7 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -119,8 +252,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -131,8 +264,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -143,8 +276,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_table",
 				Label:      "Target Table",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -158,8 +291,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_id",
 				Label:      "Target Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -173,8 +306,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "notes",
 				Label:      "Notes",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -188,8 +321,8 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "actor_id",
 				Label:      "Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

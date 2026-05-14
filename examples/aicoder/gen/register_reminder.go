@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerReminder(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Reminder]{
-		Kind:      "reminder",
-		Display:   "Reminders",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "reminder",
+		Display:        "Reminders",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,160 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entReminder.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.ProjectIDContainsFold(f.Value))
+					}
+				case "target_table":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.TargetTableEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.TargetTableNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.TargetTableContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entReminder.TargetTableIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entReminder.TargetTableNotNil())
+					}
+				case "target_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.TargetIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.TargetIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.TargetIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entReminder.TargetIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entReminder.TargetIDNotNil())
+					}
+				case "message":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.MessageEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.MessageNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.MessageContainsFold(f.Value))
+					}
+				case "recurrence":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.RecurrenceEQ(entReminder.Recurrence(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.RecurrenceNEQ(entReminder.Recurrence(f.Value)))
+					case runtime.OpIsNull:
+						q = q.Where(entReminder.RecurrenceIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entReminder.RecurrenceNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entReminder.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entReminder.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entReminder.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entReminder.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entReminder.CreatedByActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entReminder.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entReminder.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldProjectID))
+						}
+					case "target_table":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldTargetTable))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldTargetTable))
+						}
+					case "target_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldTargetID))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldTargetID))
+						}
+					case "due_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldDueAt))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldDueAt))
+						}
+					case "message":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldMessage))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldMessage))
+						}
+					case "recurrence":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldRecurrence))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldRecurrence))
+						}
+					case "done_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldDoneAt))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldDoneAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -74,8 +219,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -101,7 +246,7 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -116,8 +261,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,8 +273,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_table",
 				Label:      "Target Table",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -143,8 +288,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_id",
 				Label:      "Target Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -158,7 +303,7 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "due_at",
 				Label:      "Due At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -173,8 +318,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "message",
 				Label:      "Message",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -185,8 +330,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "recurrence",
 				Label:      "Recurrence",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -200,7 +345,7 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "done_at",
 				Label:      "Done At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -215,8 +360,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

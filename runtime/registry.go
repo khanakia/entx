@@ -19,9 +19,10 @@ type anySpec struct {
 	group   string
 	icon    string
 
-	pageSize    int
-	multiSort   bool
-	defaultView DefaultView
+	pageSize       int
+	multiSort      bool
+	showEdgeCounts bool
+	defaultView    DefaultView
 
 	// fetch returns the row IDs + their typed display data.
 	fetch func(ctx context.Context, opts ListOpts) ([]Row, int, error)
@@ -53,6 +54,21 @@ type anyEdge struct {
 	// resolveUpward / resolveDrill bound to a row ID.
 	resolveUpward func(ctx context.Context, id string) (EntityRef, error)
 	resolveDrill  func(ctx context.Context, id string) (EntityRefList, error)
+}
+
+// viewState is the per-page state that survives a list↔table toggle.
+// Both browser and tableView produce + consume this struct so the user
+// keeps their filter / sort / pagination / selection across `v`.
+type viewState struct {
+	Filter          string
+	Filters         []FilterCondition
+	SortField       string
+	SortDir         SortDir
+	SortStack       []SortKey
+	Page            int
+	PageSize        int
+	SelectedID      string
+	ColumnOverrides map[string]bool // table-only; ignored by browser
 }
 
 // Row is the runtime-visible projection of one ent row. Strings only —
@@ -179,13 +195,14 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 	}
 
 	app.specs[spec.Kind] = &anySpec{
-		kind:        spec.Kind,
-		display:     spec.Display,
-		group:       spec.Group,
-		icon:        spec.Icon,
-		pageSize:    spec.PageSize,
-		multiSort:   spec.MultiSort,
-		defaultView: spec.Default,
+		kind:           spec.Kind,
+		display:        spec.Display,
+		group:          spec.Group,
+		icon:           spec.Icon,
+		pageSize:       spec.PageSize,
+		multiSort:      spec.MultiSort,
+		showEdgeCounts: spec.ShowEdgeCounts,
+		defaultView:    spec.Default,
 		fetch:       fetch,
 		getOne:      getOne,
 		columns:     columns,

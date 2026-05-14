@@ -8,6 +8,6 @@
 
 [yellow::b]── edges ──[-:-:-]
 {{- range .Edges }}
-  [orange::b]{{ .Trigger }}[-:-:-]  {{ .Display }}
+  [orange::b]{{ .Trigger }}[-:-:-]  {{ .Display }}{{ if .Count }}  [aqua]({{ .Count }})[-]{{ end }}
 {{- end -}}
 {{- end -}}

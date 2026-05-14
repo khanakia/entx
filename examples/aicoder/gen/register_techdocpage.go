@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTechDocPage(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TechDocPage]{
-		Kind:      "techdocpage",
-		Display:   "TechDocPages",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "techdocpage",
+		Display:        "TechDocPages",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,42 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.ProjectIDContainsFold(f.Value))
+					}
+				case "tech_doc_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.TechDocIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.TechDocIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.TechDocIDContainsFold(f.Value))
+					}
+				case "url":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.URLEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.URLNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.URLContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -74,6 +111,19 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTechDocPage.BodyContainsFold(f.Value))
 					}
+				case "content_sha":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.ContentShaEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.ContentShaNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.ContentShaContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTechDocPage.ContentShaIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTechDocPage.ContentShaNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -81,11 +131,59 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTechDocPage.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTechDocPage.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldProjectID))
+						}
+					case "tech_doc_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldTechDocID))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldTechDocID))
+						}
+					case "url":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldURL))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldURL))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldBody))
+						}
+					case "content_sha":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldContentSha))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldContentSha))
 						}
 					}
 				}
@@ -121,8 +219,8 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -148,7 +246,7 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -163,8 +261,8 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -175,8 +273,8 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "tech_doc_id",
 				Label:      "Tech Doc Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -187,8 +285,8 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "url",
 				Label:      "Url",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -199,7 +297,7 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -214,8 +312,8 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "content_sha",
 				Label:      "Content Sha",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -231,6 +329,12 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.TechDocPage]{
 			{
 				Name: "tech_doc", Display: "→ TechDocs", Kind: runtime.EdgeUpward, Trigger: "t",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.TechDocPage) (int, error) {
+					return client.TechDocPage.QueryTechDoc(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.TechDocPage) (runtime.EntityRef, error) {
 					tgt, err := client.TechDocPage.QueryTechDoc(r).Only(ctx)
 					if err != nil {

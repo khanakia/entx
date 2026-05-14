@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRenderHistory(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.RenderHistory]{
-		Kind:      "renderhistory",
-		Display:   "RenderHistories",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "renderhistory",
+		Display:        "RenderHistories",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,157 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRenderHistory.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRenderHistory.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRenderHistory.RepoIDNotNil())
+					}
+				case "target_path":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.TargetPathEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.TargetPathNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.TargetPathContainsFold(f.Value))
+					}
+				case "rendered_text":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.RenderedTextEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.RenderedTextNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.RenderedTextContainsFold(f.Value))
+					}
+				case "rendered_sha256":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.RenderedSha256EQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.RenderedSha256NEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.RenderedSha256ContainsFold(f.Value))
+					}
+				case "scope_summary":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.ScopeSummaryEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.ScopeSummaryNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.ScopeSummaryContainsFold(f.Value))
+					}
+				case "rendered_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRenderHistory.RenderedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRenderHistory.RenderedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRenderHistory.RenderedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRenderHistory.RenderedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRenderHistory.RenderedByActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entRenderHistory.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entRenderHistory.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldRepoID))
+						}
+					case "target_path":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldTargetPath))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldTargetPath))
+						}
+					case "rendered_text":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldRenderedText))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldRenderedText))
+						}
+					case "rendered_sha256":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldRenderedSha256))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldRenderedSha256))
+						}
+					case "scope_summary":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldScopeSummary))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldScopeSummary))
+						}
+					case "rendered_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldRenderedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldRenderedByActorID))
 						}
 					}
 				}
@@ -75,8 +217,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +244,7 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +259,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +271,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -144,8 +286,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "target_path",
 				Label:      "Target Path",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -156,8 +298,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "rendered_text",
 				Label:      "Rendered Text",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,8 +310,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "rendered_sha256",
 				Label:      "Rendered Sha256",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -207,8 +349,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "scope_summary",
 				Label:      "Scope Summary",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -219,8 +361,8 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "rendered_by_actor_id",
 				Label:      "Rendered By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

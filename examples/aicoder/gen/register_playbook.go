@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerPlaybook(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Playbook]{
-		Kind:      "playbook",
-		Display:   "Playbooks",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "playbook",
+		Display:        "Playbooks",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -54,6 +55,50 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPlaybook.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPlaybook.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.ProjectIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPlaybook.ProjectIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPlaybook.ProjectIDNotNil())
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -81,6 +126,32 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPlaybook.BodyContainsFold(f.Value))
 					}
+				case "composes":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.ComposesEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.ComposesNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.ComposesContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPlaybook.ComposesIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPlaybook.ComposesNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPlaybook.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPlaybook.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -88,11 +159,89 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPlaybook.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entPlaybook.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldName))
+						}
+					case "description":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldDescription))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldDescription))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldBody))
+						}
+					case "composes":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldComposes))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldComposes))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -125,8 +274,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -152,7 +301,7 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -194,7 +343,7 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -209,7 +358,7 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -224,7 +373,7 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -239,8 +388,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -251,8 +400,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -266,8 +415,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -281,7 +430,7 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -293,8 +442,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "composes",
 				Label:      "Composes",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -308,8 +457,8 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

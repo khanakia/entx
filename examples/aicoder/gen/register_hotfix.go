@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerHotfix(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Hotfix]{
-		Kind:      "hotfix",
-		Display:   "Hotfixs",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "hotfix",
+		Display:        "Hotfixs",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -53,6 +54,59 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHotfix.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHotfix.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHotfix.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHotfix.RepoIDNotNil())
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,6 +125,39 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entHotfix.BodyContainsFold(f.Value))
 					}
+				case "severity":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.SeverityEQ(entHotfix.Severity(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.SeverityNEQ(entHotfix.Severity(f.Value)))
+					}
+				case "superseded_by_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.SupersededByIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.SupersededByIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.SupersededByIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHotfix.SupersededByIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHotfix.SupersededByIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHotfix.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHotfix.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -78,11 +165,95 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entHotfix.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entHotfix.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldRepoID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldBody))
+						}
+					case "severity":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldSeverity))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldSeverity))
+						}
+					case "superseded_by_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldSupersededByID))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldSupersededByID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -118,8 +289,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -145,7 +316,7 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -187,7 +358,7 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -202,7 +373,7 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -217,7 +388,7 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -232,8 +403,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -244,8 +415,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -259,8 +430,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -271,8 +442,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -286,7 +457,7 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -298,8 +469,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "severity",
 				Label:      "Severity",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -310,8 +481,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "superseded_by_id",
 				Label:      "Superseded By Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -325,8 +496,8 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

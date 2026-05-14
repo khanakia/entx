@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCodeFile(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CodeFile]{
-		Kind:      "codefile",
-		Display:   "CodeFiles",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "codefile",
+		Display:        "CodeFiles",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,139 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCodeFile.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.RepoIDContainsFold(f.Value))
+					}
+				case "path":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.PathEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.PathNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.PathContainsFold(f.Value))
+					}
+				case "language":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.LanguageEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.LanguageNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.LanguageContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCodeFile.LanguageIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCodeFile.LanguageNotNil())
+					}
+				case "content_sha":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeFile.ContentShaEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeFile.ContentShaNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeFile.ContentShaContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCodeFile.ContentShaIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCodeFile.ContentShaNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCodeFile.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entCodeFile.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldRepoID))
+						}
+					case "path":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldPath))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldPath))
+						}
+					case "language":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldLanguage))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldLanguage))
+						}
+					case "content_sha":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldContentSha))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldContentSha))
+						}
+					case "last_indexed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldLastIndexedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldLastIndexedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldArchivedAt))
 						}
 					}
 				}
@@ -75,8 +199,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +226,7 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +241,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +253,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,8 +265,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "path",
 				Label:      "Path",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -153,8 +277,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "language",
 				Label:      "Language",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -183,8 +307,8 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "content_sha",
 				Label:      "Content Sha",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -198,7 +322,7 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_indexed_at",
 				Label:      "Last Indexed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -213,7 +337,7 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,

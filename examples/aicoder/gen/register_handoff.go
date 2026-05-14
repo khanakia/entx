@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerHandoff(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Handoff]{
-		Kind:      "handoff",
-		Display:   "Handoffs",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "handoff",
+		Display:        "Handoffs",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -51,6 +52,50 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHandoff.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHandoff.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHandoff.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHandoff.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHandoff.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHandoff.ProjectIDContainsFold(f.Value))
+					}
+				case "from_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHandoff.FromActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHandoff.FromActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHandoff.FromActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHandoff.FromActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHandoff.FromActorIDNotNil())
+					}
+				case "to_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHandoff.ToActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHandoff.ToActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHandoff.ToActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entHandoff.ToActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entHandoff.ToActorIDNotNil())
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -60,6 +105,15 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entHandoff.BodyContainsFold(f.Value))
 					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHandoff.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHandoff.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHandoff.StatusStrContainsFold(f.Value))
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -67,11 +121,53 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entHandoff.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entHandoff.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldProjectID))
+						}
+					case "from_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldFromActorID))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldFromActorID))
+						}
+					case "to_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldToActorID))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldToActorID))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldBody))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHandoff.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entHandoff.FieldStatusStr))
 						}
 					}
 				}
@@ -101,8 +197,8 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,7 +224,7 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -143,8 +239,8 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,8 +251,8 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "from_actor_id",
 				Label:      "From Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -170,8 +266,8 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "to_actor_id",
 				Label:      "To Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -185,8 +281,8 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

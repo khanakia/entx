@@ -75,6 +75,23 @@ type ProjectScope struct {
 
 func (ProjectScope) Name() string { return "EntTUI.ProjectScope" }
 
+// CountEdges turns on per-edge count display in the preview pane. With
+// it enabled, the runtime fires the generated Count closure for every
+// edge whenever a row's preview is rendered, and shows the result in
+// parentheses next to the edge label (e.g. "subtasks (5)"). Counts cost
+// one query per edge per row-selection-change — cheap on local SQLite,
+// possibly costly on remote DBs, hence opt-in.
+//
+//	func (Task) Annotations() []schema.Annotation {
+//	    return []schema.Annotation{
+//	        enttui.Browse(),
+//	        enttui.CountEdges(),
+//	    }
+//	}
+type CountEdges struct{ schema.Annotation }
+
+func (CountEdges) Name() string { return "EntTUI.CountEdges" }
+
 // --- field-level ---
 
 // AsTitle marks a field as the row title.

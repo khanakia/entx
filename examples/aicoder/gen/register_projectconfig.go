@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerProjectConfig(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ProjectConfig]{
-		Kind:      "projectconfig",
-		Display:   "ProjectConfigs",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "projectconfig",
+		Display:        "ProjectConfigs",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,99 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entProjectConfig.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entProjectConfig.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entProjectConfig.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entProjectConfig.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entProjectConfig.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entProjectConfig.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entProjectConfig.ProjectIDContainsFold(f.Value))
+					}
+				case "key":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entProjectConfig.KeyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entProjectConfig.KeyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entProjectConfig.KeyContainsFold(f.Value))
+					}
+				case "value":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entProjectConfig.ValueEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entProjectConfig.ValueNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entProjectConfig.ValueContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entProjectConfig.ValueIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entProjectConfig.ValueNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldProjectID))
+						}
+					case "key":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldKey))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldKey))
+						}
+					case "value":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldValue))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldValue))
+						}
+					case "setting_updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldSettingUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldSettingUpdatedAt))
 						}
 					}
 				}
@@ -74,8 +158,8 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -101,7 +185,7 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -116,8 +200,8 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,8 +212,8 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "key",
 				Label:      "Key",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -140,8 +224,8 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "value",
 				Label:      "Value",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,7 +239,7 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "setting_updated_at",
 				Label:      "Setting Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,

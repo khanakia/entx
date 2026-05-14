@@ -27,7 +27,32 @@ type App struct {
 	// code looks up keys it knows about (e.g. "project_id"); unknown keys
 	// are ignored. Nil = no scope filters applied.
 	scope map[string]string
+
+	// initialKind, if set, overrides "first registered kind" as the page
+	// to mount when Run starts. Set via app.SetInitialKind("task").
+	initialKind string
+
+	// defaultViewMode is the global preferred view for any page that
+	// doesn't have a per-spec EntitySpec.Default.Mode set. "table" or
+	// "list". Default: "list".
+	defaultViewMode string
+
+	// instances maps a tview Pages entry name → the Go-side widget
+	// struct (*browser or *tableView). Used to recover state for v-toggle.
+	instances map[string]any
 }
+
+// SetInitialKind overrides which entity kind is shown when Run starts.
+// Empty (or unknown kind) → falls back to the first kind that registered.
+//
+//	app.SetInitialKind("task")
+func (a *App) SetInitialKind(kind string) { a.initialKind = kind }
+
+// SetDefaultViewMode picks the view used by any new page that doesn't
+// override via EntitySpec.Default.Mode. Valid: "list", "table".
+//
+//	app.SetDefaultViewMode("table")
+func (a *App) SetDefaultViewMode(mode string) { a.defaultViewMode = mode }
 
 // SetScope attaches a generic scope filter. Generated Fetch closures look
 // up whichever keys they understand and apply them as predicates.
@@ -90,19 +115,43 @@ func (a *App) Run() error {
 		return errEmpty
 	}
 
-	// Pick the first registered kind as initial view.
+	// Pick the initial kind: explicit override wins; otherwise first
+	// registered. Falls back to registration order if the override
+	// names an unknown kind.
 	first := a.kindOrder[0]
+	if a.initialKind != "" {
+		if _, ok := a.specs[a.initialKind]; ok {
+			first = a.initialKind
+		}
+	}
 	a.pushBrowser(first, "")
 
 	// Global key handler — single-letter shortcuts (`k`, `q`, `?`) only
 	// fire when focus is NOT inside a text input; otherwise the user
 	// typing "task" into the picker would re-trigger the picker.
+	//
+	// esc handling: only pop the page stack when the front page IS a stack
+	// entry. If a modal overlay is in front (preview, filter, picker,
+	// sort/cond/columns modals, help), the modal's own InputCapture
+	// handles esc — we don't want to also pop the underlying stack page
+	// out from under it. See bug fix: opening preview via enter, pressing
+	// esc was emptying the table because popPage removed the table page.
 	a.tv.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		// Don't eat keystrokes while the user is typing in an input field.
+		// While typing into a text field, never intercept characters —
+		// `k` should type a `k`, not open the picker. esc inside an input
+		// is owned by the input itself (it knows whether to clear or
+		// dismiss its overlay).
 		if _, typing := a.tv.GetFocus().(*tview.InputField); typing {
+			return ev
+		}
+		// While ANY modal overlay is in front (preview, filter, picker,
+		// sort/condition/columns modals, help), do not intercept letter
+		// shortcuts — the modal's own InputCapture owns them. This is
+		// why `K` in the sort modal was opening the kind picker: the
+		// global handler was eating `k` before the modal saw it.
+		if a.frontIsModal() {
 			if ev.Key() == tcell.KeyEscape {
-				a.popPage()
-				return nil
+				return ev
 			}
 			return ev
 		}
@@ -117,8 +166,7 @@ func (a *App) Run() error {
 			a.openHelp()
 			return nil
 		}
-		switch ev.Key() {
-		case tcell.KeyEscape:
+		if ev.Key() == tcell.KeyEscape {
 			a.popPage()
 			return nil
 		}
@@ -128,56 +176,132 @@ func (a *App) Run() error {
 	return a.tv.SetRoot(a.pages, true).EnableMouse(true).Run()
 }
 
-// pushBrowser opens a new Browser page for the given kind. Optional ID
-// restricts the page to a single row (used by edge upward navigation).
+// pushBrowser opens a page for the given kind in the appropriate view
+// mode. Mode resolution order (first non-empty wins):
+//  1. spec.Default.Mode (annotation enttui.DefaultView("table") etc.)
+//  2. a.defaultViewMode (app.SetDefaultViewMode("table"))
+//  3. "list"  (the original list+preview UX)
+//
+// Optional focusID restricts a list-mode page to a single row (used by
+// edge upward navigation). Ignored in table mode for v1.
 func (a *App) pushBrowser(kind, focusID string) {
 	spec, ok := a.specs[kind]
 	if !ok {
 		return
 	}
-	b := newBrowser(a, spec)
-	name := pageName("browse", kind, focusID)
+
+	mode := spec.defaultView.Mode
+	if mode == "" {
+		mode = a.defaultViewMode
+	}
+	if mode == "" {
+		mode = "list"
+	}
+
 	title := spec.display
 	if title == "" {
 		title = kind
 	}
+
+	if mode == "table" {
+		t := newTableView(a, spec)
+		name := pageName("table", kind, "")
+		a.pages.AddPage(name, t.root, true, true)
+		a.stack = append(a.stack, pageEntry{name: name, title: title + " (table)"})
+		a.tv.SetFocus(t.table)
+		a.registerInstance(name, t)
+		return
+	}
+
+	b := newBrowser(a, spec)
+	name := pageName("browse", kind, focusID)
 	a.pages.AddPage(name, b.root, true, true)
 	a.stack = append(a.stack, pageEntry{name: name, title: title})
 	a.tv.SetFocus(b.list)
+	a.registerInstance(name, b)
 	if focusID != "" {
 		b.focusID(focusID)
 	}
 }
 
-// swapToTable replaces the current top page with a table view of the same
-// spec. Used by the browser's `v` key.
+// swapToTable replaces the current top page with a table view of the
+// same spec. Carries over filter / sort / page / selection from the
+// previous (browser) view so the toggle feels transparent.
 func (a *App) swapToTable(spec *anySpec) {
 	if len(a.stack) == 0 {
 		return
 	}
 	top := a.stack[len(a.stack)-1]
+
+	// Snapshot state from the outgoing view before removing it.
+	var s viewState
+	if b, ok := a.pageInstance(top.name).(*browser); ok && b != nil {
+		s = b.state()
+	} else if t, ok := a.pageInstance(top.name).(*tableView); ok && t != nil {
+		s = t.state()
+	}
+
 	a.pages.RemovePage(top.name)
+	a.clearInstance(top.name)
 
 	t := newTableView(a, spec)
 	name := pageName("table", spec.kind, "")
 	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display + " (table)"}
 	a.pages.AddPage(name, t.root, true, true)
 	a.tv.SetFocus(t.table)
+	a.registerInstance(name, t)
+	t.applyState(s)
 }
 
-// swapToBrowser is the inverse — used by the table view's `v` key.
+// swapToBrowser is the inverse — table → list+preview. Same state
+// preservation as swapToTable.
 func (a *App) swapToBrowser(spec *anySpec) {
 	if len(a.stack) == 0 {
 		return
 	}
 	top := a.stack[len(a.stack)-1]
+
+	var s viewState
+	if t, ok := a.pageInstance(top.name).(*tableView); ok && t != nil {
+		s = t.state()
+	} else if b, ok := a.pageInstance(top.name).(*browser); ok && b != nil {
+		s = b.state()
+	}
+
 	a.pages.RemovePage(top.name)
+	a.clearInstance(top.name)
 
 	b := newBrowser(a, spec)
 	name := pageName("browse", spec.kind, "")
 	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display}
 	a.pages.AddPage(name, b.root, true, true)
 	a.tv.SetFocus(b.list)
+	a.registerInstance(name, b)
+	b.applyState(s)
+}
+
+// --- page-name → widget-instance registry ---
+//
+// tview.Pages stores primitives but not Go-side instance pointers, so we
+// keep a parallel map to recover the *browser / *tableView for state
+// handoff during view toggles. Cleared on popPage / RemovePage paths.
+
+func (a *App) registerInstance(name string, inst any) {
+	if a.instances == nil {
+		a.instances = map[string]any{}
+	}
+	a.instances[name] = inst
+}
+
+func (a *App) pageInstance(name string) any {
+	if a.instances == nil {
+		return nil
+	}
+	return a.instances[name]
+}
+
+func (a *App) clearInstance(name string) {
+	delete(a.instances, name)
 }
 
 // pushBrowserList opens a new Browser page filtered to a fixed set of
@@ -194,6 +318,24 @@ func (a *App) pushBrowserList(refs EntityRefList) {
 	a.pages.AddPage(name, b.root, true, true)
 	a.stack = append(a.stack, pageEntry{name: name, title: title})
 	a.tv.SetFocus(b.list)
+	a.registerInstance(name, b)
+}
+
+// frontIsModal returns true when the front tview page is NOT one of the
+// stack pages (i.e. an overlay like preview / filter / picker / etc.).
+// Used by the global esc handler to defer to the modal's own InputCapture
+// instead of popping the underlying stack page.
+func (a *App) frontIsModal() bool {
+	front, _ := a.pages.GetFrontPage()
+	if front == "" {
+		return false
+	}
+	for _, e := range a.stack {
+		if e.name == front {
+			return false
+		}
+	}
+	return true
 }
 
 // popPage returns to the previous page in the back-stack.
@@ -203,6 +345,7 @@ func (a *App) popPage() {
 	}
 	top := a.stack[len(a.stack)-1]
 	a.pages.RemovePage(top.name)
+	a.clearInstance(top.name)
 	a.stack = a.stack[:len(a.stack)-1]
 	prev := a.stack[len(a.stack)-1]
 	a.pages.SwitchToPage(prev.name)
@@ -223,27 +366,7 @@ func (a *App) closePicker() {
 	}
 }
 
-// openHelp shows a modal with keybindings.
-func (a *App) openHelp() {
-	m := tview.NewModal().
-		SetText(helpText).
-		AddButtons([]string{"OK"}).
-		SetDoneFunc(func(_ int, _ string) {
-			a.pages.RemovePage("help")
-		})
-	a.pages.AddPage("help", m, true, true)
-}
-
-const helpText = `enttui — keybindings
-
-  k        open kind picker
-  /        filter (substring)
-  s        cycle sort
-  enter    open preview / drill into edge
-  esc      back / close modal
-  ?        this help
-  q        quit
-`
+// openHelp lives in help.go — searchable shortcut palette overlay.
 
 var errEmpty = &runtimeError{msg: "enttui: no entities registered — call Register[T] before Run"}
 

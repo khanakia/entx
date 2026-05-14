@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerWorkspace(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Workspace]{
-		Kind:      "workspace",
-		Display:   "Workspaces",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "workspace",
+		Display:        "Workspaces",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkspace.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkspace.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkspace.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkspace.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkspace.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkspace.ProjectIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -81,11 +100,41 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkspace.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entWorkspace.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entWorkspace.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entWorkspace.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkspace.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entWorkspace.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkspace.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entWorkspace.FieldProjectID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkspace.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entWorkspace.FieldName))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkspace.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entWorkspace.FieldBody))
 						}
 					}
 				}
@@ -121,8 +170,8 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -148,7 +197,7 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -163,8 +212,8 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -175,7 +224,7 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,

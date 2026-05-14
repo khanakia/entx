@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchEval(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchEval]{
-		Kind:      "bencheval",
-		Display:   "BenchEvals",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "bencheval",
+		Display:        "BenchEvals",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,210 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchEval.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.ProjectIDContainsFold(f.Value))
+					}
+				case "code":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.CodeEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.CodeNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.CodeContainsFold(f.Value))
+					}
+				case "category":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.CategoryEQ(entBenchEval.Category(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.CategoryNEQ(entBenchEval.Category(f.Value)))
+					}
+				case "prompt":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.PromptEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.PromptNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.PromptContainsFold(f.Value))
+					}
+				case "linked_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.LinkedKindEQ(entBenchEval.LinkedKind(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.LinkedKindNEQ(entBenchEval.LinkedKind(f.Value)))
+					}
+				case "linked_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.LinkedIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.LinkedIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.LinkedIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchEval.LinkedIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchEval.LinkedIDNotNil())
+					}
+				case "linked_body_snapshot":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.LinkedBodySnapshotEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.LinkedBodySnapshotNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.LinkedBodySnapshotContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchEval.LinkedBodySnapshotIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchEval.LinkedBodySnapshotNotNil())
+					}
+				case "grader_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.GraderKindEQ(entBenchEval.GraderKind(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.GraderKindNEQ(entBenchEval.GraderKind(f.Value)))
+					}
+				case "notes":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.NotesEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.NotesNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.NotesContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchEval.NotesIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchEval.NotesNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entBenchEval.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entBenchEval.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entBenchEval.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entBenchEval.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entBenchEval.CreatedByActorIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entBenchEval.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entBenchEval.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldProjectID))
+						}
+					case "code":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldCode))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldCode))
+						}
+					case "category":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldCategory))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldCategory))
+						}
+					case "prompt":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldPrompt))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldPrompt))
+						}
+					case "linked_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldLinkedKind))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldLinkedKind))
+						}
+					case "linked_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldLinkedID))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldLinkedID))
+						}
+					case "linked_body_snapshot":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldLinkedBodySnapshot))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldLinkedBodySnapshot))
+						}
+					case "grader_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldGraderKind))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldGraderKind))
+						}
+					case "notes":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldNotes))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldNotes))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldCreatedByActorID))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldArchivedAt))
 						}
 					}
 				}
@@ -75,8 +270,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +297,7 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +312,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +324,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "code",
 				Label:      "Code",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,8 +336,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "category",
 				Label:      "Category",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -153,8 +348,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "prompt",
 				Label:      "Prompt",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -165,8 +360,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "linked_kind",
 				Label:      "Linked Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -177,8 +372,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "linked_id",
 				Label:      "Linked Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -192,8 +387,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "linked_body_snapshot",
 				Label:      "Linked Body Snapshot",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -207,8 +402,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "grader_kind",
 				Label:      "Grader Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -243,8 +438,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "notes",
 				Label:      "Notes",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -258,8 +453,8 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -273,7 +468,7 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -290,6 +485,9 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.BenchEval]{
 			{
 				Name: "results", Display: "BenchResults", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.BenchEval) (int, error) {
 					return client.BenchEval.QueryResults(r).Count(ctx)
 				},

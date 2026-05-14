@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRepo(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Repo]{
-		Kind:      "repo",
-		Display:   "Repos",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "repo",
+		Display:        "Repos",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -38,16 +39,118 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRepo.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRepo.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRepo.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRepo.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRepo.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRepo.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRepo.ProjectIDContainsFold(f.Value))
+					}
+				case "mount_name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRepo.MountNameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRepo.MountNameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRepo.MountNameContainsFold(f.Value))
+					}
+				case "display_name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRepo.DisplayNameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRepo.DisplayNameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRepo.DisplayNameContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRepo.DisplayNameIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRepo.DisplayNameNotNil())
+					}
+				case "origin_url":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRepo.OriginURLEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRepo.OriginURLNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRepo.OriginURLContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRepo.OriginURLIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRepo.OriginURLNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entRepo.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entRepo.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldProjectID))
+						}
+					case "mount_name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldMountName))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldMountName))
+						}
+					case "display_name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldDisplayName))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldDisplayName))
+						}
+					case "origin_url":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldOriginURL))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldOriginURL))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldArchivedAt))
 						}
 					}
 				}
@@ -74,8 +177,8 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -101,7 +204,7 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -116,8 +219,8 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -128,8 +231,8 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "mount_name",
 				Label:      "Mount Name",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -140,8 +243,8 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "display_name",
 				Label:      "Display Name",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -155,8 +258,8 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "origin_url",
 				Label:      "Origin Url",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -170,7 +273,7 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -187,6 +290,12 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.Repo]{
 			{
 				Name: "project", Display: "→ Projects", Kind: runtime.EdgeUpward, Trigger: "p",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.Repo) (int, error) {
+					return client.Repo.QueryProject(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.Repo) (runtime.EntityRef, error) {
 					tgt, err := client.Repo.QueryProject(r).Only(ctx)
 					if err != nil {
@@ -197,6 +306,9 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			},
 			{
 				Name: "memories", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.Repo) (int, error) {
 					return client.Repo.QueryMemories(r).Count(ctx)
 				},

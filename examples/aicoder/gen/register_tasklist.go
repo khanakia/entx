@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTaskList(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TaskList]{
-		Kind:      "tasklist",
-		Display:   "TaskLists",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "tasklist",
+		Display:        "TaskLists",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskList.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskList.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskList.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskList.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskList.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskList.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -74,6 +93,15 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entTaskList.BodyNotNil())
 					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTaskList.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTaskList.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTaskList.StatusStrContainsFold(f.Value))
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -81,11 +109,47 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTaskList.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entTaskList.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldBody))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTaskList.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entTaskList.FieldStatusStr))
 						}
 					}
 				}
@@ -121,8 +185,8 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -148,7 +212,7 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -163,8 +227,8 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -175,7 +239,7 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -187,8 +251,8 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -201,6 +265,9 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.TaskList]{
 			{
 				Name: "tasks", Display: "Tasks", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.TaskList) (int, error) {
 					return client.TaskList.QueryTasks(r).Count(ctx)
 				},

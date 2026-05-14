@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCompressRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CompressRun]{
-		Kind:      "compressrun",
-		Display:   "CompressRuns",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "compressrun",
+		Display:        "CompressRuns",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,74 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCompressRun.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCompressRun.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCompressRun.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCompressRun.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCompressRun.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCompressRun.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCompressRun.ProjectIDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCompressRun.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCompressRun.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCompressRun.SourceKindContainsFold(f.Value))
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCompressRun.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entCompressRun.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCompressRun.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entCompressRun.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCompressRun.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCompressRun.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCompressRun.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entCompressRun.FieldProjectID))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCompressRun.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entCompressRun.FieldSourceKind))
 						}
 					}
 				}
@@ -75,8 +134,8 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +161,7 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +176,8 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +188,8 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CodeSymbol]{
-		Kind:      "codesymbol",
-		Display:   "CodeSymbols",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "codesymbol",
+		Display:        "CodeSymbols",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,33 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.ProjectIDContainsFold(f.Value))
+					}
+				case "code_file_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.CodeFileIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.CodeFileIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.CodeFileIDContainsFold(f.Value))
+					}
 				case "name":
 					switch f.Op {
 					case runtime.OpEq:
@@ -61,6 +89,28 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entCodeSymbol.NameContainsFold(f.Value))
 					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.KindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.KindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.KindContainsFold(f.Value))
+					}
+				case "signature":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.SignatureEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.SignatureNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.SignatureContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entCodeSymbol.SignatureIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entCodeSymbol.SignatureNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -68,11 +118,53 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCodeSymbol.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entCodeSymbol.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldProjectID))
+						}
+					case "code_file_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldCodeFileID))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldCodeFileID))
+						}
+					case "name":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldName))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldName))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldKind))
+						}
+					case "signature":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldSignature))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldSignature))
 						}
 					}
 				}
@@ -102,8 +194,8 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,7 +221,7 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -144,8 +236,8 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -156,8 +248,8 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "code_file_id",
 				Label:      "Code File Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +260,7 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "name",
 				Label:      "Name",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +272,8 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -222,8 +314,8 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "signature",
 				Label:      "Signature",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

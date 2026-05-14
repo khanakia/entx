@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerDecision(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Decision]{
-		Kind:      "decision",
-		Display:   "Decisions",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "decision",
+		Display:        "Decisions",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -53,6 +54,59 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entDecision.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entDecision.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entDecision.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entDecision.RepoIDNotNil())
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,6 +125,39 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entDecision.BodyContainsFold(f.Value))
 					}
+				case "status":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.StatusEQ(entDecision.Status(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.StatusNEQ(entDecision.Status(f.Value)))
+					}
+				case "superseded_by_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.SupersededByIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.SupersededByIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.SupersededByIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entDecision.SupersededByIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entDecision.SupersededByIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entDecision.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entDecision.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entDecision.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entDecision.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entDecision.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -78,11 +165,95 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entDecision.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entDecision.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldRepoID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldBody))
+						}
+					case "status":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldStatus))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldStatus))
+						}
+					case "superseded_by_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldSupersededByID))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldSupersededByID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entDecision.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entDecision.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -118,8 +289,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -145,7 +316,7 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -187,7 +358,7 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -202,7 +373,7 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -217,7 +388,7 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -232,8 +403,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -244,8 +415,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -259,8 +430,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -271,8 +442,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -286,7 +457,7 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -298,8 +469,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status",
 				Label:      "Status",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -310,8 +481,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "superseded_by_id",
 				Label:      "Superseded By Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -325,8 +496,8 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

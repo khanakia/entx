@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerPlan(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Plan]{
-		Kind:      "plan",
-		Display:   "Plans",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "plan",
+		Display:        "Plans",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlan.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlan.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlan.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlan.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlan.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlan.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,28 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPlan.BodyContainsFold(f.Value))
 					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlan.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlan.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlan.StatusStrContainsFold(f.Value))
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlan.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlan.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlan.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entPlan.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entPlan.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +118,53 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPlan.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entPlan.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldBody))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldStatusStr))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlan.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entPlan.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +197,8 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +224,7 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +239,8 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +251,7 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +263,8 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -192,8 +275,8 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -209,6 +292,9 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.Plan]{
 			{
 				Name: "tasks", Display: "Tasks", Kind: runtime.EdgeDrill, Trigger: "enter",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
 				Count: func(ctx context.Context, r *ent.Plan) (int, error) {
 					return client.Plan.QueryTasks(r).Count(ctx)
 				},

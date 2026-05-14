@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.{{ .Name }}]{
-		Kind:      "{{ .Kind }}",
-		Display:   "{{ .Display }}",
-		Group:     "{{ .Group }}",
-		Icon:      "{{ .Icon }}",
-		PageSize:  {{ if .PageSize }}{{ .PageSize }}{{ else }}200{{ end }},
-		MultiSort: {{ .MultiSort }},
+		Kind:           "{{ .Kind }}",
+		Display:        "{{ .Display }}",
+		Group:          "{{ .Group }}",
+		Icon:           "{{ .Icon }}",
+		PageSize:       {{ if .PageSize }}{{ .PageSize }}{{ else }}200{{ end }},
+		MultiSort:      {{ .MultiSort }},
+		ShowEdgeCounts: {{ .ShowEdgeCounts }},
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -71,9 +72,17 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:  q = q.Where({{ $.PredAlias }}.{{ .GoName }}NotNil())
 					{{- end }}
 					}
+					{{- else if or (eq .Kind "enum") (eq .Kind "enumPtr") }}
+					switch f.Op {
+					case runtime.OpEq:  q = q.Where({{ $.PredAlias }}.{{ .GoName }}EQ({{ $.PredAlias }}.{{ .GoName }}(f.Value)))
+					case runtime.OpNeq: q = q.Where({{ $.PredAlias }}.{{ .GoName }}NEQ({{ $.PredAlias }}.{{ .GoName }}(f.Value)))
+					{{- if eq .Kind "enumPtr" }}
+					case runtime.OpIsNull:  q = q.Where({{ $.PredAlias }}.{{ .GoName }}IsNil())
+					case runtime.OpNotNull: q = q.Where({{ $.PredAlias }}.{{ .GoName }}NotNil())
+					{{- end }}
+					}
 					{{- else }}
-					// Non-string filterable fields await Phase F2 type-
-					// aware codegen. Currently only EQ-via-string applies.
+					// Numeric / time / json filtering awaits Phase F2.
 					_ = f
 					{{- end }}
 				{{- end }}
@@ -168,6 +177,12 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 			{{- range .Edges }}
 			{
 				Name: "{{ .Name }}", Display: "{{ .Display }}", Kind: runtime.{{ .Kind }}, Trigger: "{{ .Trigger }}",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.{{ $.Name }}) (int, error) {
+					return client.{{ $.Name }}.Query{{ .GoName }}(r).Count(ctx)
+				},
 				{{- if eq .Kind "EdgeUpward" }}
 				ResolveUpward: func(ctx context.Context, r *ent.{{ $.Name }}) (runtime.EntityRef, error) {
 					tgt, err := client.{{ $.Name }}.Query{{ .GoName }}(r).Only(ctx)
@@ -177,9 +192,6 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 					return runtime.EntityRef{Kind: "{{ .TargetKind }}", ID: tgt.ID}, nil
 				},
 				{{- else }}
-				Count: func(ctx context.Context, r *ent.{{ $.Name }}) (int, error) {
-					return client.{{ $.Name }}.Query{{ .GoName }}(r).Count(ctx)
-				},
 				ResolveDrill: func(ctx context.Context, r *ent.{{ $.Name }}) (runtime.EntityRefList, error) {
 					ids, err := client.{{ $.Name }}.Query{{ .GoName }}(r).IDs(ctx)
 					if err != nil {

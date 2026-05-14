@@ -19,12 +19,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ArchitectureNote]{
-		Kind:      "architecturenote",
-		Display:   "ArchitectureNotes",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "architecturenote",
+		Display:        "ArchitectureNotes",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,24 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entArchitectureNote.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entArchitectureNote.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entArchitectureNote.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entArchitectureNote.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entArchitectureNote.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entArchitectureNote.ProjectIDContainsFold(f.Value))
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -70,6 +89,19 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entArchitectureNote.BodyContainsFold(f.Value))
 					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entArchitectureNote.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entArchitectureNote.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entArchitectureNote.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entArchitectureNote.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entArchitectureNote.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -77,11 +109,47 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entArchitectureNote.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entArchitectureNote.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldProjectID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldBody))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entArchitectureNote.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entArchitectureNote.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -114,8 +182,8 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -141,7 +209,7 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -156,8 +224,8 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,7 +236,7 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -180,8 +248,8 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

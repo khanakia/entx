@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.KnowledgeRevision]{
-		Kind:      "knowledgerevision",
-		Display:   "KnowledgeRevisions",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "knowledgerevision",
+		Display:        "KnowledgeRevisions",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,42 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.ProjectIDContainsFold(f.Value))
+					}
+				case "entity_table":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.EntityTableEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.EntityTableNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.EntityTableContainsFold(f.Value))
+					}
+				case "entity_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.EntityIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.EntityIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.EntityIDContainsFold(f.Value))
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -61,6 +98,19 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entKnowledgeRevision.BodyContainsFold(f.Value))
 					}
+				case "actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.ActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.ActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.ActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entKnowledgeRevision.ActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entKnowledgeRevision.ActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -68,11 +118,53 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entKnowledgeRevision.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entKnowledgeRevision.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldProjectID))
+						}
+					case "entity_table":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldEntityTable))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldEntityTable))
+						}
+					case "entity_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldEntityID))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldEntityID))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldBody))
+						}
+					case "actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldActorID))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldActorID))
 						}
 					}
 				}
@@ -102,8 +194,8 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,7 +221,7 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -144,8 +236,8 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -156,8 +248,8 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_table",
 				Label:      "Entity Table",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -168,8 +260,8 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "entity_id",
 				Label:      "Entity Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -192,8 +284,8 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "actor_id",
 				Label:      "Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

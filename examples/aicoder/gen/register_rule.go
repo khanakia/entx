@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRule(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Rule]{
-		Kind:      "rule",
-		Display:   "Rules",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "rule",
+		Display:        "Rules",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -52,6 +53,63 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.ProjectIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.ProjectIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.ProjectIDNotNil())
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.RepoIDNotNil())
+					}
 				case "body":
 					switch f.Op {
 					case runtime.OpEq:
@@ -61,6 +119,72 @@ func registerRule(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entRule.BodyContainsFold(f.Value))
 					}
+				case "activation":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.ActivationEQ(entRule.Activation(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entRule.ActivationNEQ(entRule.Activation(f.Value)))
+					}
+				case "globs":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.GlobsEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.GlobsNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.GlobsContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.GlobsIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.GlobsNotNil())
+					}
+				case "applies_to_description":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.AppliesToDescriptionEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.AppliesToDescriptionNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.AppliesToDescriptionContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.AppliesToDescriptionIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.AppliesToDescriptionNotNil())
+					}
+				case "severity":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.SeverityEQ(entRule.Severity(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entRule.SeverityNEQ(entRule.Severity(f.Value)))
+					}
+				case "superseded_by_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.SupersededByIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.SupersededByIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.SupersededByIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.SupersededByIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.SupersededByIDNotNil())
+					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRule.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRule.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRule.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRule.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRule.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -68,11 +192,107 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entRule.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entRule.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldRepoID))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldBody))
+						}
+					case "activation":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldActivation))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldActivation))
+						}
+					case "globs":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldGlobs))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldGlobs))
+						}
+					case "applies_to_description":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldAppliesToDescription))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldAppliesToDescription))
+						}
+					case "severity":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldSeverity))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldSeverity))
+						}
+					case "superseded_by_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldSupersededByID))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldSupersededByID))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRule.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entRule.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -105,8 +325,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -132,7 +352,7 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -174,7 +394,7 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -189,7 +409,7 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -204,7 +424,7 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -219,8 +439,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -231,8 +451,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -246,8 +466,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -261,8 +481,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -276,8 +496,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "activation",
 				Label:      "Activation",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -288,8 +508,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "globs",
 				Label:      "Globs",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -303,8 +523,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "applies_to_description",
 				Label:      "Applies To Description",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -318,8 +538,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "severity",
 				Label:      "Severity",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -330,8 +550,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "superseded_by_id",
 				Label:      "Superseded By Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -345,8 +565,8 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

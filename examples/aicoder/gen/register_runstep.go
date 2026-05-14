@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRunStep(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.RunStep]{
-		Kind:      "runstep",
-		Display:   "RunSteps",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "runstep",
+		Display:        "RunSteps",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,123 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRunStep.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.ProjectIDContainsFold(f.Value))
+					}
+				case "run_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.RunIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.RunIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.RunIDContainsFold(f.Value))
+					}
+				case "kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.KindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.KindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.KindContainsFold(f.Value))
+					}
+				case "status_str":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.StatusStrEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.StatusStrNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.StatusStrContainsFold(f.Value))
+					}
+				case "payload":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entRunStep.PayloadEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entRunStep.PayloadNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entRunStep.PayloadContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entRunStep.PayloadIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entRunStep.PayloadNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entRunStep.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entRunStep.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldProjectID))
+						}
+					case "run_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldRunID))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldRunID))
+						}
+					case "kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldKind))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldKind))
+						}
+					case "status_str":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldStatusStr))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldStatusStr))
+						}
+					case "payload":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldPayload))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldPayload))
 						}
 					}
 				}
@@ -75,8 +183,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -102,7 +210,7 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -117,8 +225,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -129,8 +237,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "run_id",
 				Label:      "Run Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -153,8 +261,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "kind",
 				Label:      "Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -165,8 +273,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status_str",
 				Label:      "Status Str",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -177,8 +285,8 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "payload",
 				Label:      "Payload",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -194,6 +302,12 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 		Edges: []runtime.EdgeSpec[*ent.RunStep]{
 			{
 				Name: "run", Display: "→ Runs", Kind: runtime.EdgeUpward, Trigger: "u",
+				// Count is emitted for BOTH upward and drill edges. For
+				// upward edges it returns 0 or 1 (parent exists / doesn't).
+				// For drill edges, the child row count.
+				Count: func(ctx context.Context, r *ent.RunStep) (int, error) {
+					return client.RunStep.QueryRun(r).Count(ctx)
+				},
 				ResolveUpward: func(ctx context.Context, r *ent.RunStep) (runtime.EntityRef, error) {
 					tgt, err := client.RunStep.QueryRun(r).Only(ctx)
 					if err != nil {

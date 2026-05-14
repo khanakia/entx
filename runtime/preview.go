@@ -19,9 +19,14 @@ type previewField struct {
 }
 
 // previewEdge is one entry in the edges footer.
+//
+// Count is non-empty when the entity has the enttui.CountEdges()
+// annotation AND the runtime successfully fetched the count. Shown as
+// "(N)" appended to Display via the template.
 type previewEdge struct {
 	Trigger string
 	Display string
+	Count   string
 }
 
 // previewData is the root context for templates/preview.tmpl.

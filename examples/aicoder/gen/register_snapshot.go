@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerSnapshot(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Snapshot]{
-		Kind:      "snapshot",
-		Display:   "Snapshots",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "snapshot",
+		Display:        "Snapshots",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -53,6 +54,59 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			// silently rather than erroring — keeps the UI forgiving.
 			for _, f := range opts.Filters {
 				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.IDContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.SourceKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.SourceKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.SourceKindContainsFold(f.Value))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSnapshot.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSnapshot.SourceRefNotNil())
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSnapshot.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSnapshot.RepoIDNotNil())
+					}
 				case "title":
 					switch f.Op {
 					case runtime.OpEq:
@@ -71,6 +125,19 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entSnapshot.BodyContainsFold(f.Value))
 					}
+				case "created_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entSnapshot.CreatedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entSnapshot.CreatedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entSnapshot.CreatedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entSnapshot.CreatedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entSnapshot.CreatedByActorIDNotNil())
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -78,11 +145,89 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entSnapshot.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entSnapshot.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldUpdatedAt))
+						}
+					case "last_accessed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldLastAccessedAt))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldLastAccessedAt))
+						}
+					case "last_validated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldLastValidatedAt))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldLastValidatedAt))
+						}
+					case "archived_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldArchivedAt))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldArchivedAt))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldSourceRef))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldRepoID))
+						}
+					case "title":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldTitle))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldTitle))
+						}
+					case "body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldBody))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldBody))
+						}
+					case "taken_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldTakenAt))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldTakenAt))
+						}
+					case "created_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSnapshot.FieldCreatedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entSnapshot.FieldCreatedByActorID))
 						}
 					}
 				}
@@ -115,8 +260,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -142,7 +287,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -184,7 +329,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_accessed_at",
 				Label:      "Last Accessed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -199,7 +344,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "last_validated_at",
 				Label:      "Last Validated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -214,7 +359,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "archived_at",
 				Label:      "Archived At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -229,8 +374,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -241,8 +386,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -256,8 +401,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -268,8 +413,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -283,7 +428,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "title",
 				Label:      "Title",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: true,
 				Hidden:     false,
 				Width:      0,
@@ -295,7 +440,7 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "taken_at",
 				Label:      "Taken At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -310,8 +455,8 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "created_by_actor_id",
 				Label:      "Created By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",

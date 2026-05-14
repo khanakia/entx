@@ -61,6 +61,78 @@ type tableView struct {
 	columnOverrides map[string]bool
 }
 
+// state captures the current view state for handoff to the browser view
+// on `v` toggle. Filter / sort stack / column overrides / page state /
+// selected row all survive.
+func (t *tableView) state() viewState {
+	id := ""
+	if r, _ := t.table.GetSelection(); r >= 1 && r-1 < len(t.rows) {
+		id = t.rows[r-1].ID
+	}
+	stack := append([]SortKey(nil), t.sortStack...)
+	filters := append([]FilterCondition(nil), t.colFilters...)
+	var overrides map[string]bool
+	if t.columnOverrides != nil {
+		overrides = make(map[string]bool, len(t.columnOverrides))
+		for k, v := range t.columnOverrides {
+			overrides[k] = v
+		}
+	}
+	return viewState{
+		Filter:          t.filter,
+		Filters:         filters,
+		SortField:       t.sortField,
+		SortDir:         t.sortDir,
+		SortStack:       stack,
+		Page:            t.page,
+		PageSize:        t.pageSize,
+		SelectedID:      id,
+		ColumnOverrides: overrides,
+	}
+}
+
+// applyState seeds this tableView from a previous view's state.
+func (t *tableView) applyState(s viewState) {
+	if s.Filter != "" {
+		t.filter = s.Filter
+	}
+	if s.Filters != nil {
+		t.colFilters = append([]FilterCondition(nil), s.Filters...)
+	}
+	if s.SortField != "" {
+		t.sortField = s.SortField
+		t.sortDir = s.SortDir
+	}
+	if s.SortStack != nil {
+		t.sortStack = append([]SortKey(nil), s.SortStack...)
+	}
+	if s.PageSize > 0 {
+		t.pageSize = s.PageSize
+	}
+	t.page = s.Page
+	if s.ColumnOverrides != nil {
+		t.columnOverrides = make(map[string]bool, len(s.ColumnOverrides))
+		for k, v := range s.ColumnOverrides {
+			t.columnOverrides[k] = v
+		}
+	}
+	t.refresh()
+	if s.SelectedID != "" {
+		t.focusID(s.SelectedID)
+	}
+}
+
+// focusID moves selection to the data row with the given ID, if present.
+// Used after view toggles to preserve selection.
+func (t *tableView) focusID(id string) {
+	for i, r := range t.rows {
+		if r.ID == id {
+			t.table.Select(i+1, 0) // +1 — row 0 is the header
+			return
+		}
+	}
+}
+
 // newTableView builds the widget tree for an entity in table mode. Does
 // NOT push itself to the Pages stack — the caller does. Refresh runs once
 // before the function returns so cells are populated when shown.
@@ -77,10 +149,21 @@ func newTableView(app *App, spec *anySpec) *tableView {
 		pageSize:  ps,
 	}
 
+	// Selectable on BOTH axes so ←→ moves column focus (Phase D `s` sorts
+	// the focused column) and ↑↓ moves row focus.
+	//
+	// SetFixed(1, 0) pins the header row in place during vertical scroll.
+	// SetSelectedStyle paints the focused cell with high contrast so the
+	// user can actually see where they are when navigating with arrows.
 	t.table = tview.NewTable().
 		SetBorders(false).
-		SetSelectable(true, false). // rows selectable, cells not
-		SetFixed(1, 0)              // header row stays at top while scrolling
+		SetSelectable(true, true).
+		SetFixed(1, 0).
+		SetSeparator(' ').
+		SetSelectedStyle(tcell.StyleDefault.
+			Background(tcell.ColorDodgerBlue).
+			Foreground(tcell.ColorBlack).
+			Attributes(tcell.AttrBold))
 	t.table.SetBorder(true).
 		SetTitle(" " + spec.display + " (table) ").
 		SetTitleColor(tcell.ColorYellow).
@@ -126,10 +209,23 @@ func (t *tableView) refresh() {
 	t.total = total
 	t.table.Clear()
 
-	// Header row. Honors per-instance overrides from the columns modal.
+	// Header row. NotSelectable + the table-wide SetFixed(1, 0) means the
+	// header never accepts focus; ↑/↓ navigation skips straight past it
+	// onto data rows. Sort-stack position indicator appended when active.
 	cols := t.visibleColumns()
 	for c, col := range cols {
-		cell := tview.NewTableCell(col.label).
+		label := col.label
+		for i, k := range t.sortStack {
+			if k.Field == col.key {
+				dir := "↑"
+				if k.Dir == Desc {
+					dir = "↓"
+				}
+				label = fmt.Sprintf("%s %s%d", col.label, dir, i+1)
+				break
+			}
+		}
+		cell := tview.NewTableCell(label).
 			SetTextColor(tcell.ColorYellow).
 			SetAttributes(tcell.AttrBold).
 			SetSelectable(false).
@@ -286,8 +382,18 @@ func (t *tableView) openPreviewOverlay() {
 		}
 		addField(c.label, v)
 	}
+	// Same edge-count logic as browser.refreshPreview — see comment there.
 	for _, e := range t.spec.edges {
-		data.Edges = append(data.Edges, previewEdge{Trigger: e.trigger, Display: e.display})
+		pe := previewEdge{Trigger: e.trigger, Display: e.display}
+		if t.spec.showEdgeCounts && e.count != nil {
+			ctx, cancel := context.WithTimeout(t.app.ctx, 2*time.Second)
+			n, err := e.count(ctx, r.ID)
+			cancel()
+			if err == nil {
+				pe.Count = fmt.Sprintf("%d", n)
+			}
+		}
+		data.Edges = append(data.Edges, pe)
 	}
 
 	body := tview.NewTextView().

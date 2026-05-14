@@ -20,12 +20,13 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.LearnCandidate]{
-		Kind:      "learncandidate",
-		Display:   "LearnCandidates",
-		Group:     "data",
-		Icon:      "•",
-		PageSize:  200,
-		MultiSort: true,
+		Kind:           "learncandidate",
+		Display:        "LearnCandidates",
+		Group:          "data",
+		Icon:           "•",
+		PageSize:       200,
+		MultiSort:      true,
+		ShowEdgeCounts: true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -39,16 +40,216 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entLearnCandidate.ProjectID(v))
 			}
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.IDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.IDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.IDContainsFold(f.Value))
+					}
+				case "project_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.ProjectIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.ProjectIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.ProjectIDContainsFold(f.Value))
+					}
+				case "repo_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.RepoIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.RepoIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.RepoIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entLearnCandidate.RepoIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entLearnCandidate.RepoIDNotNil())
+					}
+				case "proposed_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.ProposedKindEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.ProposedKindNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.ProposedKindContainsFold(f.Value))
+					}
+				case "proposed_body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.ProposedBodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.ProposedBodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.ProposedBodyContainsFold(f.Value))
+					}
+				case "source_kind":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.SourceKindEQ(entLearnCandidate.SourceKind(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.SourceKindNEQ(entLearnCandidate.SourceKind(f.Value)))
+					}
+				case "source_ref":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.SourceRefEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.SourceRefNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.SourceRefContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entLearnCandidate.SourceRefIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entLearnCandidate.SourceRefNotNil())
+					}
+				case "proposed_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.ProposedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.ProposedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.ProposedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entLearnCandidate.ProposedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entLearnCandidate.ProposedByActorIDNotNil())
+					}
+				case "status":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.StatusEQ(entLearnCandidate.Status(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.StatusNEQ(entLearnCandidate.Status(f.Value)))
+					}
+				case "reviewed_by_actor_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.ReviewedByActorIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.ReviewedByActorIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.ReviewedByActorIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entLearnCandidate.ReviewedByActorIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entLearnCandidate.ReviewedByActorIDNotNil())
+					}
+				case "job_id":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entLearnCandidate.JobIDEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entLearnCandidate.JobIDNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entLearnCandidate.JobIDContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entLearnCandidate.JobIDIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entLearnCandidate.JobIDNotNil())
+					}
+				}
+			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
 			// generated dispatch; unknown fields are silently skipped.
 			if len(opts.Sort) > 0 {
 				for _, k := range opts.Sort {
 					switch k.Field {
+					case "id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldID))
+						}
 					case "created_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entLearnCandidate.FieldCreatedAt))
 						} else {
 							q = q.Order(ent.Desc(entLearnCandidate.FieldCreatedAt))
+						}
+					case "updated_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldUpdatedAt))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldUpdatedAt))
+						}
+					case "project_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldProjectID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldProjectID))
+						}
+					case "repo_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldRepoID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldRepoID))
+						}
+					case "proposed_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldProposedKind))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldProposedKind))
+						}
+					case "proposed_body":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldProposedBody))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldProposedBody))
+						}
+					case "source_kind":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldSourceKind))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldSourceKind))
+						}
+					case "source_ref":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldSourceRef))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldSourceRef))
+						}
+					case "proposed_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldProposedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldProposedByActorID))
+						}
+					case "status":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldStatus))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldStatus))
+						}
+					case "reviewed_by_actor_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldReviewedByActorID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldReviewedByActorID))
+						}
+					case "reviewed_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldReviewedAt))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldReviewedAt))
+						}
+					case "job_id":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldJobID))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldJobID))
 						}
 					}
 				}
@@ -78,8 +279,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "id",
 				Label:      "Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -105,7 +306,7 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "updated_at",
 				Label:      "Updated At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -120,8 +321,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "project_id",
 				Label:      "Project Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -132,8 +333,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "repo_id",
 				Label:      "Repo Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -147,8 +348,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "proposed_kind",
 				Label:      "Proposed Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -159,8 +360,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "proposed_body",
 				Label:      "Proposed Body",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -171,8 +372,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_kind",
 				Label:      "Source Kind",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -183,8 +384,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "source_ref",
 				Label:      "Source Ref",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -210,8 +411,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "proposed_by_actor_id",
 				Label:      "Proposed By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -225,8 +426,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "status",
 				Label:      "Status",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -237,8 +438,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "reviewed_by_actor_id",
 				Label:      "Reviewed By Actor Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
@@ -252,7 +453,7 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "reviewed_at",
 				Label:      "Reviewed At",
-				Sortable:   false,
+				Sortable:   true,
 				Filterable: false,
 				Hidden:     false,
 				Width:      0,
@@ -267,8 +468,8 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 			{
 				Key:        "job_id",
 				Label:      "Job Id",
-				Sortable:   false,
-				Filterable: false,
+				Sortable:   true,
+				Filterable: true,
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
