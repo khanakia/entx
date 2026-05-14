@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchEval(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchEval]{
-		Kind:     "bencheval",
-		Display:  "BenchEvals",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "bencheval",
+		Display:   "BenchEvals",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.BenchEval, int, error) {
 			q := client.BenchEval.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchEval.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entBenchEval.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entBenchEval.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchEval.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchEval.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entBenchEval.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entBenchEval.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,75 +72,219 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.BenchEval) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.BenchEval]{
-			{Key: "id", Label: "Id", Get: func(r *ent.BenchEval) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.BenchEval) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.BenchEval) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.BenchEval) string {
-				return r.ProjectID
-			}},
-			{Key: "code", Label: "Code", Get: func(r *ent.BenchEval) string {
-				return r.Code
-			}},
-			{Key: "category", Label: "Category", Get: func(r *ent.BenchEval) string {
-				return string(r.Category)
-			}},
-			{Key: "prompt", Label: "Prompt", Get: func(r *ent.BenchEval) string {
-				return r.Prompt
-			}},
-			{Key: "linked_kind", Label: "Linked Kind", Get: func(r *ent.BenchEval) string {
-				return string(r.LinkedKind)
-			}},
-			{Key: "linked_id", Label: "Linked Id", Get: func(r *ent.BenchEval) string {
-				if r.LinkedID == nil {
-					return ""
-				}
-				return *r.LinkedID
-			}},
-			{Key: "linked_body_snapshot", Label: "Linked Body Snapshot", Get: func(r *ent.BenchEval) string {
-				if r.LinkedBodySnapshot == nil {
-					return ""
-				}
-				return *r.LinkedBodySnapshot
-			}},
-			{Key: "grader_kind", Label: "Grader Kind", Get: func(r *ent.BenchEval) string {
-				return string(r.GraderKind)
-			}},
-			{Key: "expected_pass_with", Label: "Expected Pass With", Get: func(r *ent.BenchEval) string {
-				return fmt.Sprintf("%v", r.ExpectedPassWith)
-			}},
-			{Key: "expected_pass_baseline", Label: "Expected Pass Baseline", Get: func(r *ent.BenchEval) string {
-				return fmt.Sprintf("%v", r.ExpectedPassBaseline)
-			}},
-			{Key: "notes", Label: "Notes", Get: func(r *ent.BenchEval) string {
-				if r.Notes == nil {
-					return ""
-				}
-				return *r.Notes
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.BenchEval) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
-			{Key: "archived_at", Label: "Archived At", Get: func(r *ent.BenchEval) string {
-				if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
-					return ""
-				}
-				return r.ArchivedAt.Format("2006-01-02 15:04:05")
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "code",
+				Label:      "Code",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return r.Code
+				},
+			},
+			{
+				Key:        "category",
+				Label:      "Category",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return string(r.Category)
+				},
+			},
+			{
+				Key:        "prompt",
+				Label:      "Prompt",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return r.Prompt
+				},
+			},
+			{
+				Key:        "linked_kind",
+				Label:      "Linked Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return string(r.LinkedKind)
+				},
+			},
+			{
+				Key:        "linked_id",
+				Label:      "Linked Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.LinkedID == nil {
+						return ""
+					}
+					return *r.LinkedID
+				},
+			},
+			{
+				Key:        "linked_body_snapshot",
+				Label:      "Linked Body Snapshot",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.LinkedBodySnapshot == nil {
+						return ""
+					}
+					return *r.LinkedBodySnapshot
+				},
+			},
+			{
+				Key:        "grader_kind",
+				Label:      "Grader Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return string(r.GraderKind)
+				},
+			},
+			{
+				Key:        "expected_pass_with",
+				Label:      "Expected Pass With",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return fmt.Sprintf("%v", r.ExpectedPassWith)
+				},
+			},
+			{
+				Key:        "expected_pass_baseline",
+				Label:      "Expected Pass Baseline",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					return fmt.Sprintf("%v", r.ExpectedPassBaseline)
+				},
+			},
+			{
+				Key:        "notes",
+				Label:      "Notes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.Notes == nil {
+						return ""
+					}
+					return *r.Notes
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
+			{
+				Key:        "archived_at",
+				Label:      "Archived At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchEval) string {
+					if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
+						return ""
+					}
+					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.BenchEval]{

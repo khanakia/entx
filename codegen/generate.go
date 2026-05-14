@@ -57,6 +57,9 @@ type Options struct {
 //
 // NeedsFmt is set if any field accessor (title/body/column) renders via
 // fmt.Sprintf — the template uses it to gate the "fmt" import.
+//
+// MultiSort / DefaultView / PageSize / NeedsRuntime are populated from
+// schema-level annotations during extraction.
 type EntityMeta struct {
 	Package          string
 	EntPkgPath       string
@@ -70,23 +73,57 @@ type EntityMeta struct {
 	HasProjectID     bool
 	HasCreated       bool
 	HasUpdated       bool
-	FilterPredicates []string // predicate function names usable with substring filter
+	FilterPredicates []string // legacy substring predicates for ListOpts.Filter
 	TitleField       *FieldMeta
 	BodyField        *FieldMeta
 	StatusField      *FieldMeta
 	Columns          []FieldMeta
 	Edges            []EdgeMeta
 	NeedsFmt         bool
+
+	// Phase C — schema annotation results.
+	MultiSort   bool   // enttui.MultiSort() — default true
+	DefaultView string // enttui.DefaultView("list" | "table"); default ""
+	PageSize    int    // enttui.PageSize(N); 0 → spec default (200)
+
+	// Phase C/D — fields the user marked Sortable() (in declaration order).
+	SortableFields []FieldMeta
+	// Phase C/E — fields the user marked Filterable().
+	FilterableFields []FieldMeta
 }
 
 // FieldMeta describes one ent field for template emission.
+//
+// Sortable / Filterable / Hidden / Chip / Width / Align are populated from
+// field-level annotations during extraction.
 type FieldMeta struct {
 	GoName string // Title
 	Key    string // title (snake_case)
 	Label  string // Title
 	// Kind discriminates how the template renders the value:
-	//   "string", "stringPtr", "enum", "time", "scalar", "scalarPtr"
+	//   "string", "stringPtr", "enum", "enumPtr", "time", "timePtr",
+	//   "scalar", "scalarPtr"
 	Kind string
+
+	// Phase C — annotation results.
+	Sortable    bool
+	Filterable  bool
+	Hidden      bool
+	Width       int
+	Align       string
+	ChipEntries []ChipEntry // sorted by key for deterministic output
+
+	// EnumGoType is non-empty for enum fields and holds the generated Go
+	// type name (e.g. "task.Status"). Used by the filter dispatch to cast
+	// the FilterCondition.Value string into the typed enum.
+	EnumGoType string
+}
+
+// ChipEntry is one (value, tone) pair from an enttui.Chip annotation.
+// Sorted by Value for deterministic template output.
+type ChipEntry struct {
+	Value string
+	Tone  string
 }
 
 // EdgeMeta describes one ent edge for template emission.
@@ -186,6 +223,24 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		Icon:       "•",
 		PredPkg:    strings.ToLower(n.Name),
 		PredAlias:  "ent" + n.Name,
+		MultiSort:  true, // default true per ADR-103
+	}
+
+	// --- Schema-level annotations (enttui.Display, Group, Icon, …) ---
+	if s, ok := annotString(n.Annotations, "EntTUI.Display", "Value"); ok {
+		em.Display = s
+	}
+	if s, ok := annotString(n.Annotations, "EntTUI.Group", "Value"); ok {
+		em.Group = s
+	}
+	if s, ok := annotString(n.Annotations, "EntTUI.Icon", "Value"); ok {
+		em.Icon = s
+	}
+	if n, ok := annotInt(n.Annotations, "EntTUI.PageSize", "Value"); ok {
+		em.PageSize = n
+	}
+	if s, ok := annotString(n.Annotations, "EntTUI.DefaultView", "Value"); ok {
+		em.DefaultView = s
 	}
 
 	// Iterate ID field separately — gen.Type stores it on .ID, not in .Fields.
@@ -196,6 +251,38 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	allFields = append(allFields, n.Fields...)
 	for _, f := range allFields {
 		fm := fieldMetaOf(f)
+
+		// --- Field-level annotation reads (Phase C) ---
+		fm.Sortable = hasAnnot(f.Annotations, "EntTUI.Sortable")
+		fm.Filterable = hasAnnot(f.Annotations, "EntTUI.Filterable")
+		fm.Hidden = hasAnnot(f.Annotations, "EntTUI.Hidden")
+		if w, ok := annotInt(f.Annotations, "EntTUI.Width", "Value"); ok {
+			fm.Width = w
+		}
+		if a, ok := annotString(f.Annotations, "EntTUI.Align", "Value"); ok {
+			fm.Align = a
+		}
+		if entries, ok := annotStringMap(f.Annotations, "EntTUI.Chip", "Tones"); ok {
+			for _, kv := range entries {
+				fm.ChipEntries = append(fm.ChipEntries, ChipEntry{Value: kv.K, Tone: kv.V})
+			}
+		}
+
+		// AsTitle / AsBody / AsStatus annotations override the
+		// convention-based hero-field detection below.
+		if hasAnnot(f.Annotations, "EntTUI.AsTitle") {
+			m := fm
+			em.TitleField = &m
+		}
+		if hasAnnot(f.Annotations, "EntTUI.AsBody") {
+			m := fm
+			em.BodyField = &m
+		}
+		if hasAnnot(f.Annotations, "EntTUI.AsStatus") {
+			m := fm
+			em.StatusField = &m
+		}
+
 		switch f.Name {
 		case "id":
 			// id is always rendered via the columns block too.
@@ -203,6 +290,10 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			em.HasProjectID = true
 		case "created_at":
 			em.HasCreated = true
+			if !fm.Sortable {
+				// created_at is sortable by convention even without annotation.
+				fm.Sortable = true
+			}
 		case "updated_at":
 			em.HasUpdated = true
 		case "title", "name":
@@ -222,15 +313,33 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			}
 		}
 
-		// Filter predicates: title + body string fields.
+		// Convention: title-ish + body-ish string fields are filterable
+		// even without the explicit annotation. Keeps existing behavior.
+		if !fm.Filterable && f.IsString() &&
+			(f.Name == "title" || f.Name == "name" || f.Name == "body" || f.Name == "description") {
+			fm.Filterable = true
+		}
+
+		// Legacy substring predicates list (still used for the global `/`
+		// filter in the browser view; Phase E uses structured filters).
 		if (f.Name == "title" || f.Name == "name" || f.Name == "body" || f.Name == "description") && f.IsString() {
 			em.FilterPredicates = append(em.FilterPredicates, fm.GoName+"ContainsFold")
 		}
 
 		// Columns: skip body (rendered as preview body, not column),
-		// always include id, time fields, and meaningful scalars.
+		// always include id, time fields, and meaningful scalars. Hidden
+		// fields stay in the slice but carry the .Hidden flag so the UI
+		// can re-show them on demand.
 		if shouldRenderAsColumn(f) {
 			em.Columns = append(em.Columns, fm)
+		}
+		// Sortable / filterable indexes (used by the multi-sort dispatch
+		// + the condition builder operator menu).
+		if fm.Sortable {
+			em.SortableFields = append(em.SortableFields, fm)
+		}
+		if fm.Filterable {
+			em.FilterableFields = append(em.FilterableFields, fm)
 		}
 	}
 	if n.ID == nil {

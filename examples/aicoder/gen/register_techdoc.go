@@ -19,28 +19,84 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTechDoc(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TechDoc]{
-		Kind:     "techdoc",
-		Display:  "TechDocs",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "techdoc",
+		Display:   "TechDocs",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.TechDoc, int, error) {
 			q := client.TechDoc.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entTechDoc.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTechDoc.Or(
 					entTechDoc.NameContainsFold(opts.Filter),
 					entTechDoc.DescriptionContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entTechDoc.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entTechDoc.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDoc.NameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDoc.NameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDoc.NameContainsFold(f.Value))
+					}
+				case "description":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDoc.DescriptionEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDoc.DescriptionNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDoc.DescriptionContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTechDoc.DescriptionIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTechDoc.DescriptionNotNil())
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDoc.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTechDoc.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entTechDoc.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entTechDoc.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -62,33 +118,87 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.TechDoc) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.TechDoc]{
-			{Key: "id", Label: "Id", Get: func(r *ent.TechDoc) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.TechDoc) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.TechDoc) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.TechDoc) string {
-				return r.ProjectID
-			}},
-			{Key: "name", Label: "Name", Get: func(r *ent.TechDoc) string {
-				return r.Name
-			}},
-			{Key: "base_url", Label: "Base Url", Get: func(r *ent.TechDoc) string {
-				if r.BaseURL == nil {
-					return ""
-				}
-				return *r.BaseURL
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "name",
+				Label:      "Name",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					return r.Name
+				},
+			},
+			{
+				Key:        "base_url",
+				Label:      "Base Url",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					if r.BaseURL == nil {
+						return ""
+					}
+					return *r.BaseURL
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.TechDoc]{

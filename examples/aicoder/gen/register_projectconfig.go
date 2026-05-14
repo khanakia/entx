@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerProjectConfig(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ProjectConfig]{
-		Kind:     "projectconfig",
-		Display:  "ProjectConfigs",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "projectconfig",
+		Display:   "ProjectConfigs",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ProjectConfig, int, error) {
 			q := client.ProjectConfig.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entProjectConfig.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entProjectConfig.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entProjectConfig.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -47,39 +71,102 @@ func registerProjectConfig(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.ProjectConfig) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.ProjectConfig]{
-			{Key: "id", Label: "Id", Get: func(r *ent.ProjectConfig) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.ProjectConfig) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.ProjectConfig) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.ProjectConfig) string {
-				return r.ProjectID
-			}},
-			{Key: "key", Label: "Key", Get: func(r *ent.ProjectConfig) string {
-				return r.Key
-			}},
-			{Key: "value", Label: "Value", Get: func(r *ent.ProjectConfig) string {
-				if r.Value == nil {
-					return ""
-				}
-				return *r.Value
-			}},
-			{Key: "setting_updated_at", Label: "Setting Updated At", Get: func(r *ent.ProjectConfig) string {
-				if r.SettingUpdatedAt.IsZero() {
-					return ""
-				}
-				return r.SettingUpdatedAt.Format("2006-01-02 15:04:05")
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "key",
+				Label:      "Key",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					return r.Key
+				},
+			},
+			{
+				Key:        "value",
+				Label:      "Value",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					if r.Value == nil {
+						return ""
+					}
+					return *r.Value
+				},
+			},
+			{
+				Key:        "setting_updated_at",
+				Label:      "Setting Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ProjectConfig) string {
+					if r.SettingUpdatedAt.IsZero() {
+						return ""
+					}
+					return r.SettingUpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
 		},
 	})
 }

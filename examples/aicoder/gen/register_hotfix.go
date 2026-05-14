@@ -20,28 +20,80 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerHotfix(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Hotfix]{
-		Kind:     "hotfix",
-		Display:  "Hotfixs",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "hotfix",
+		Display:   "Hotfixs",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Hotfix, int, error) {
 			q := client.Hotfix.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entHotfix.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entHotfix.Or(
 					entHotfix.TitleContainsFold(opts.Filter),
 					entHotfix.BodyContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entHotfix.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entHotfix.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "title":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.TitleEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.TitleNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.TitleContainsFold(f.Value))
+					}
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entHotfix.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entHotfix.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entHotfix.BodyContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entHotfix.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entHotfix.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entHotfix.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entHotfix.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -63,84 +115,228 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Hotfix) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Hotfix]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Hotfix) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Hotfix) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Hotfix) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "trust_score", Label: "Trust Score", Get: func(r *ent.Hotfix) string {
-				return fmt.Sprintf("%v", r.TrustScore)
-			}},
-			{Key: "confidence", Label: "Confidence", Get: func(r *ent.Hotfix) string {
-				if r.Confidence == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.Confidence)
-			}},
-			{Key: "last_accessed_at", Label: "Last Accessed At", Get: func(r *ent.Hotfix) string {
-				if r.LastAccessedAt == nil || r.LastAccessedAt.IsZero() {
-					return ""
-				}
-				return r.LastAccessedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "last_validated_at", Label: "Last Validated At", Get: func(r *ent.Hotfix) string {
-				if r.LastValidatedAt == nil || r.LastValidatedAt.IsZero() {
-					return ""
-				}
-				return r.LastValidatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "archived_at", Label: "Archived At", Get: func(r *ent.Hotfix) string {
-				if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
-					return ""
-				}
-				return r.ArchivedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "source_kind", Label: "Source Kind", Get: func(r *ent.Hotfix) string {
-				return r.SourceKind
-			}},
-			{Key: "source_ref", Label: "Source Ref", Get: func(r *ent.Hotfix) string {
-				if r.SourceRef == nil {
-					return ""
-				}
-				return *r.SourceRef
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Hotfix) string {
-				return r.ProjectID
-			}},
-			{Key: "repo_id", Label: "Repo Id", Get: func(r *ent.Hotfix) string {
-				if r.RepoID == nil {
-					return ""
-				}
-				return *r.RepoID
-			}},
-			{Key: "title", Label: "Title", Get: func(r *ent.Hotfix) string {
-				return r.Title
-			}},
-			{Key: "severity", Label: "Severity", Get: func(r *ent.Hotfix) string {
-				return string(r.Severity)
-			}},
-			{Key: "superseded_by_id", Label: "Superseded By Id", Get: func(r *ent.Hotfix) string {
-				if r.SupersededByID == nil {
-					return ""
-				}
-				return *r.SupersededByID
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.Hotfix) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "trust_score",
+				Label:      "Trust Score",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return fmt.Sprintf("%v", r.TrustScore)
+				},
+			},
+			{
+				Key:        "confidence",
+				Label:      "Confidence",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.Confidence == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.Confidence)
+				},
+			},
+			{
+				Key:        "last_accessed_at",
+				Label:      "Last Accessed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.LastAccessedAt == nil || r.LastAccessedAt.IsZero() {
+						return ""
+					}
+					return r.LastAccessedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "last_validated_at",
+				Label:      "Last Validated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.LastValidatedAt == nil || r.LastValidatedAt.IsZero() {
+						return ""
+					}
+					return r.LastValidatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "archived_at",
+				Label:      "Archived At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
+						return ""
+					}
+					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "source_kind",
+				Label:      "Source Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return r.SourceKind
+				},
+			},
+			{
+				Key:        "source_ref",
+				Label:      "Source Ref",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.SourceRef == nil {
+						return ""
+					}
+					return *r.SourceRef
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "repo_id",
+				Label:      "Repo Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.RepoID == nil {
+						return ""
+					}
+					return *r.RepoID
+				},
+			},
+			{
+				Key:        "title",
+				Label:      "Title",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return r.Title
+				},
+			},
+			{
+				Key:        "severity",
+				Label:      "Severity",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return string(r.Severity)
+				},
+			},
+			{
+				Key:        "superseded_by_id",
+				Label:      "Superseded By Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.SupersededByID == nil {
+						return ""
+					}
+					return *r.SupersededByID
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 	})
 }

@@ -20,27 +20,70 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.KnowledgeRevision]{
-		Kind:     "knowledgerevision",
-		Display:  "KnowledgeRevisions",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "knowledgerevision",
+		Display:   "KnowledgeRevisions",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.KnowledgeRevision, int, error) {
 			q := client.KnowledgeRevision.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entKnowledgeRevision.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entKnowledgeRevision.Or(
 					entKnowledgeRevision.BodyContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entKnowledgeRevision.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entKnowledgeRevision.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entKnowledgeRevision.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entKnowledgeRevision.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entKnowledgeRevision.BodyContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entKnowledgeRevision.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entKnowledgeRevision.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entKnowledgeRevision.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entKnowledgeRevision.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -56,39 +99,111 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.KnowledgeRevision) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.KnowledgeRevision]{
-			{Key: "id", Label: "Id", Get: func(r *ent.KnowledgeRevision) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.KnowledgeRevision) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.KnowledgeRevision) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.KnowledgeRevision) string {
-				return r.ProjectID
-			}},
-			{Key: "entity_table", Label: "Entity Table", Get: func(r *ent.KnowledgeRevision) string {
-				return r.EntityTable
-			}},
-			{Key: "entity_id", Label: "Entity Id", Get: func(r *ent.KnowledgeRevision) string {
-				return r.EntityID
-			}},
-			{Key: "revision_num", Label: "Revision Num", Get: func(r *ent.KnowledgeRevision) string {
-				return fmt.Sprintf("%v", r.RevisionNum)
-			}},
-			{Key: "actor_id", Label: "Actor Id", Get: func(r *ent.KnowledgeRevision) string {
-				if r.ActorID == nil {
-					return ""
-				}
-				return *r.ActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "entity_table",
+				Label:      "Entity Table",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return r.EntityTable
+				},
+			},
+			{
+				Key:        "entity_id",
+				Label:      "Entity Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return r.EntityID
+				},
+			},
+			{
+				Key:        "revision_num",
+				Label:      "Revision Num",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return fmt.Sprintf("%v", r.RevisionNum)
+				},
+			},
+			{
+				Key:        "actor_id",
+				Label:      "Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					if r.ActorID == nil {
+						return ""
+					}
+					return *r.ActorID
+				},
+			},
 		},
 	})
 }

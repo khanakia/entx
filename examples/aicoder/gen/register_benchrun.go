@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchRun]{
-		Kind:     "benchrun",
-		Display:  "BenchRuns",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "benchrun",
+		Display:   "BenchRuns",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.BenchRun, int, error) {
 			q := client.BenchRun.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchRun.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entBenchRun.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entBenchRun.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchRun.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchRun.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entBenchRun.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entBenchRun.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -51,81 +75,234 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.BenchRun) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.BenchRun]{
-			{Key: "id", Label: "Id", Get: func(r *ent.BenchRun) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.BenchRun) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.BenchRun) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.BenchRun) string {
-				return r.ProjectID
-			}},
-			{Key: "code", Label: "Code", Get: func(r *ent.BenchRun) string {
-				return r.Code
-			}},
-			{Key: "model", Label: "Model", Get: func(r *ent.BenchRun) string {
-				return r.Model
-			}},
-			{Key: "temperature", Label: "Temperature", Get: func(r *ent.BenchRun) string {
-				return fmt.Sprintf("%v", r.Temperature)
-			}},
-			{Key: "runs_per_arm", Label: "Runs Per Arm", Get: func(r *ent.BenchRun) string {
-				return fmt.Sprintf("%v", r.RunsPerArm)
-			}},
-			{Key: "claude_md_sha256", Label: "Claude Md Sha256", Get: func(r *ent.BenchRun) string {
-				if r.ClaudeMdSha256 == nil {
-					return ""
-				}
-				return *r.ClaudeMdSha256
-			}},
-			{Key: "claude_md_size_bytes", Label: "Claude Md Size Bytes", Get: func(r *ent.BenchRun) string {
-				if r.ClaudeMdSizeBytes == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.ClaudeMdSizeBytes)
-			}},
-			{Key: "started_at", Label: "Started At", Get: func(r *ent.BenchRun) string {
-				if r.StartedAt.IsZero() {
-					return ""
-				}
-				return r.StartedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "completed_at", Label: "Completed At", Get: func(r *ent.BenchRun) string {
-				if r.CompletedAt == nil || r.CompletedAt.IsZero() {
-					return ""
-				}
-				return r.CompletedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "status", Label: "Status", Get: func(r *ent.BenchRun) string {
-				return string(r.Status)
-			}},
-			{Key: "cost_usd_estimate", Label: "Cost Usd Estimate", Get: func(r *ent.BenchRun) string {
-				return fmt.Sprintf("%v", r.CostUsdEstimate)
-			}},
-			{Key: "total_calls", Label: "Total Calls", Get: func(r *ent.BenchRun) string {
-				return fmt.Sprintf("%v", r.TotalCalls)
-			}},
-			{Key: "notes", Label: "Notes", Get: func(r *ent.BenchRun) string {
-				if r.Notes == nil {
-					return ""
-				}
-				return *r.Notes
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.BenchRun) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "code",
+				Label:      "Code",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return r.Code
+				},
+			},
+			{
+				Key:        "model",
+				Label:      "Model",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return r.Model
+				},
+			},
+			{
+				Key:        "temperature",
+				Label:      "Temperature",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return fmt.Sprintf("%v", r.Temperature)
+				},
+			},
+			{
+				Key:        "runs_per_arm",
+				Label:      "Runs Per Arm",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return fmt.Sprintf("%v", r.RunsPerArm)
+				},
+			},
+			{
+				Key:        "claude_md_sha256",
+				Label:      "Claude Md Sha256",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.ClaudeMdSha256 == nil {
+						return ""
+					}
+					return *r.ClaudeMdSha256
+				},
+			},
+			{
+				Key:        "claude_md_size_bytes",
+				Label:      "Claude Md Size Bytes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.ClaudeMdSizeBytes == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.ClaudeMdSizeBytes)
+				},
+			},
+			{
+				Key:        "started_at",
+				Label:      "Started At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.StartedAt.IsZero() {
+						return ""
+					}
+					return r.StartedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "completed_at",
+				Label:      "Completed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.CompletedAt == nil || r.CompletedAt.IsZero() {
+						return ""
+					}
+					return r.CompletedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "status",
+				Label:      "Status",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return string(r.Status)
+				},
+			},
+			{
+				Key:        "cost_usd_estimate",
+				Label:      "Cost Usd Estimate",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return fmt.Sprintf("%v", r.CostUsdEstimate)
+				},
+			},
+			{
+				Key:        "total_calls",
+				Label:      "Total Calls",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					return fmt.Sprintf("%v", r.TotalCalls)
+				},
+			},
+			{
+				Key:        "notes",
+				Label:      "Notes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.Notes == nil {
+						return ""
+					}
+					return *r.Notes
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchRun) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.BenchRun]{

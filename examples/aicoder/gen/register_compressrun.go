@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCompressRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CompressRun]{
-		Kind:     "compressrun",
-		Display:  "CompressRuns",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "compressrun",
+		Display:   "CompressRuns",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.CompressRun, int, error) {
 			q := client.CompressRun.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCompressRun.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entCompressRun.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entCompressRun.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCompressRun.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCompressRun.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entCompressRun.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entCompressRun.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,39 +72,102 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.CompressRun) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.CompressRun]{
-			{Key: "id", Label: "Id", Get: func(r *ent.CompressRun) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.CompressRun) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.CompressRun) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.CompressRun) string {
-				return r.ProjectID
-			}},
-			{Key: "source_kind", Label: "Source Kind", Get: func(r *ent.CompressRun) string {
-				return r.SourceKind
-			}},
-			{Key: "input_tokens", Label: "Input Tokens", Get: func(r *ent.CompressRun) string {
-				if r.InputTokens == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.InputTokens)
-			}},
-			{Key: "output_tokens", Label: "Output Tokens", Get: func(r *ent.CompressRun) string {
-				if r.OutputTokens == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.OutputTokens)
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "source_kind",
+				Label:      "Source Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					return r.SourceKind
+				},
+			},
+			{
+				Key:        "input_tokens",
+				Label:      "Input Tokens",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					if r.InputTokens == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.InputTokens)
+				},
+			},
+			{
+				Key:        "output_tokens",
+				Label:      "Output Tokens",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CompressRun) string {
+					if r.OutputTokens == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.OutputTokens)
+				},
+			},
 		},
 	})
 }

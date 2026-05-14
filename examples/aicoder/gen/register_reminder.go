@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerReminder(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Reminder]{
-		Kind:     "reminder",
-		Display:  "Reminders",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "reminder",
+		Display:   "Reminders",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Reminder, int, error) {
 			q := client.Reminder.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entReminder.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entReminder.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entReminder.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entReminder.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entReminder.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entReminder.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entReminder.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -47,63 +71,162 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Reminder) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Reminder]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Reminder) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Reminder) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Reminder) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Reminder) string {
-				return r.ProjectID
-			}},
-			{Key: "target_table", Label: "Target Table", Get: func(r *ent.Reminder) string {
-				if r.TargetTable == nil {
-					return ""
-				}
-				return *r.TargetTable
-			}},
-			{Key: "target_id", Label: "Target Id", Get: func(r *ent.Reminder) string {
-				if r.TargetID == nil {
-					return ""
-				}
-				return *r.TargetID
-			}},
-			{Key: "due_at", Label: "Due At", Get: func(r *ent.Reminder) string {
-				if r.DueAt.IsZero() {
-					return ""
-				}
-				return r.DueAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "message", Label: "Message", Get: func(r *ent.Reminder) string {
-				return r.Message
-			}},
-			{Key: "recurrence", Label: "Recurrence", Get: func(r *ent.Reminder) string {
-				if r.Recurrence == nil {
-					return ""
-				}
-				return string(*r.Recurrence)
-			}},
-			{Key: "done_at", Label: "Done At", Get: func(r *ent.Reminder) string {
-				if r.DoneAt == nil || r.DoneAt.IsZero() {
-					return ""
-				}
-				return r.DoneAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.Reminder) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "target_table",
+				Label:      "Target Table",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.TargetTable == nil {
+						return ""
+					}
+					return *r.TargetTable
+				},
+			},
+			{
+				Key:        "target_id",
+				Label:      "Target Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.TargetID == nil {
+						return ""
+					}
+					return *r.TargetID
+				},
+			},
+			{
+				Key:        "due_at",
+				Label:      "Due At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.DueAt.IsZero() {
+						return ""
+					}
+					return r.DueAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "message",
+				Label:      "Message",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					return r.Message
+				},
+			},
+			{
+				Key:        "recurrence",
+				Label:      "Recurrence",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.Recurrence == nil {
+						return ""
+					}
+					return string(*r.Recurrence)
+				},
+			},
+			{
+				Key:        "done_at",
+				Label:      "Done At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.DoneAt == nil || r.DoneAt.IsZero() {
+						return ""
+					}
+					return r.DoneAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Reminder) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 	})
 }

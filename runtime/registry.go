@@ -20,6 +20,7 @@ type anySpec struct {
 	icon    string
 
 	pageSize    int
+	multiSort   bool
 	defaultView DefaultView
 
 	// fetch returns the row IDs + their typed display data.
@@ -32,10 +33,14 @@ type anySpec struct {
 }
 
 type anyColumn struct {
-	key    string
-	label  string
-	chip   map[string]string
-	hidden bool
+	key        string
+	label      string
+	chip       map[string]string
+	hidden     bool
+	sortable   bool
+	filterable bool
+	width      int
+	align      string
 }
 
 type anyEdge struct {
@@ -114,6 +119,8 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 	for _, c := range spec.Columns {
 		columns = append(columns, anyColumn{
 			key: c.Key, label: c.Label, chip: c.Chip, hidden: c.Hidden,
+			sortable: c.Sortable, filterable: c.Filterable,
+			width: c.Width, align: c.Align,
 		})
 	}
 
@@ -177,6 +184,7 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		group:       spec.Group,
 		icon:        spec.Icon,
 		pageSize:    spec.PageSize,
+		multiSort:   spec.MultiSort,
 		defaultView: spec.Default,
 		fetch:       fetch,
 		getOne:      getOne,

@@ -53,19 +53,60 @@ type browser struct {
 	filter    string
 	sortField string
 	sortDir   SortDir
-	idFilter  map[string]bool // non-nil = restrict to this set (drill mode)
+
+	// Pagination state (Phase B). pageSize defaults to spec.pageSize and
+	// can be cycled via +/-. page is 0-indexed internally but rendered
+	// 1-indexed in the status bar.
+	page     int
+	pageSize int
+
+	idFilter map[string]bool // non-nil = restrict to this set (drill mode)
 }
 
 // newBrowser builds the widget tree for one entity kind. It does NOT add
 // itself to the Pages stack — the caller (App.pushBrowser / pushBrowserList)
 // does that. The newly-constructed browser is already refreshed once and
 // has the list pane focused.
+// pageSizesCycle is the set of page-size values + / - cycles through.
+// Annotation-driven custom sizes will land in Phase C.
+var pageSizesCycle = []int{50, 100, 200, 500, 1000}
+
+// nextPageSize advances cur to the next (or previous, if dir==-1) value
+// in pageSizesCycle. Snaps to the nearest cycle member if cur isn't in the
+// list — handles entities with annotated PageSize values outside the cycle.
+func nextPageSize(cur, dir int) int {
+	idx := 0
+	for i, v := range pageSizesCycle {
+		if v == cur {
+			idx = i
+			break
+		}
+		if v > cur {
+			idx = i
+			break
+		}
+	}
+	idx += dir
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(pageSizesCycle) {
+		idx = len(pageSizesCycle) - 1
+	}
+	return pageSizesCycle[idx]
+}
+
 func newBrowser(app *App, spec *anySpec) *browser {
+	ps := spec.pageSize
+	if ps <= 0 {
+		ps = 200
+	}
 	b := &browser{
 		app:       app,
 		spec:      spec,
 		sortField: spec.defaultView.SortField,
 		sortDir:   spec.defaultView.SortDir,
+		pageSize:  ps,
 	}
 
 	b.list = tview.NewList().
@@ -125,8 +166,8 @@ func (b *browser) refresh() {
 		Filter:    b.filter,
 		SortField: b.sortField,
 		SortDir:   b.sortDir,
-		Offset:    b.offset,
-		Limit:     b.spec.pageSize,
+		Offset:    b.page * b.pageSize,
+		Limit:     b.pageSize,
 		Scope:     b.app.Scope(),
 	}
 	rows, total, err := b.spec.fetch(ctx, opts)
@@ -240,6 +281,52 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		b.cycleSort()
 		return nil
 	case 'r':
+		b.refresh()
+		return nil
+	case 'v':
+		// Phase A: swap this page to a table view of the same spec.
+		// Filter / sort state is intentionally NOT carried across — keeps
+		// the toggle stateless. Phase D can preserve state.
+		b.app.swapToTable(b.spec)
+		return nil
+	case 'n':
+		// Phase B: next page (clamped).
+		if (b.page+1)*b.pageSize < b.total {
+			b.page++
+			b.refresh()
+		}
+		return nil
+	case 'p':
+		// Phase B: previous page (clamped).
+		if b.page > 0 {
+			b.page--
+			b.refresh()
+		}
+		return nil
+	case 'G':
+		// Phase B: jump to last page.
+		if b.pageSize > 0 && b.total > 0 {
+			b.page = (b.total - 1) / b.pageSize
+			b.refresh()
+		}
+		return nil
+	case 'g':
+		// Phase B: jump to first page.
+		if b.page != 0 {
+			b.page = 0
+			b.refresh()
+		}
+		return nil
+	case '+', '=':
+		// Phase B: bump to next page size in the cycle.
+		b.pageSize = nextPageSize(b.pageSize, +1)
+		b.page = 0
+		b.refresh()
+		return nil
+	case '-', '_':
+		// Phase B: drop to previous page size in the cycle.
+		b.pageSize = nextPageSize(b.pageSize, -1)
+		b.page = 0
 		b.refresh()
 		return nil
 	}
@@ -401,6 +488,12 @@ func (b *browser) updateStatus(msg string) {
 	if b.sortDir == Desc {
 		dir = "↓"
 	}
+	pages := 0
+	page := 0
+	if b.pageSize > 0 && b.total > 0 {
+		pages = (b.total + b.pageSize - 1) / b.pageSize
+		page = b.page + 1
+	}
 	b.stat.SetText(renderStatus(statusData{
 		Display:   b.spec.display,
 		Count:     fmt.Sprintf("%d/%d", b.list.GetItemCount(), b.total),
@@ -408,6 +501,9 @@ func (b *browser) updateStatus(msg string) {
 		SortDir:   dir,
 		Filter:    b.filter,
 		Error:     msg,
+		Page:      page,
+		Pages:     pages,
+		PageSize:  b.pageSize,
 	}))
 }
 

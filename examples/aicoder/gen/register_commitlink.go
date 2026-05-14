@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCommitLink(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CommitLink]{
-		Kind:     "commitlink",
-		Display:  "CommitLinks",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "commitlink",
+		Display:   "CommitLinks",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.CommitLink, int, error) {
 			q := client.CommitLink.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCommitLink.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entCommitLink.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entCommitLink.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCommitLink.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCommitLink.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entCommitLink.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entCommitLink.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -47,63 +71,171 @@ func registerCommitLink(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.CommitLink) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.CommitLink]{
-			{Key: "id", Label: "Id", Get: func(r *ent.CommitLink) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.CommitLink) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.CommitLink) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.CommitLink) string {
-				return r.ProjectID
-			}},
-			{Key: "entity_table", Label: "Entity Table", Get: func(r *ent.CommitLink) string {
-				return r.EntityTable
-			}},
-			{Key: "entity_id", Label: "Entity Id", Get: func(r *ent.CommitLink) string {
-				return r.EntityID
-			}},
-			{Key: "sha", Label: "Sha", Get: func(r *ent.CommitLink) string {
-				return r.Sha
-			}},
-			{Key: "message", Label: "Message", Get: func(r *ent.CommitLink) string {
-				if r.Message == nil {
-					return ""
-				}
-				return *r.Message
-			}},
-			{Key: "repo_path", Label: "Repo Path", Get: func(r *ent.CommitLink) string {
-				if r.RepoPath == nil {
-					return ""
-				}
-				return *r.RepoPath
-			}},
-			{Key: "author", Label: "Author", Get: func(r *ent.CommitLink) string {
-				if r.Author == nil {
-					return ""
-				}
-				return *r.Author
-			}},
-			{Key: "committed_at", Label: "Committed At", Get: func(r *ent.CommitLink) string {
-				if r.CommittedAt == nil {
-					return ""
-				}
-				return *r.CommittedAt
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.CommitLink) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "entity_table",
+				Label:      "Entity Table",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					return r.EntityTable
+				},
+			},
+			{
+				Key:        "entity_id",
+				Label:      "Entity Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					return r.EntityID
+				},
+			},
+			{
+				Key:        "sha",
+				Label:      "Sha",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					return r.Sha
+				},
+			},
+			{
+				Key:        "message",
+				Label:      "Message",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.Message == nil {
+						return ""
+					}
+					return *r.Message
+				},
+			},
+			{
+				Key:        "repo_path",
+				Label:      "Repo Path",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.RepoPath == nil {
+						return ""
+					}
+					return *r.RepoPath
+				},
+			},
+			{
+				Key:        "author",
+				Label:      "Author",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.Author == nil {
+						return ""
+					}
+					return *r.Author
+				},
+			},
+			{
+				Key:        "committed_at",
+				Label:      "Committed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.CommittedAt == nil {
+						return ""
+					}
+					return *r.CommittedAt
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CommitLink) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 	})
 }

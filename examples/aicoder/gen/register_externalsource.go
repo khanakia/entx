@@ -20,27 +20,70 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerExternalSource(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.ExternalSource]{
-		Kind:     "externalsource",
-		Display:  "ExternalSources",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "externalsource",
+		Display:   "ExternalSources",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.ExternalSource, int, error) {
 			q := client.ExternalSource.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entExternalSource.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entExternalSource.Or(
 					entExternalSource.NameContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entExternalSource.NameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entExternalSource.NameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entExternalSource.NameContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entExternalSource.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entExternalSource.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -56,39 +99,111 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.ExternalSource) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.ExternalSource]{
-			{Key: "id", Label: "Id", Get: func(r *ent.ExternalSource) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.ExternalSource) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.ExternalSource) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.ExternalSource) string {
-				return r.ProjectID
-			}},
-			{Key: "kind", Label: "Kind", Get: func(r *ent.ExternalSource) string {
-				return r.Kind
-			}},
-			{Key: "name", Label: "Name", Get: func(r *ent.ExternalSource) string {
-				return r.Name
-			}},
-			{Key: "config_json", Label: "Config Json", Get: func(r *ent.ExternalSource) string {
-				if r.ConfigJSON == nil {
-					return ""
-				}
-				return *r.ConfigJSON
-			}},
-			{Key: "enabled", Label: "Enabled", Get: func(r *ent.ExternalSource) string {
-				return fmt.Sprintf("%v", r.Enabled)
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "kind",
+				Label:      "Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					return r.Kind
+				},
+			},
+			{
+				Key:        "name",
+				Label:      "Name",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					return r.Name
+				},
+			},
+			{
+				Key:        "config_json",
+				Label:      "Config Json",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					if r.ConfigJSON == nil {
+						return ""
+					}
+					return *r.ConfigJSON
+				},
+			},
+			{
+				Key:        "enabled",
+				Label:      "Enabled",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ExternalSource) string {
+					return fmt.Sprintf("%v", r.Enabled)
+				},
+			},
 		},
 	})
 }

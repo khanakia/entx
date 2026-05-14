@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerLearnRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.LearnRun]{
-		Kind:     "learnrun",
-		Display:  "LearnRuns",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "learnrun",
+		Display:   "LearnRuns",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.LearnRun, int, error) {
 			q := client.LearnRun.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entLearnRun.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entLearnRun.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entLearnRun.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnRun.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entLearnRun.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entLearnRun.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entLearnRun.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,42 +72,114 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.LearnRun) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.LearnRun]{
-			{Key: "id", Label: "Id", Get: func(r *ent.LearnRun) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.LearnRun) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.LearnRun) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.LearnRun) string {
-				return r.ProjectID
-			}},
-			{Key: "source_kind", Label: "Source Kind", Get: func(r *ent.LearnRun) string {
-				return r.SourceKind
-			}},
-			{Key: "snapshots_count", Label: "Snapshots Count", Get: func(r *ent.LearnRun) string {
-				if r.SnapshotsCount == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.SnapshotsCount)
-			}},
-			{Key: "candidates_count", Label: "Candidates Count", Get: func(r *ent.LearnRun) string {
-				if r.CandidatesCount == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.CandidatesCount)
-			}},
-			{Key: "status_str", Label: "Status Str", Get: func(r *ent.LearnRun) string {
-				return r.StatusStr
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "source_kind",
+				Label:      "Source Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					return r.SourceKind
+				},
+			},
+			{
+				Key:        "snapshots_count",
+				Label:      "Snapshots Count",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					if r.SnapshotsCount == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.SnapshotsCount)
+				},
+			},
+			{
+				Key:        "candidates_count",
+				Label:      "Candidates Count",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					if r.CandidatesCount == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.CandidatesCount)
+				},
+			},
+			{
+				Key:        "status_str",
+				Label:      "Status Str",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnRun) string {
+					return r.StatusStr
+				},
+			},
 		},
 	})
 }

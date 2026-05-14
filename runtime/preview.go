@@ -41,6 +41,10 @@ func renderPreview(data previewData) string {
 }
 
 // statusData feeds templates/status.tmpl.
+//
+// Page / Pages / PageSize are populated by Phase B (pagination). When
+// Page == 0 the template hides the whole "page X/N" segment — useful for
+// drill-mode pages that don't paginate.
 type statusData struct {
 	Display   string
 	Count     string
@@ -48,6 +52,9 @@ type statusData struct {
 	SortDir   string
 	Filter    string
 	Error     string
+	Page      int // 1-indexed; 0 hides the segment
+	Pages     int
+	PageSize  int
 }
 
 func renderStatus(data statusData) string {

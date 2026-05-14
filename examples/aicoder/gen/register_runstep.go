@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRunStep(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.RunStep]{
-		Kind:     "runstep",
-		Display:  "RunSteps",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "runstep",
+		Display:   "RunSteps",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.RunStep, int, error) {
 			q := client.RunStep.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRunStep.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entRunStep.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entRunStep.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRunStep.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRunStep.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entRunStep.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entRunStep.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,42 +72,123 @@ func registerRunStep(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.RunStep) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.RunStep]{
-			{Key: "id", Label: "Id", Get: func(r *ent.RunStep) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.RunStep) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.RunStep) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.RunStep) string {
-				return r.ProjectID
-			}},
-			{Key: "run_id", Label: "Run Id", Get: func(r *ent.RunStep) string {
-				return r.RunID
-			}},
-			{Key: "seq", Label: "Seq", Get: func(r *ent.RunStep) string {
-				return fmt.Sprintf("%v", r.Seq)
-			}},
-			{Key: "kind", Label: "Kind", Get: func(r *ent.RunStep) string {
-				return r.Kind
-			}},
-			{Key: "status_str", Label: "Status Str", Get: func(r *ent.RunStep) string {
-				return r.StatusStr
-			}},
-			{Key: "payload", Label: "Payload", Get: func(r *ent.RunStep) string {
-				if r.Payload == nil {
-					return ""
-				}
-				return *r.Payload
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "run_id",
+				Label:      "Run Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return r.RunID
+				},
+			},
+			{
+				Key:        "seq",
+				Label:      "Seq",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return fmt.Sprintf("%v", r.Seq)
+				},
+			},
+			{
+				Key:        "kind",
+				Label:      "Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return r.Kind
+				},
+			},
+			{
+				Key:        "status_str",
+				Label:      "Status Str",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					return r.StatusStr
+				},
+			},
+			{
+				Key:        "payload",
+				Label:      "Payload",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RunStep) string {
+					if r.Payload == nil {
+						return ""
+					}
+					return *r.Payload
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.RunStep]{

@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerSession(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Session]{
-		Kind:     "session",
-		Display:  "Sessions",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "session",
+		Display:   "Sessions",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Session, int, error) {
 			q := client.Session.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entSession.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entSession.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entSession.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entSession.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entSession.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entSession.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entSession.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -47,48 +71,120 @@ func registerSession(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Session) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Session]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Session) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Session) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Session) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Session) string {
-				return r.ProjectID
-			}},
-			{Key: "started_at", Label: "Started At", Get: func(r *ent.Session) string {
-				if r.StartedAt.IsZero() {
-					return ""
-				}
-				return r.StartedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "ended_at", Label: "Ended At", Get: func(r *ent.Session) string {
-				if r.EndedAt == nil || r.EndedAt.IsZero() {
-					return ""
-				}
-				return r.EndedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "actor_id", Label: "Actor Id", Get: func(r *ent.Session) string {
-				if r.ActorID == nil {
-					return ""
-				}
-				return *r.ActorID
-			}},
-			{Key: "agent_kind", Label: "Agent Kind", Get: func(r *ent.Session) string {
-				if r.AgentKind == nil {
-					return ""
-				}
-				return *r.AgentKind
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "started_at",
+				Label:      "Started At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.StartedAt.IsZero() {
+						return ""
+					}
+					return r.StartedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "ended_at",
+				Label:      "Ended At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.EndedAt == nil || r.EndedAt.IsZero() {
+						return ""
+					}
+					return r.EndedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "actor_id",
+				Label:      "Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.ActorID == nil {
+						return ""
+					}
+					return *r.ActorID
+				},
+			},
+			{
+				Key:        "agent_kind",
+				Label:      "Agent Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Session) string {
+					if r.AgentKind == nil {
+						return ""
+					}
+					return *r.AgentKind
+				},
+			},
 		},
 	})
 }

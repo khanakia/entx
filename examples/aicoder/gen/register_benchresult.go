@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerBenchResult(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.BenchResult]{
-		Kind:     "benchresult",
-		Display:  "BenchResults",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "benchresult",
+		Display:   "BenchResults",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.BenchResult, int, error) {
 			q := client.BenchResult.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchResult.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entBenchResult.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entBenchResult.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entBenchResult.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entBenchResult.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entBenchResult.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entBenchResult.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,84 +72,255 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.BenchResult) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.BenchResult]{
-			{Key: "id", Label: "Id", Get: func(r *ent.BenchResult) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.BenchResult) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.BenchResult) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.BenchResult) string {
-				return r.ProjectID
-			}},
-			{Key: "bench_run_id", Label: "Bench Run Id", Get: func(r *ent.BenchResult) string {
-				return r.BenchRunID
-			}},
-			{Key: "bench_eval_id", Label: "Bench Eval Id", Get: func(r *ent.BenchResult) string {
-				return r.BenchEvalID
-			}},
-			{Key: "arm", Label: "Arm", Get: func(r *ent.BenchResult) string {
-				return string(r.Arm)
-			}},
-			{Key: "attempt", Label: "Attempt", Get: func(r *ent.BenchResult) string {
-				return fmt.Sprintf("%v", r.Attempt)
-			}},
-			{Key: "prompt_sent", Label: "Prompt Sent", Get: func(r *ent.BenchResult) string {
-				return r.PromptSent
-			}},
-			{Key: "output_received", Label: "Output Received", Get: func(r *ent.BenchResult) string {
-				return r.OutputReceived
-			}},
-			{Key: "output_chars", Label: "Output Chars", Get: func(r *ent.BenchResult) string {
-				return fmt.Sprintf("%v", r.OutputChars)
-			}},
-			{Key: "input_tokens_estimate", Label: "Input Tokens Estimate", Get: func(r *ent.BenchResult) string {
-				if r.InputTokensEstimate == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.InputTokensEstimate)
-			}},
-			{Key: "output_tokens_estimate", Label: "Output Tokens Estimate", Get: func(r *ent.BenchResult) string {
-				if r.OutputTokensEstimate == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.OutputTokensEstimate)
-			}},
-			{Key: "elapsed_ms", Label: "Elapsed Ms", Get: func(r *ent.BenchResult) string {
-				return fmt.Sprintf("%v", r.ElapsedMs)
-			}},
-			{Key: "grade", Label: "Grade", Get: func(r *ent.BenchResult) string {
-				return string(r.Grade)
-			}},
-			{Key: "cost_usd_estimate", Label: "Cost Usd Estimate", Get: func(r *ent.BenchResult) string {
-				return fmt.Sprintf("%v", r.CostUsdEstimate)
-			}},
-			{Key: "judge_model", Label: "Judge Model", Get: func(r *ent.BenchResult) string {
-				if r.JudgeModel == nil {
-					return ""
-				}
-				return *r.JudgeModel
-			}},
-			{Key: "judge_rubric", Label: "Judge Rubric", Get: func(r *ent.BenchResult) string {
-				if r.JudgeRubric == nil {
-					return ""
-				}
-				return *r.JudgeRubric
-			}},
-			{Key: "judge_response", Label: "Judge Response", Get: func(r *ent.BenchResult) string {
-				if r.JudgeResponse == nil {
-					return ""
-				}
-				return *r.JudgeResponse
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "bench_run_id",
+				Label:      "Bench Run Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.BenchRunID
+				},
+			},
+			{
+				Key:        "bench_eval_id",
+				Label:      "Bench Eval Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.BenchEvalID
+				},
+			},
+			{
+				Key:        "arm",
+				Label:      "Arm",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return string(r.Arm)
+				},
+			},
+			{
+				Key:        "attempt",
+				Label:      "Attempt",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return fmt.Sprintf("%v", r.Attempt)
+				},
+			},
+			{
+				Key:        "prompt_sent",
+				Label:      "Prompt Sent",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.PromptSent
+				},
+			},
+			{
+				Key:        "output_received",
+				Label:      "Output Received",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return r.OutputReceived
+				},
+			},
+			{
+				Key:        "output_chars",
+				Label:      "Output Chars",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return fmt.Sprintf("%v", r.OutputChars)
+				},
+			},
+			{
+				Key:        "input_tokens_estimate",
+				Label:      "Input Tokens Estimate",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.InputTokensEstimate == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.InputTokensEstimate)
+				},
+			},
+			{
+				Key:        "output_tokens_estimate",
+				Label:      "Output Tokens Estimate",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.OutputTokensEstimate == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.OutputTokensEstimate)
+				},
+			},
+			{
+				Key:        "elapsed_ms",
+				Label:      "Elapsed Ms",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return fmt.Sprintf("%v", r.ElapsedMs)
+				},
+			},
+			{
+				Key:        "grade",
+				Label:      "Grade",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return string(r.Grade)
+				},
+			},
+			{
+				Key:        "cost_usd_estimate",
+				Label:      "Cost Usd Estimate",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					return fmt.Sprintf("%v", r.CostUsdEstimate)
+				},
+			},
+			{
+				Key:        "judge_model",
+				Label:      "Judge Model",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.JudgeModel == nil {
+						return ""
+					}
+					return *r.JudgeModel
+				},
+			},
+			{
+				Key:        "judge_rubric",
+				Label:      "Judge Rubric",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.JudgeRubric == nil {
+						return ""
+					}
+					return *r.JudgeRubric
+				},
+			},
+			{
+				Key:        "judge_response",
+				Label:      "Judge Response",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.BenchResult) string {
+					if r.JudgeResponse == nil {
+						return ""
+					}
+					return *r.JudgeResponse
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.BenchResult]{

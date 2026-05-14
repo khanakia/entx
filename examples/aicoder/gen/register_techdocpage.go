@@ -19,28 +19,84 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerTechDocPage(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.TechDocPage]{
-		Kind:     "techdocpage",
-		Display:  "TechDocPages",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "techdocpage",
+		Display:   "TechDocPages",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.TechDocPage, int, error) {
 			q := client.TechDocPage.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entTechDocPage.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTechDocPage.Or(
 					entTechDocPage.TitleContainsFold(opts.Filter),
 					entTechDocPage.BodyContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entTechDocPage.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entTechDocPage.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "title":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.TitleEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.TitleNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.TitleContainsFold(f.Value))
+					case runtime.OpIsNull:
+						q = q.Where(entTechDocPage.TitleIsNil())
+					case runtime.OpNotNull:
+						q = q.Where(entTechDocPage.TitleNotNil())
+					}
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTechDocPage.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entTechDocPage.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entTechDocPage.BodyContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entTechDocPage.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entTechDocPage.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entTechDocPage.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entTechDocPage.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -62,42 +118,114 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.TechDocPage) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.TechDocPage]{
-			{Key: "id", Label: "Id", Get: func(r *ent.TechDocPage) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.TechDocPage) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.TechDocPage) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.TechDocPage) string {
-				return r.ProjectID
-			}},
-			{Key: "tech_doc_id", Label: "Tech Doc Id", Get: func(r *ent.TechDocPage) string {
-				return r.TechDocID
-			}},
-			{Key: "url", Label: "Url", Get: func(r *ent.TechDocPage) string {
-				return r.URL
-			}},
-			{Key: "title", Label: "Title", Get: func(r *ent.TechDocPage) string {
-				if r.Title == nil {
-					return ""
-				}
-				return *r.Title
-			}},
-			{Key: "content_sha", Label: "Content Sha", Get: func(r *ent.TechDocPage) string {
-				if r.ContentSha == nil {
-					return ""
-				}
-				return *r.ContentSha
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "tech_doc_id",
+				Label:      "Tech Doc Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					return r.TechDocID
+				},
+			},
+			{
+				Key:        "url",
+				Label:      "Url",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					return r.URL
+				},
+			},
+			{
+				Key:        "title",
+				Label:      "Title",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					if r.Title == nil {
+						return ""
+					}
+					return *r.Title
+				},
+			},
+			{
+				Key:        "content_sha",
+				Label:      "Content Sha",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					if r.ContentSha == nil {
+						return ""
+					}
+					return *r.ContentSha
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.TechDocPage]{

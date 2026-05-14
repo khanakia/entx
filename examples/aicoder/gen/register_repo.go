@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRepo(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Repo]{
-		Kind:     "repo",
-		Display:  "Repos",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "repo",
+		Display:   "Repos",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Repo, int, error) {
 			q := client.Repo.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRepo.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entRepo.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entRepo.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRepo.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRepo.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entRepo.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entRepo.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -47,45 +71,117 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Repo) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Repo]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Repo) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Repo) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Repo) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Repo) string {
-				return r.ProjectID
-			}},
-			{Key: "mount_name", Label: "Mount Name", Get: func(r *ent.Repo) string {
-				return r.MountName
-			}},
-			{Key: "display_name", Label: "Display Name", Get: func(r *ent.Repo) string {
-				if r.DisplayName == nil {
-					return ""
-				}
-				return *r.DisplayName
-			}},
-			{Key: "origin_url", Label: "Origin Url", Get: func(r *ent.Repo) string {
-				if r.OriginURL == nil {
-					return ""
-				}
-				return *r.OriginURL
-			}},
-			{Key: "archived_at", Label: "Archived At", Get: func(r *ent.Repo) string {
-				if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
-					return ""
-				}
-				return r.ArchivedAt.Format("2006-01-02 15:04:05")
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "mount_name",
+				Label:      "Mount Name",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					return r.MountName
+				},
+			},
+			{
+				Key:        "display_name",
+				Label:      "Display Name",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					if r.DisplayName == nil {
+						return ""
+					}
+					return *r.DisplayName
+				},
+			},
+			{
+				Key:        "origin_url",
+				Label:      "Origin Url",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					if r.OriginURL == nil {
+						return ""
+					}
+					return *r.OriginURL
+				},
+			},
+			{
+				Key:        "archived_at",
+				Label:      "Archived At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Repo) string {
+					if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
+						return ""
+					}
+					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.Repo]{

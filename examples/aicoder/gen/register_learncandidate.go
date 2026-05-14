@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.LearnCandidate]{
-		Kind:     "learncandidate",
-		Display:  "LearnCandidates",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "learncandidate",
+		Display:   "LearnCandidates",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.LearnCandidate, int, error) {
 			q := client.LearnCandidate.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entLearnCandidate.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entLearnCandidate.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entLearnCandidate.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entLearnCandidate.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entLearnCandidate.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entLearnCandidate.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entLearnCandidate.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -51,75 +75,210 @@ func registerLearnCandidate(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.LearnCandidate) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.LearnCandidate]{
-			{Key: "id", Label: "Id", Get: func(r *ent.LearnCandidate) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.LearnCandidate) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.LearnCandidate) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.LearnCandidate) string {
-				return r.ProjectID
-			}},
-			{Key: "repo_id", Label: "Repo Id", Get: func(r *ent.LearnCandidate) string {
-				if r.RepoID == nil {
-					return ""
-				}
-				return *r.RepoID
-			}},
-			{Key: "proposed_kind", Label: "Proposed Kind", Get: func(r *ent.LearnCandidate) string {
-				return r.ProposedKind
-			}},
-			{Key: "proposed_body", Label: "Proposed Body", Get: func(r *ent.LearnCandidate) string {
-				return r.ProposedBody
-			}},
-			{Key: "source_kind", Label: "Source Kind", Get: func(r *ent.LearnCandidate) string {
-				return string(r.SourceKind)
-			}},
-			{Key: "source_ref", Label: "Source Ref", Get: func(r *ent.LearnCandidate) string {
-				if r.SourceRef == nil {
-					return ""
-				}
-				return *r.SourceRef
-			}},
-			{Key: "trust_score", Label: "Trust Score", Get: func(r *ent.LearnCandidate) string {
-				return fmt.Sprintf("%v", r.TrustScore)
-			}},
-			{Key: "proposed_by_actor_id", Label: "Proposed By Actor Id", Get: func(r *ent.LearnCandidate) string {
-				if r.ProposedByActorID == nil {
-					return ""
-				}
-				return *r.ProposedByActorID
-			}},
-			{Key: "status", Label: "Status", Get: func(r *ent.LearnCandidate) string {
-				return string(r.Status)
-			}},
-			{Key: "reviewed_by_actor_id", Label: "Reviewed By Actor Id", Get: func(r *ent.LearnCandidate) string {
-				if r.ReviewedByActorID == nil {
-					return ""
-				}
-				return *r.ReviewedByActorID
-			}},
-			{Key: "reviewed_at", Label: "Reviewed At", Get: func(r *ent.LearnCandidate) string {
-				if r.ReviewedAt == nil || r.ReviewedAt.IsZero() {
-					return ""
-				}
-				return r.ReviewedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "job_id", Label: "Job Id", Get: func(r *ent.LearnCandidate) string {
-				if r.JobID == nil {
-					return ""
-				}
-				return *r.JobID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "repo_id",
+				Label:      "Repo Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.RepoID == nil {
+						return ""
+					}
+					return *r.RepoID
+				},
+			},
+			{
+				Key:        "proposed_kind",
+				Label:      "Proposed Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return r.ProposedKind
+				},
+			},
+			{
+				Key:        "proposed_body",
+				Label:      "Proposed Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return r.ProposedBody
+				},
+			},
+			{
+				Key:        "source_kind",
+				Label:      "Source Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return string(r.SourceKind)
+				},
+			},
+			{
+				Key:        "source_ref",
+				Label:      "Source Ref",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.SourceRef == nil {
+						return ""
+					}
+					return *r.SourceRef
+				},
+			},
+			{
+				Key:        "trust_score",
+				Label:      "Trust Score",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return fmt.Sprintf("%v", r.TrustScore)
+				},
+			},
+			{
+				Key:        "proposed_by_actor_id",
+				Label:      "Proposed By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.ProposedByActorID == nil {
+						return ""
+					}
+					return *r.ProposedByActorID
+				},
+			},
+			{
+				Key:        "status",
+				Label:      "Status",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					return string(r.Status)
+				},
+			},
+			{
+				Key:        "reviewed_by_actor_id",
+				Label:      "Reviewed By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.ReviewedByActorID == nil {
+						return ""
+					}
+					return *r.ReviewedByActorID
+				},
+			},
+			{
+				Key:        "reviewed_at",
+				Label:      "Reviewed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.ReviewedAt == nil || r.ReviewedAt.IsZero() {
+						return ""
+					}
+					return r.ReviewedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "job_id",
+				Label:      "Job Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.LearnCandidate) string {
+					if r.JobID == nil {
+						return ""
+					}
+					return *r.JobID
+				},
+			},
 		},
 	})
 }

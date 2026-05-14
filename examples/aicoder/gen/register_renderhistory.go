@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerRenderHistory(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.RenderHistory]{
-		Kind:     "renderhistory",
-		Display:  "RenderHistories",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "renderhistory",
+		Display:   "RenderHistories",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.RenderHistory, int, error) {
 			q := client.RenderHistory.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRenderHistory.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entRenderHistory.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entRenderHistory.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entRenderHistory.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entRenderHistory.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entRenderHistory.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entRenderHistory.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,57 +72,165 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.RenderHistory) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.RenderHistory]{
-			{Key: "id", Label: "Id", Get: func(r *ent.RenderHistory) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.RenderHistory) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.RenderHistory) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.RenderHistory) string {
-				return r.ProjectID
-			}},
-			{Key: "repo_id", Label: "Repo Id", Get: func(r *ent.RenderHistory) string {
-				if r.RepoID == nil {
-					return ""
-				}
-				return *r.RepoID
-			}},
-			{Key: "target_path", Label: "Target Path", Get: func(r *ent.RenderHistory) string {
-				return r.TargetPath
-			}},
-			{Key: "rendered_text", Label: "Rendered Text", Get: func(r *ent.RenderHistory) string {
-				return r.RenderedText
-			}},
-			{Key: "rendered_sha256", Label: "Rendered Sha256", Get: func(r *ent.RenderHistory) string {
-				return r.RenderedSha256
-			}},
-			{Key: "total_bytes", Label: "Total Bytes", Get: func(r *ent.RenderHistory) string {
-				return fmt.Sprintf("%v", r.TotalBytes)
-			}},
-			{Key: "total_tokens", Label: "Total Tokens", Get: func(r *ent.RenderHistory) string {
-				if r.TotalTokens == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.TotalTokens)
-			}},
-			{Key: "scope_summary", Label: "Scope Summary", Get: func(r *ent.RenderHistory) string {
-				return r.ScopeSummary
-			}},
-			{Key: "rendered_by_actor_id", Label: "Rendered By Actor Id", Get: func(r *ent.RenderHistory) string {
-				if r.RenderedByActorID == nil {
-					return ""
-				}
-				return *r.RenderedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "repo_id",
+				Label:      "Repo Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					if r.RepoID == nil {
+						return ""
+					}
+					return *r.RepoID
+				},
+			},
+			{
+				Key:        "target_path",
+				Label:      "Target Path",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.TargetPath
+				},
+			},
+			{
+				Key:        "rendered_text",
+				Label:      "Rendered Text",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.RenderedText
+				},
+			},
+			{
+				Key:        "rendered_sha256",
+				Label:      "Rendered Sha256",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.RenderedSha256
+				},
+			},
+			{
+				Key:        "total_bytes",
+				Label:      "Total Bytes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return fmt.Sprintf("%v", r.TotalBytes)
+				},
+			},
+			{
+				Key:        "total_tokens",
+				Label:      "Total Tokens",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					if r.TotalTokens == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.TotalTokens)
+				},
+			},
+			{
+				Key:        "scope_summary",
+				Label:      "Scope Summary",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					return r.ScopeSummary
+				},
+			},
+			{
+				Key:        "rendered_by_actor_id",
+				Label:      "Rendered By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.RenderHistory) string {
+					if r.RenderedByActorID == nil {
+						return ""
+					}
+					return *r.RenderedByActorID
+				},
+			},
 		},
 	})
 }

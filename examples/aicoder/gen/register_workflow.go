@@ -19,28 +19,80 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerWorkflow(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Workflow]{
-		Kind:     "workflow",
-		Display:  "Workflows",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "workflow",
+		Display:   "Workflows",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Workflow, int, error) {
 			q := client.Workflow.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entWorkflow.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entWorkflow.Or(
 					entWorkflow.NameContainsFold(opts.Filter),
 					entWorkflow.BodyContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entWorkflow.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entWorkflow.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkflow.NameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkflow.NameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkflow.NameContainsFold(f.Value))
+					}
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entWorkflow.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entWorkflow.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entWorkflow.BodyContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entWorkflow.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entWorkflow.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entWorkflow.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entWorkflow.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -59,27 +111,72 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Workflow) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Workflow]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Workflow) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Workflow) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Workflow) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Workflow) string {
-				return r.ProjectID
-			}},
-			{Key: "name", Label: "Name", Get: func(r *ent.Workflow) string {
-				return r.Name
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "name",
+				Label:      "Name",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					return r.Name
+				},
+			},
 		},
 	})
 }

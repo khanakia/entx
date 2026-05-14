@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerAssembleRun(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.AssembleRun]{
-		Kind:     "assemblerun",
-		Display:  "AssembleRuns",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "assemblerun",
+		Display:   "AssembleRuns",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.AssembleRun, int, error) {
 			q := client.AssembleRun.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entAssembleRun.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entAssembleRun.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entAssembleRun.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleRun.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entAssembleRun.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entAssembleRun.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entAssembleRun.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,48 +72,120 @@ func registerAssembleRun(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.AssembleRun) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.AssembleRun]{
-			{Key: "id", Label: "Id", Get: func(r *ent.AssembleRun) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.AssembleRun) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.AssembleRun) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.AssembleRun) string {
-				return r.ProjectID
-			}},
-			{Key: "query_text", Label: "Query Text", Get: func(r *ent.AssembleRun) string {
-				if r.QueryText == nil {
-					return ""
-				}
-				return *r.QueryText
-			}},
-			{Key: "rendered_target", Label: "Rendered Target", Get: func(r *ent.AssembleRun) string {
-				if r.RenderedTarget == nil {
-					return ""
-				}
-				return *r.RenderedTarget
-			}},
-			{Key: "total_bytes", Label: "Total Bytes", Get: func(r *ent.AssembleRun) string {
-				if r.TotalBytes == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.TotalBytes)
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.AssembleRun) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "query_text",
+				Label:      "Query Text",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.QueryText == nil {
+						return ""
+					}
+					return *r.QueryText
+				},
+			},
+			{
+				Key:        "rendered_target",
+				Label:      "Rendered Target",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.RenderedTarget == nil {
+						return ""
+					}
+					return *r.RenderedTarget
+				},
+			},
+			{
+				Key:        "total_bytes",
+				Label:      "Total Bytes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.TotalBytes == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.TotalBytes)
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleRun) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.AssembleRun]{

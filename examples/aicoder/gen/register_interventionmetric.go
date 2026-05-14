@@ -19,22 +19,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.InterventionMetric]{
-		Kind:     "interventionmetric",
-		Display:  "InterventionMetrics",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "interventionmetric",
+		Display:   "InterventionMetrics",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.InterventionMetric, int, error) {
 			q := client.InterventionMetric.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entInterventionMetric.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entInterventionMetric.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entInterventionMetric.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entInterventionMetric.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entInterventionMetric.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entInterventionMetric.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entInterventionMetric.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -50,51 +74,132 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.InterventionMetric) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.InterventionMetric]{
-			{Key: "id", Label: "Id", Get: func(r *ent.InterventionMetric) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.InterventionMetric) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.InterventionMetric) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.InterventionMetric) string {
-				return r.ProjectID
-			}},
-			{Key: "kind", Label: "Kind", Get: func(r *ent.InterventionMetric) string {
-				return string(r.Kind)
-			}},
-			{Key: "target_table", Label: "Target Table", Get: func(r *ent.InterventionMetric) string {
-				if r.TargetTable == nil {
-					return ""
-				}
-				return *r.TargetTable
-			}},
-			{Key: "target_id", Label: "Target Id", Get: func(r *ent.InterventionMetric) string {
-				if r.TargetID == nil {
-					return ""
-				}
-				return *r.TargetID
-			}},
-			{Key: "notes", Label: "Notes", Get: func(r *ent.InterventionMetric) string {
-				if r.Notes == nil {
-					return ""
-				}
-				return *r.Notes
-			}},
-			{Key: "actor_id", Label: "Actor Id", Get: func(r *ent.InterventionMetric) string {
-				if r.ActorID == nil {
-					return ""
-				}
-				return *r.ActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "kind",
+				Label:      "Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					return string(r.Kind)
+				},
+			},
+			{
+				Key:        "target_table",
+				Label:      "Target Table",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.TargetTable == nil {
+						return ""
+					}
+					return *r.TargetTable
+				},
+			},
+			{
+				Key:        "target_id",
+				Label:      "Target Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.TargetID == nil {
+						return ""
+					}
+					return *r.TargetID
+				},
+			},
+			{
+				Key:        "notes",
+				Label:      "Notes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.Notes == nil {
+						return ""
+					}
+					return *r.Notes
+				},
+			},
+			{
+				Key:        "actor_id",
+				Label:      "Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.InterventionMetric) string {
+					if r.ActorID == nil {
+						return ""
+					}
+					return *r.ActorID
+				},
+			},
 		},
 	})
 }

@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCodeFile(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CodeFile]{
-		Kind:     "codefile",
-		Display:  "CodeFiles",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "codefile",
+		Display:   "CodeFiles",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.CodeFile, int, error) {
 			q := client.CodeFile.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCodeFile.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entCodeFile.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entCodeFile.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeFile.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeFile.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entCodeFile.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entCodeFile.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,60 +72,159 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.CodeFile) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.CodeFile]{
-			{Key: "id", Label: "Id", Get: func(r *ent.CodeFile) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.CodeFile) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.CodeFile) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.CodeFile) string {
-				return r.ProjectID
-			}},
-			{Key: "repo_id", Label: "Repo Id", Get: func(r *ent.CodeFile) string {
-				return r.RepoID
-			}},
-			{Key: "path", Label: "Path", Get: func(r *ent.CodeFile) string {
-				return r.Path
-			}},
-			{Key: "language", Label: "Language", Get: func(r *ent.CodeFile) string {
-				if r.Language == nil {
-					return ""
-				}
-				return *r.Language
-			}},
-			{Key: "size_bytes", Label: "Size Bytes", Get: func(r *ent.CodeFile) string {
-				if r.SizeBytes == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.SizeBytes)
-			}},
-			{Key: "content_sha", Label: "Content Sha", Get: func(r *ent.CodeFile) string {
-				if r.ContentSha == nil {
-					return ""
-				}
-				return *r.ContentSha
-			}},
-			{Key: "last_indexed_at", Label: "Last Indexed At", Get: func(r *ent.CodeFile) string {
-				if r.LastIndexedAt.IsZero() {
-					return ""
-				}
-				return r.LastIndexedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "archived_at", Label: "Archived At", Get: func(r *ent.CodeFile) string {
-				if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
-					return ""
-				}
-				return r.ArchivedAt.Format("2006-01-02 15:04:05")
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "repo_id",
+				Label:      "Repo Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					return r.RepoID
+				},
+			},
+			{
+				Key:        "path",
+				Label:      "Path",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					return r.Path
+				},
+			},
+			{
+				Key:        "language",
+				Label:      "Language",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.Language == nil {
+						return ""
+					}
+					return *r.Language
+				},
+			},
+			{
+				Key:        "size_bytes",
+				Label:      "Size Bytes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.SizeBytes == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.SizeBytes)
+				},
+			},
+			{
+				Key:        "content_sha",
+				Label:      "Content Sha",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.ContentSha == nil {
+						return ""
+					}
+					return *r.ContentSha
+				},
+			},
+			{
+				Key:        "last_indexed_at",
+				Label:      "Last Indexed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.LastIndexedAt.IsZero() {
+						return ""
+					}
+					return r.LastIndexedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "archived_at",
+				Label:      "Archived At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeFile) string {
+					if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
+						return ""
+					}
+					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+				},
+			},
 		},
 	})
 }

@@ -20,22 +20,46 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.AssembleCitation]{
-		Kind:     "assemblecitation",
-		Display:  "AssembleCitations",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "assemblecitation",
+		Display:   "AssembleCitations",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.AssembleCitation, int, error) {
 			q := client.AssembleCitation.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entAssembleCitation.ProjectID(v))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entAssembleCitation.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entAssembleCitation.FieldCreatedAt))
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entAssembleCitation.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entAssembleCitation.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entAssembleCitation.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entAssembleCitation.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -48,39 +72,111 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.AssembleCitation) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.AssembleCitation]{
-			{Key: "id", Label: "Id", Get: func(r *ent.AssembleCitation) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.AssembleCitation) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.AssembleCitation) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.AssembleCitation) string {
-				return r.ProjectID
-			}},
-			{Key: "assemble_run_id", Label: "Assemble Run Id", Get: func(r *ent.AssembleCitation) string {
-				return r.AssembleRunID
-			}},
-			{Key: "entity_table", Label: "Entity Table", Get: func(r *ent.AssembleCitation) string {
-				return r.EntityTable
-			}},
-			{Key: "entity_id", Label: "Entity Id", Get: func(r *ent.AssembleCitation) string {
-				return r.EntityID
-			}},
-			{Key: "score", Label: "Score", Get: func(r *ent.AssembleCitation) string {
-				if r.Score == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.Score)
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "assemble_run_id",
+				Label:      "Assemble Run Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					return r.AssembleRunID
+				},
+			},
+			{
+				Key:        "entity_table",
+				Label:      "Entity Table",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					return r.EntityTable
+				},
+			},
+			{
+				Key:        "entity_id",
+				Label:      "Entity Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					return r.EntityID
+				},
+			},
+			{
+				Key:        "score",
+				Label:      "Score",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.AssembleCitation) string {
+					if r.Score == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.Score)
+				},
+			},
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.AssembleCitation]{

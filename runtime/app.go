@@ -149,6 +149,37 @@ func (a *App) pushBrowser(kind, focusID string) {
 	}
 }
 
+// swapToTable replaces the current top page with a table view of the same
+// spec. Used by the browser's `v` key.
+func (a *App) swapToTable(spec *anySpec) {
+	if len(a.stack) == 0 {
+		return
+	}
+	top := a.stack[len(a.stack)-1]
+	a.pages.RemovePage(top.name)
+
+	t := newTableView(a, spec)
+	name := pageName("table", spec.kind, "")
+	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display + " (table)"}
+	a.pages.AddPage(name, t.root, true, true)
+	a.tv.SetFocus(t.table)
+}
+
+// swapToBrowser is the inverse — used by the table view's `v` key.
+func (a *App) swapToBrowser(spec *anySpec) {
+	if len(a.stack) == 0 {
+		return
+	}
+	top := a.stack[len(a.stack)-1]
+	a.pages.RemovePage(top.name)
+
+	b := newBrowser(a, spec)
+	name := pageName("browse", spec.kind, "")
+	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display}
+	a.pages.AddPage(name, b.root, true, true)
+	a.tv.SetFocus(b.list)
+}
+
 // pushBrowserList opens a new Browser page filtered to a fixed set of
 // IDs (used by edge drill).
 func (a *App) pushBrowserList(refs EntityRefList) {

@@ -20,18 +20,28 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerPlaybook(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.Playbook]{
-		Kind:     "playbook",
-		Display:  "Playbooks",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "playbook",
+		Display:   "Playbooks",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Playbook, int, error) {
 			q := client.Playbook.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entPlaybook.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entPlaybook.Or(
 					entPlaybook.NameContainsFold(opts.Filter),
@@ -39,10 +49,61 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 					entPlaybook.BodyContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entPlaybook.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entPlaybook.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.NameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.NameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.NameContainsFold(f.Value))
+					}
+				case "description":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.DescriptionEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.DescriptionNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.DescriptionContainsFold(f.Value))
+					}
+				case "body":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entPlaybook.BodyEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entPlaybook.BodyNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entPlaybook.BodyContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entPlaybook.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entPlaybook.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entPlaybook.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entPlaybook.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -61,78 +122,204 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.Playbook) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.Playbook]{
-			{Key: "id", Label: "Id", Get: func(r *ent.Playbook) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.Playbook) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.Playbook) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "trust_score", Label: "Trust Score", Get: func(r *ent.Playbook) string {
-				return fmt.Sprintf("%v", r.TrustScore)
-			}},
-			{Key: "confidence", Label: "Confidence", Get: func(r *ent.Playbook) string {
-				if r.Confidence == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.Confidence)
-			}},
-			{Key: "last_accessed_at", Label: "Last Accessed At", Get: func(r *ent.Playbook) string {
-				if r.LastAccessedAt == nil || r.LastAccessedAt.IsZero() {
-					return ""
-				}
-				return r.LastAccessedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "last_validated_at", Label: "Last Validated At", Get: func(r *ent.Playbook) string {
-				if r.LastValidatedAt == nil || r.LastValidatedAt.IsZero() {
-					return ""
-				}
-				return r.LastValidatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "archived_at", Label: "Archived At", Get: func(r *ent.Playbook) string {
-				if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
-					return ""
-				}
-				return r.ArchivedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "source_kind", Label: "Source Kind", Get: func(r *ent.Playbook) string {
-				return r.SourceKind
-			}},
-			{Key: "source_ref", Label: "Source Ref", Get: func(r *ent.Playbook) string {
-				if r.SourceRef == nil {
-					return ""
-				}
-				return *r.SourceRef
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.Playbook) string {
-				if r.ProjectID == nil {
-					return ""
-				}
-				return *r.ProjectID
-			}},
-			{Key: "name", Label: "Name", Get: func(r *ent.Playbook) string {
-				return r.Name
-			}},
-			{Key: "composes", Label: "Composes", Get: func(r *ent.Playbook) string {
-				if r.Composes == nil {
-					return ""
-				}
-				return *r.Composes
-			}},
-			{Key: "created_by_actor_id", Label: "Created By Actor Id", Get: func(r *ent.Playbook) string {
-				if r.CreatedByActorID == nil {
-					return ""
-				}
-				return *r.CreatedByActorID
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "trust_score",
+				Label:      "Trust Score",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return fmt.Sprintf("%v", r.TrustScore)
+				},
+			},
+			{
+				Key:        "confidence",
+				Label:      "Confidence",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.Confidence == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.Confidence)
+				},
+			},
+			{
+				Key:        "last_accessed_at",
+				Label:      "Last Accessed At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.LastAccessedAt == nil || r.LastAccessedAt.IsZero() {
+						return ""
+					}
+					return r.LastAccessedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "last_validated_at",
+				Label:      "Last Validated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.LastValidatedAt == nil || r.LastValidatedAt.IsZero() {
+						return ""
+					}
+					return r.LastValidatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "archived_at",
+				Label:      "Archived At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.ArchivedAt == nil || r.ArchivedAt.IsZero() {
+						return ""
+					}
+					return r.ArchivedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "source_kind",
+				Label:      "Source Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return r.SourceKind
+				},
+			},
+			{
+				Key:        "source_ref",
+				Label:      "Source Ref",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.SourceRef == nil {
+						return ""
+					}
+					return *r.SourceRef
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.ProjectID == nil {
+						return ""
+					}
+					return *r.ProjectID
+				},
+			},
+			{
+				Key:        "name",
+				Label:      "Name",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return r.Name
+				},
+			},
+			{
+				Key:        "composes",
+				Label:      "Composes",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.Composes == nil {
+						return ""
+					}
+					return *r.Composes
+				},
+			},
+			{
+				Key:        "created_by_actor_id",
+				Label:      "Created By Actor Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					if r.CreatedByActorID == nil {
+						return ""
+					}
+					return *r.CreatedByActorID
+				},
+			},
 		},
 	})
 }

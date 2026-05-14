@@ -20,27 +20,70 @@ import (
 // predicate when present. Caller sets the scope via app.SetScope("project_id", id).
 func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 	runtime.Register(app, runtime.EntitySpec[*ent.CodeSymbol]{
-		Kind:     "codesymbol",
-		Display:  "CodeSymbols",
-		Group:    "data",
-		Icon:     "•",
-		PageSize: 200,
-		Default:  runtime.DefaultView{SortField: "created_at", SortDir: runtime.Desc},
+		Kind:      "codesymbol",
+		Display:   "CodeSymbols",
+		Group:     "data",
+		Icon:      "•",
+		PageSize:  200,
+		MultiSort: true,
+		Default: runtime.DefaultView{
+			SortField: "created_at",
+			SortDir:   runtime.Desc,
+			Mode:      "",
+		},
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.CodeSymbol, int, error) {
 			q := client.CodeSymbol.Query()
+			// Project scope — looked up generically via ListOpts.Scope so
+			// the runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCodeSymbol.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entCodeSymbol.Or(
 					entCodeSymbol.NameContainsFold(opts.Filter),
 				))
 			}
-			if opts.SortDir == runtime.Asc {
-				q = q.Order(ent.Asc(entCodeSymbol.FieldCreatedAt))
-			} else {
-				q = q.Order(ent.Desc(entCodeSymbol.FieldCreatedAt))
+			// Phase E — structured per-column filters. AND-composed.
+			// Unsupported operators for a given field type fall through
+			// silently rather than erroring — keeps the UI forgiving.
+			for _, f := range opts.Filters {
+				switch f.Field {
+				case "name":
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entCodeSymbol.NameEQ(f.Value))
+					case runtime.OpNeq:
+						q = q.Where(entCodeSymbol.NameNEQ(f.Value))
+					case runtime.OpContains:
+						q = q.Where(entCodeSymbol.NameContainsFold(f.Value))
+					}
+				}
+			}
+			// Phase D — multi-column sort stack. Each Sort entry walks the
+			// generated dispatch; unknown fields are silently skipped.
+			if len(opts.Sort) > 0 {
+				for _, k := range opts.Sort {
+					switch k.Field {
+					case "created_at":
+						if k.Dir == runtime.Asc {
+							q = q.Order(ent.Asc(entCodeSymbol.FieldCreatedAt))
+						} else {
+							q = q.Order(ent.Desc(entCodeSymbol.FieldCreatedAt))
+						}
+					}
+				}
+			} else
+			// Legacy single-column sort (browser view default).
+			{
+				if opts.SortDir == runtime.Asc {
+					q = q.Order(ent.Asc(entCodeSymbol.FieldCreatedAt))
+				} else {
+					q = q.Order(ent.Desc(entCodeSymbol.FieldCreatedAt))
+				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -56,51 +99,141 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 		UpdatedAt: func(r *ent.CodeSymbol) time.Time { return r.UpdatedAt },
 
 		Columns: []runtime.Column[*ent.CodeSymbol]{
-			{Key: "id", Label: "Id", Get: func(r *ent.CodeSymbol) string {
-				return r.ID
-			}},
-			{Key: "created_at", Label: "Created At", Get: func(r *ent.CodeSymbol) string {
-				if r.CreatedAt.IsZero() {
-					return ""
-				}
-				return r.CreatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "updated_at", Label: "Updated At", Get: func(r *ent.CodeSymbol) string {
-				if r.UpdatedAt.IsZero() {
-					return ""
-				}
-				return r.UpdatedAt.Format("2006-01-02 15:04:05")
-			}},
-			{Key: "project_id", Label: "Project Id", Get: func(r *ent.CodeSymbol) string {
-				return r.ProjectID
-			}},
-			{Key: "code_file_id", Label: "Code File Id", Get: func(r *ent.CodeSymbol) string {
-				return r.CodeFileID
-			}},
-			{Key: "name", Label: "Name", Get: func(r *ent.CodeSymbol) string {
-				return r.Name
-			}},
-			{Key: "kind", Label: "Kind", Get: func(r *ent.CodeSymbol) string {
-				return r.Kind
-			}},
-			{Key: "line_start", Label: "Line Start", Get: func(r *ent.CodeSymbol) string {
-				if r.LineStart == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.LineStart)
-			}},
-			{Key: "line_end", Label: "Line End", Get: func(r *ent.CodeSymbol) string {
-				if r.LineEnd == nil {
-					return ""
-				}
-				return fmt.Sprintf("%v", *r.LineEnd)
-			}},
-			{Key: "signature", Label: "Signature", Get: func(r *ent.CodeSymbol) string {
-				if r.Signature == nil {
-					return ""
-				}
-				return *r.Signature
-			}},
+			{
+				Key:        "id",
+				Label:      "Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					return r.ID
+				},
+			},
+			{
+				Key:        "created_at",
+				Label:      "Created At",
+				Sortable:   true,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					if r.CreatedAt.IsZero() {
+						return ""
+					}
+					return r.CreatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "updated_at",
+				Label:      "Updated At",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					if r.UpdatedAt.IsZero() {
+						return ""
+					}
+					return r.UpdatedAt.Format("2006-01-02 15:04:05")
+				},
+			},
+			{
+				Key:        "project_id",
+				Label:      "Project Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					return r.ProjectID
+				},
+			},
+			{
+				Key:        "code_file_id",
+				Label:      "Code File Id",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					return r.CodeFileID
+				},
+			},
+			{
+				Key:        "name",
+				Label:      "Name",
+				Sortable:   false,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					return r.Name
+				},
+			},
+			{
+				Key:        "kind",
+				Label:      "Kind",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					return r.Kind
+				},
+			},
+			{
+				Key:        "line_start",
+				Label:      "Line Start",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					if r.LineStart == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.LineStart)
+				},
+			},
+			{
+				Key:        "line_end",
+				Label:      "Line End",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					if r.LineEnd == nil {
+						return ""
+					}
+					return fmt.Sprintf("%v", *r.LineEnd)
+				},
+			},
+			{
+				Key:        "signature",
+				Label:      "Signature",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CodeSymbol) string {
+					if r.Signature == nil {
+						return ""
+					}
+					return *r.Signature
+				},
+			},
 		},
 	})
 }
