@@ -68,6 +68,13 @@ type polyState struct {
 	// (host of a MorphOne / MorphMany or Target of a MorphedByMany)
 	// used to auto-register morph map entries.
 	parents []string
+
+	// pivotMorph maps a type name → the MorphName declared by its
+	// MorphTo edge (if any). Populated in a pre-pass at preprocess
+	// start so handleHolder can resolve a MorphedByMany's morph name
+	// from the pivot's declaration instead of singularise(table),
+	// without depending on edge iteration order.
+	pivotMorph map[string]string
 }
 
 // parentNames returns the deduplicated, sorted set of parent participant
@@ -94,6 +101,15 @@ type childInfo struct {
 	MorphName      string             // The relation name (e.g. "commentable").
 	IDColumn       string             // Resolved id column name.
 	TypeColumn     string             // Resolved type column name.
+	TypeIsEnum     bool               // True when the type column was emitted as a
+	// field.Enum (via MixinAllowed). When true, ent
+	// generates a named string type (<pkg>.<TypeField>)
+	// so the template can use it as a type conversion.
+	// When false, the column is a plain string and the
+	// identifier <pkg>.<TypeField> resolves to the
+	// predicate-EQ shortcut function instead — see
+	// docs/entpoly-gql-bug background and template
+	// branches on TypeIsEnum.
 	IDType         string             // "string" or "int" — the morph_id column type.
 	AllowedTypes   []string           // Allowed parent schema names from the builder.
 	Required       bool               // True when MorphTo(...).Required() was set — the
@@ -153,6 +169,9 @@ type parentInfo struct {
 	Kind       string // "morphOne" or "morphMany".
 	IDColumn   string // Custom id column override (empty for default).
 	TypeColumn string // Custom type column override (empty for default).
+	TypeIsEnum bool   // Whether the target child's type column is a
+	// field.Enum (via MixinAllowed). Same meaning as
+	// childInfo.TypeIsEnum.
 }
 
 // holderInfo describes one MorphedByMany declaration on the holder side
@@ -171,4 +190,7 @@ type holderInfo struct {
 	TargetIDPkgPath  string // Import path for the target's ID type when non-builtin.
 	HolderIDGoType   string // Go type of Holder's ID field.
 	HolderIDPkgPath  string // Import path for the holder's ID type when non-builtin.
+	TypeIsEnum       bool   // Whether the pivot's morph-type column was emitted as
+	// a field.Enum (via MixinAllowed on the pivot's
+	// MorphMixin). Same meaning as childInfo.TypeIsEnum.
 }

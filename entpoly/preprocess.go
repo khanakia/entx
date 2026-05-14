@@ -112,6 +112,37 @@
 //                                                       a sidecar .graphql file when
 //                                                       WithGQLSchemaFile is set.
 //
+//   18  Type column is field.String (no MixinAllowed) handleMorphTo detects the
+//                                                       presence of Field.Enums on the
+//                                                       type column and threads TypeIsEnum
+//                                                       through childInfo / parentInfo /
+//                                                       holderInfo. Template branches at
+//                                                       every cast site so plain-string
+//                                                       columns emit string(MorphKey)
+//                                                       directly while enum columns keep
+//                                                       the named-type conversion.
+//
+//   19  MorphedByMany.Through() morph-name from pivot   Pre-pass over g.Nodes builds
+//                                                       pivotMorph[typeName]=morphName
+//                                                       BEFORE any edges are stripped.
+//                                                       handleHolder then resolves:
+//                                                       explicit .MorphName(...) >
+//                                                       pivot's MorphTo MorphName >
+//                                                       singularise(ThroughName) fallback.
+//                                                       Closes the gap where the pivot
+//                                                       table name didn't share a stem
+//                                                       with the morph noun.
+//
+//   20  Composite-index storage-key override            MixinIndexName(name) sets
+//                                                       index.Fields(typeCol, idCol)
+//                                                       .StorageKey(name) on the mixin.
+//                                                       Lets two ent modules sharing a
+//                                                       database avoid collisions when
+//                                                       both declare the same Go entity
+//                                                       name and morph relation.
+//                                                       Implemented in mixin.go, not
+//                                                       preprocess.
+//
 // Tests for each case live in edgecase_test.go and integration_test.go;
 // search by the case number in those files to find the exercising tests.
 package entpoly
@@ -152,6 +183,33 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 		e.state.MorphMap[k] = v
 	}
 
+	// Pre-pass: index each type's MorphTo morph name BEFORE we strip
+	// any edges. handleHolder needs this so a MorphedByMany whose
+	// Through(...) pivot table doesn't share a stem with the pivot's
+	// MorphTo morph name (e.g. "source_links" → "source_link" vs the
+	// real "sourceable") still resolves the right discriminator
+	// columns. Doing it lazily inside handleHolder would be iteration-
+	// order dependent — the pivot's edges may already be stripped by
+	// the time the holder is processed.
+	pivotMorph := map[string]string{}
+	for _, t := range g.Nodes {
+		for _, ed := range t.Edges {
+			if ed.Annotations == nil {
+				continue
+			}
+			raw, ok := ed.Annotations[MarkerName]
+			if !ok {
+				continue
+			}
+			m, ok := decodeMarkerAny(raw)
+			if !ok || m.Kind != "morphTo" || m.MorphName == "" {
+				continue
+			}
+			pivotMorph[t.Name] = m.MorphName
+		}
+	}
+	e.state.pivotMorph = pivotMorph
+
 	for _, t := range g.Nodes {
 		kept := t.Edges[:0]
 		for _, ed := range t.Edges {
@@ -181,9 +239,9 @@ func (e *Extension) preprocess(g *gen.Graph) error {
 					return err
 				}
 			case "morphMany":
-				e.handleParent(t, m)
+				e.handleParent(g, t, m)
 			case "morphOne":
-				e.handleParent(t, m)
+				e.handleParent(g, t, m)
 			case "morphedByMany":
 				if err := e.handleHolder(g, t, m); err != nil {
 					return err
@@ -441,11 +499,26 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 		targets = append(targets, ref)
 	}
 
+	// Detect whether the type column is a real field.Enum (via
+	// MixinAllowed). When it is, ent generates a named string type
+	// <pkg>.<TypeField> the template can use as a type conversion.
+	// When it is not, the same identifier is the predicate-EQ
+	// shortcut function — wrapping a value with it is a function call,
+	// not a cast, and the generated code fails to compile.
+	typeIsEnum := false
+	for _, f := range t.Fields {
+		if f.Name == typeCol && len(f.Enums) > 0 {
+			typeIsEnum = true
+			break
+		}
+	}
+
 	e.state.Children = append(e.state.Children, childInfo{
 		TypeName:       t.Name,
 		MorphName:      m.MorphName,
 		IDColumn:       idCol,
 		TypeColumn:     typeCol,
+		TypeIsEnum:     typeIsEnum,
 		IDType:         m.IDType,
 		AllowedTypes:   m.AllowedTypes,
 		Required:       m.Required,
@@ -476,7 +549,24 @@ func (e *Extension) handleMorphTo(g *gen.Graph, t *gen.Type, m *markerAnnotation
 // handleParent records a MorphOne / MorphMany back-reference on the parent
 // type. The hosting type itself becomes a parent participant; the morph
 // map auto-registers the host if no explicit alias exists.
-func (e *Extension) handleParent(t *gen.Type, m *markerAnnotation) {
+func (e *Extension) handleParent(g *gen.Graph, t *gen.Type, m *markerAnnotation) {
+	// Look up the target child's type column to detect whether it was
+	// emitted as a field.Enum. The back-ref accessors emitted from
+	// parentInfo cast or skip-cast on that flag the same way the
+	// child-side methods do.
+	typeIsEnum := false
+	typeCol := m.TypeColumn
+	if typeCol == "" {
+		typeCol = m.MorphName + "_type"
+	}
+	if tt := e.findTypeByName(g, m.Target); tt != nil {
+		for _, f := range tt.Fields {
+			if f.Name == typeCol && len(f.Enums) > 0 {
+				typeIsEnum = true
+				break
+			}
+		}
+	}
 	e.state.Parents = append(e.state.Parents, parentInfo{
 		ParentName: t.Name,
 		FieldName:  m.FieldName,
@@ -485,6 +575,7 @@ func (e *Extension) handleParent(t *gen.Type, m *markerAnnotation) {
 		Kind:       m.Kind,
 		IDColumn:   m.IDColumn,
 		TypeColumn: m.TypeColumn,
+		TypeIsEnum: typeIsEnum,
 	})
 	e.state.parents = append(e.state.parents, t.Name)
 }
@@ -523,6 +614,45 @@ func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation)
 		inverse = snake(t.Name) + "s"
 	}
 
+	// Resolve the morph name. Precedence:
+	//   1. Explicit .MorphName(...) on the builder (caller knows best).
+	//   2. The pivot type's own MorphTo annotation (the discriminator
+	//      columns it actually emits are named after that morph name).
+	//   3. singularise(ThroughName) — Laravel "taggables" → "taggable"
+	//      convention; only correct when the pivot table name shares a
+	//      stem with the morph noun.
+	//
+	// (2) catches the bug where Through("source_links", SourceLink.Type)
+	// would otherwise default to "source_link" while the pivot's actual
+	// MorphTo("sourceable", ...) means the columns are "sourceable_*".
+	pt := e.findTypeByName(g, m.Through)
+	if m.MorphName == "" {
+		if name := e.state.pivotMorph[m.Through]; name != "" {
+			m.MorphName = name
+		}
+	}
+	if m.MorphName == "" {
+		m.MorphName = singularise(m.ThroughName)
+	}
+
+	// Detect whether the pivot's morph-type column was emitted as a
+	// field.Enum (via MixinAllowed on the pivot's MorphMixin). Drives
+	// whether the back-ref methods cast through <pivot>.<TypeField> or
+	// pass the raw string.
+	typeIsEnum := false
+	pivotTypeCol := m.TypeColumn
+	if pivotTypeCol == "" {
+		pivotTypeCol = m.MorphName + "_type"
+	}
+	if pt != nil {
+		for _, f := range pt.Fields {
+			if f.Name == pivotTypeCol && len(f.Enums) > 0 {
+				typeIsEnum = true
+				break
+			}
+		}
+	}
+
 	e.state.Holders = append(e.state.Holders, holderInfo{
 		HolderName:       t.Name,
 		FieldName:        m.FieldName,
@@ -537,6 +667,7 @@ func (e *Extension) handleHolder(g *gen.Graph, t *gen.Type, m *markerAnnotation)
 		TargetIDPkgPath:  targetIDPkg,
 		HolderIDGoType:   holderIDType,
 		HolderIDPkgPath:  holderIDPkg,
+		TypeIsEnum:       typeIsEnum,
 	})
 	e.state.parents = append(e.state.parents, m.Target)
 	return nil

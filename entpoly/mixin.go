@@ -121,6 +121,29 @@ func MixinNoIndex() MixinOption {
 	return func(m *morphMixin) { m.noIndex = true }
 }
 
+// MixinIndexName overrides the storage-key (the database-side name) of
+// the composite (<type>, <id>) index the mixin emits. The default name
+// ent generates is `<entity_table>_<typeCol>_<idCol>`, which is unique
+// within a single ent module but collides across modules when two
+// modules sharing one database both declare an entity with the same Go
+// name and the same morph relation (e.g. dbent.Tag + mediamgr.Tag both
+// emit `tag_taggable_type_taggable_id`). Postgres index names are
+// schema-global, so the second module's migration aborts with
+// "relation already exists".
+//
+// Pass a name that uniquely identifies this entity within the database
+// (e.g. include the module / table prefix):
+//
+//	entpoly.MorphMixin("taggable",
+//	    entpoly.MixinIndexName("media_tags_taggable_type_taggable_id"),
+//	)
+//
+// No effect when MixinNoIndex() is also set — the index is suppressed
+// either way.
+func MixinIndexName(name string) MixinOption {
+	return func(m *morphMixin) { m.indexName = name }
+}
+
 // MixinAllowed enumerates the parent ent schema types this child may
 // reference. When non-empty, the mixin emits the type column as
 // field.Enum(allowed_keys...) — so the database (and entgql, and ent's
@@ -164,6 +187,7 @@ type morphMixin struct {
 	typeColumn string
 	allowed    []string // morph-key values for field.Enum; empty → field.String
 	noIndex    bool     // true → skip the composite (type, id) index emission
+	indexName  string   // optional StorageKey override for the composite index
 }
 
 // Indexes returns the composite index that makes the back-ref read path
@@ -192,9 +216,11 @@ func (m *morphMixin) Indexes() []ent.Index {
 	if typeCol == "" {
 		typeCol = m.relation + "_type"
 	}
-	return []ent.Index{
-		index.Fields(typeCol, idCol),
+	idx := index.Fields(typeCol, idCol)
+	if m.indexName != "" {
+		idx = idx.StorageKey(m.indexName)
 	}
+	return []ent.Index{idx}
 }
 
 // snakeForMixin is a local copy of the snake helper that lives on

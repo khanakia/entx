@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"entgo.io/ent"
 	"entgo.io/ent/entc/gen"
 	"entgo.io/ent/schema/field"
 )
@@ -935,5 +936,529 @@ func TestPreprocess_MixedAllowedTypesRecordedSeparately(t *testing.T) {
 	}
 	if gotByName["User"] != "string" {
 		t.Errorf("User IDGoType = %q, want string", gotByName["User"])
+	}
+}
+
+// TestRender_TypeIsEnumFalse_OmitsPredicateCast — regression for the
+// "comment.CommentableType used as a cast but it's the predicate-EQ
+// shortcut function" bug. When MorphMixin is used without MixinAllowed,
+// the type column is a plain string and ent does NOT emit a named
+// string type for it — `comment.CommentableType` resolves to the
+// predicate constructor, so wrapping a value with it is a function
+// call, not a cast. The template must omit the wrap in that case.
+func TestRender_TypeIsEnumFalse_OmitsPredicateCast(t *testing.T) {
+	e := NewExtension()
+	e.state = &polyState{
+		Package: "ent",
+		MorphMap: map[string]string{"post": "Post"},
+		Children: []childInfo{{
+			TypeName:      "Comment",
+			MorphName:     "commentable",
+			IDColumn:      "commentable_id",
+			TypeColumn:    "commentable_type",
+			IDType:        "string",
+			TypeIsEnum:    false,
+			ChildIDGoType: "string",
+			AllowedTypes:  []string{"Post"},
+			GQL:           true,
+			ResolveTargets: []resolveTargetRef{
+				{SchemaName: "Post", IDGoType: "string"},
+			},
+		}},
+	}
+	d, err := e.buildTmplData()
+	if err != nil {
+		t.Fatalf("buildTmplData: %v", err)
+	}
+	var buf strings.Builder
+	if err := polyTmpl.ExecuteTemplate(&buf, "file", d); err != nil {
+		t.Fatalf("template execute: %v", err)
+	}
+	out := buf.String()
+	// Negative assertion: the buggy cast must not appear anywhere.
+	if strings.Contains(out, "comment.CommentableType(string(") {
+		t.Errorf("rendered template contains buggy cast `comment.CommentableType(string(...))` when TypeIsEnum=false")
+	}
+	// Positive assertion: the un-wrapped form must appear.
+	if !strings.Contains(out, "Set"+"CommentableType(string(p.MorphKey()))") {
+		t.Errorf("rendered template missing the un-wrapped SetCommentableType(string(p.MorphKey())) form")
+	}
+	// Sanity-check the file actually parses as Go syntax.
+	if _, perr := parser.ParseFile(token.NewFileSet(), "polymorphic.go", out, parser.AllErrors); perr != nil {
+		t.Errorf("rendered template does not parse as Go: %v", perr)
+	}
+}
+
+// TestRender_TypeIsEnumTrue_KeepsCast — companion to the regression test
+// above: when MixinAllowed *is* used, the named-string-type cast must
+// still be emitted (the enum-vs-MorphKey two-named-types case).
+func TestRender_TypeIsEnumTrue_KeepsCast(t *testing.T) {
+	e := NewExtension()
+	e.state = &polyState{
+		Package: "ent",
+		MorphMap: map[string]string{"post": "Post"},
+		Children: []childInfo{{
+			TypeName:     "Comment",
+			MorphName:    "commentable",
+			IDColumn:     "commentable_id",
+			TypeColumn:   "commentable_type",
+			IDType:       "string",
+			TypeIsEnum:   true,
+			AllowedTypes: []string{"Post"},
+			ResolveTargets: []resolveTargetRef{
+				{SchemaName: "Post", IDGoType: "string"},
+			},
+		}},
+	}
+	d, err := e.buildTmplData()
+	if err != nil {
+		t.Fatalf("buildTmplData: %v", err)
+	}
+	var buf strings.Builder
+	if err := polyTmpl.ExecuteTemplate(&buf, "file", d); err != nil {
+		t.Fatalf("template execute: %v", err)
+	}
+	if !strings.Contains(buf.String(), "comment.CommentableType(string(p.MorphKey()))") {
+		t.Errorf("rendered template missing enum-mode cast `comment.CommentableType(string(p.MorphKey()))`")
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Render matrix — every meaningful axis of the template, parsed back as Go
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Background: the .GQL() bug shipped because every example schema enabled
+// MixinAllowed, hiding the plain-string code path. To prevent the same
+// shape of miss for any other axis the template branches on, the test
+// below renders the template across a deliberately broad combination of
+// inputs and asserts each result PARSES as Go and is free of the
+// known-bad cast pattern when TypeIsEnum=false.
+//
+// "Parses as Go" is a weak check — it does not prove the output type-
+// checks against a real ent package — but it catches every kind of bug
+// the previous tests missed (missing tokens, malformed cast, unbalanced
+// braces). For full type-check coverage extend examples/* with a schema
+// exercising each new axis combination.
+
+// renderState executes the embedded template against a polyState and
+// returns the rendered source. Centralised so each matrix case is a
+// one-liner.
+func renderState(t *testing.T, s *polyState) string {
+	t.Helper()
+	e := NewExtension()
+	e.state = s
+	d, err := e.buildTmplData()
+	if err != nil {
+		t.Fatalf("buildTmplData: %v", err)
+	}
+	var buf strings.Builder
+	if err := polyTmpl.ExecuteTemplate(&buf, "file", d); err != nil {
+		t.Fatalf("template execute: %v", err)
+	}
+	return buf.String()
+}
+
+// assertParsesAsGo fails the test if the rendered output is not a valid
+// Go source file. Dumps the offending output to a temp file on failure
+// so the developer can read what the template produced.
+func assertParsesAsGo(t *testing.T, name, src string) {
+	t.Helper()
+	if _, err := parser.ParseFile(token.NewFileSet(), "polymorphic.go", src, parser.AllErrors); err != nil {
+		dump := filepath.Join(t.TempDir(), name+".go")
+		_ = os.WriteFile(dump, []byte(src), 0o644)
+		t.Fatalf("rendered template does not parse (%s): %v — dump: %s", name, err, dump)
+	}
+}
+
+// assertNoBadCast catches the specific pattern that shipped as the
+// .GQL() bug: <ident>.<TypeField>(string(...) wrapping a value when
+// TypeIsEnum=false. The cast pattern is unique enough that scanning for
+// the substring is reliable.
+func assertNoBadCast(t *testing.T, name, src, ident, typeField string) {
+	t.Helper()
+	bad := ident + "." + typeField + "(string("
+	if strings.Contains(src, bad) {
+		t.Errorf("%s: rendered template contains forbidden predicate-as-cast %q", name, bad)
+	}
+}
+
+// minimalChild returns a childInfo with sane defaults that produces a
+// renderable polyState. Tests override individual fields.
+func minimalChild() childInfo {
+	return childInfo{
+		TypeName:      "Comment",
+		MorphName:     "commentable",
+		IDColumn:      "commentable_id",
+		TypeColumn:    "commentable_type",
+		IDType:        "string",
+		ChildIDGoType: "string",
+		AllowedTypes:  []string{"Post"},
+		ResolveTargets: []resolveTargetRef{
+			{SchemaName: "Post", IDGoType: "string"},
+		},
+	}
+}
+
+// TestRender_Matrix_ChildAxes — for every meaningful axis on a child
+// declaration, render with that axis flipped both ways and assert the
+// output is valid Go. When TypeIsEnum=false, also assert the buggy
+// predicate-as-cast does not appear anywhere.
+func TestRender_Matrix_ChildAxes(t *testing.T) {
+	type tweak func(*childInfo)
+	axes := map[string]tweak{
+		"baseline":         func(c *childInfo) {},
+		"GQL":              func(c *childInfo) { c.GQL = true; c.GQLUnionName = "Commentable" },
+		"Required":         func(c *childInfo) { c.Required = true },
+		"Touch":            func(c *childInfo) { c.Touch = true; c.TouchField = "updated_at" },
+		"Cascade":          func(c *childInfo) { c.Cascade = true },
+		"SoftDelete":       func(c *childInfo) { c.SoftDelete = true; c.SoftDeleteField = "deleted_at"; c.ResolveTargets[0].HasSoftDelete = true },
+		"IDInt":            func(c *childInfo) { c.IDType = "int" },
+		"ChildIDInt":       func(c *childInfo) { c.ChildIDGoType = "int" },
+		"ChildIDInt64":     func(c *childInfo) { c.ChildIDGoType = "int64" },
+		"ChildIDUUID":      func(c *childInfo) { c.ChildIDGoType = "uuid.UUID"; c.ChildIDPkgPath = "github.com/google/uuid" },
+		"ParentIDInt":      func(c *childInfo) { c.ResolveTargets[0].IDGoType = "int" },
+		"ParentIDInt64":    func(c *childInfo) { c.ResolveTargets[0].IDGoType = "int64" },
+		"ParentIDUUID":     func(c *childInfo) { c.ResolveTargets[0].IDGoType = "uuid.UUID"; c.ResolveTargets[0].IDPkgPath = "github.com/google/uuid" },
+		"AllFlags": func(c *childInfo) {
+			c.GQL, c.GQLUnionName = true, "Commentable"
+			c.Required = true
+			c.Touch, c.TouchField = true, "updated_at"
+			c.Cascade = true
+			c.SoftDelete, c.SoftDeleteField = true, "deleted_at"
+			c.ResolveTargets[0].HasSoftDelete = true
+		},
+	}
+
+	for _, typeIsEnum := range []bool{true, false} {
+		for axisName, apply := range axes {
+			name := axisName
+			if typeIsEnum {
+				name += "_Enum"
+			} else {
+				name += "_String"
+			}
+			t.Run(name, func(t *testing.T) {
+				c := minimalChild()
+				c.TypeIsEnum = typeIsEnum
+				apply(&c)
+				s := &polyState{
+					Package:  "ent",
+					MorphMap: map[string]string{"post": "Post"},
+					Children: []childInfo{c},
+				}
+				out := renderState(t, s)
+				assertParsesAsGo(t, name, out)
+				if !typeIsEnum {
+					assertNoBadCast(t, name, out, "comment", "CommentableType")
+				}
+			})
+		}
+	}
+}
+
+// TestRender_Matrix_MultipleAllowedTypes — exercise the per-parent
+// ResolveCases loop (switch arms, eager-load buckets, cascade hook
+// per-allowed-parent emission). Each parent gets a different ID Go
+// type so every strconv branch in the template renders.
+func TestRender_Matrix_MultipleAllowedTypes(t *testing.T) {
+	for _, typeIsEnum := range []bool{true, false} {
+		name := "MixedParentIDs_String"
+		if typeIsEnum {
+			name = "MixedParentIDs_Enum"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := minimalChild()
+			c.TypeIsEnum = typeIsEnum
+			c.AllowedTypes = []string{"Post", "Video", "Doc", "Note"}
+			c.ResolveTargets = []resolveTargetRef{
+				{SchemaName: "Post", IDGoType: "int"},
+				{SchemaName: "Video", IDGoType: "int64"},
+				{SchemaName: "Doc", IDGoType: "string"},
+				{SchemaName: "Note", IDGoType: "uuid.UUID", IDPkgPath: "github.com/google/uuid"},
+			}
+			c.Cascade = true
+			c.GQL, c.GQLUnionName = true, "Commentable"
+			s := &polyState{
+				Package: "ent",
+				MorphMap: map[string]string{
+					"post":  "Post",
+					"video": "Video",
+					"doc":   "Doc",
+					"note":  "Note",
+				},
+				Children: []childInfo{c},
+			}
+			out := renderState(t, s)
+			assertParsesAsGo(t, name, out)
+			if !typeIsEnum {
+				assertNoBadCast(t, name, out, "comment", "CommentableType")
+			}
+		})
+	}
+}
+
+// TestRender_Matrix_ParentAndHolder — the bug had cousin sites on the
+// MorphOne/MorphMany (parentInfo) and MorphedByMany (holderInfo) back-
+// refs. Same axis matters there too — the back-ref's typed predicate
+// uses the same <ident>.<TypeField>(string(...)) shape.
+func TestRender_Matrix_ParentAndHolder(t *testing.T) {
+	for _, typeIsEnum := range []bool{true, false} {
+		name := "ParentMorphOne_String"
+		if typeIsEnum {
+			name = "ParentMorphOne_Enum"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := minimalChild()
+			c.TypeName = "Image"
+			c.MorphName = "imageable"
+			c.IDColumn = "imageable_id"
+			c.TypeColumn = "imageable_type"
+			c.TypeIsEnum = typeIsEnum
+			c.ResolveTargets = []resolveTargetRef{{SchemaName: "Post", IDGoType: "int"}}
+			s := &polyState{
+				Package:  "ent",
+				MorphMap: map[string]string{"post": "Post"},
+				Children: []childInfo{c},
+				Parents: []parentInfo{{
+					ParentName: "Post",
+					FieldName:  "featured_image",
+					Target:     "Image",
+					MorphName:  "imageable",
+					Kind:       "morphOne",
+					TypeIsEnum: typeIsEnum,
+				}, {
+					ParentName: "Post",
+					FieldName:  "comments",
+					Target:     "Image",
+					MorphName:  "imageable",
+					Kind:       "morphMany",
+					TypeIsEnum: typeIsEnum,
+				}},
+			}
+			out := renderState(t, s)
+			assertParsesAsGo(t, name, out)
+			if !typeIsEnum {
+				// The bad pattern would be `image.ImageableType(string(`.
+				assertNoBadCast(t, name, out, "image", "ImageableType")
+			}
+		})
+	}
+
+	for _, typeIsEnum := range []bool{true, false} {
+		name := "HolderMorphedByMany_String"
+		if typeIsEnum {
+			name = "HolderMorphedByMany_Enum"
+		}
+		t.Run(name, func(t *testing.T) {
+			s := &polyState{
+				Package:  "ent",
+				MorphMap: map[string]string{"post": "Post"},
+				Children: []childInfo{minimalChild()}, // need a child for Comment imports
+				Holders: []holderInfo{{
+					HolderName:       "Tag",
+					FieldName:        "posts",
+					InverseFieldName: "tags",
+					Target:           "Post",
+					Pivot:            "Taggable",
+					MorphName:        "taggable",
+					TargetIDGoType:   "int",
+					HolderIDGoType:   "int",
+					TypeIsEnum:       typeIsEnum,
+				}},
+			}
+			out := renderState(t, s)
+			assertParsesAsGo(t, name, out)
+			if !typeIsEnum {
+				// Bad pattern on pivot: `taggable.TaggableType(string(`.
+				assertNoBadCast(t, name, out, "taggable", "TaggableType")
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// MorphedByMany morph-name resolution (regression: Through() defaulted
+// to singularise(table) even when the pivot had its own MorphTo).
+// ──────────────────────────────────────────────────────────────────────────
+
+// TestPreprocess_MorphedByMany_ResolvesMorphNameFromPivot is the
+// regression guard for the Through() defaulting bug. The pivot is
+// SourceLink with MorphTo("sourceable", ...). A holder declares
+// MorphedByMany without calling .MorphName(...), and Through() supplies
+// a table name ("source_links") whose singularise default ("source_link")
+// is WRONG — the right morph name is "sourceable", taken from the
+// pivot's MorphTo. preprocess must pick the latter so the back-ref's
+// column accessors (PivotIDField / PivotTypeField) name the columns
+// SourceLink actually has.
+func TestPreprocess_MorphedByMany_ResolvesMorphNameFromPivot(t *testing.T) {
+	// Pivot: SourceLink with MorphTo("sourceable", Post.Type)
+	pivotMorphTo := edgeWithMarker(t, "sourceable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "sourceable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+	})
+	sourceLink := withDiscriminatorFields(&gen.Type{Name: "SourceLink"}, "sourceable")
+	sourceLink.Edges = []*gen.Edge{pivotMorphTo}
+
+	// Holder: Source with MorphedByMany("decisions", Post.Type).Through("source_links", SourceLink.Type)
+	// — note the deliberate omission of .MorphName(...); the test
+	// asserts the pivot's MorphTo wins.
+	holderMbM := edgeWithMarker(t, "decisions", markerAnnotation{
+		Kind:        "morphedByMany",
+		FieldName:   "decisions",
+		Target:      "Post",
+		Through:     "SourceLink",
+		ThroughName: "source_links",
+		// MorphName intentionally empty.
+	})
+	source := &gen.Type{Name: "Source", Edges: []*gen.Edge{holderMbM}}
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{source, sourceLink, {Name: "Post"}},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	if len(e.state.Holders) != 1 {
+		t.Fatalf("Holders len = %d, want 1", len(e.state.Holders))
+	}
+	h := e.state.Holders[0]
+	// The fix: morph name comes from the pivot's MorphTo, NOT from
+	// singularise(ThroughName).
+	if got := h; false {
+		_ = got
+	}
+	// Inspect what handleHolder recorded — the pivot column-method
+	// names are derived from m.MorphName at preprocess time. We
+	// cross-check via the rendered tmplData since holderInfo doesn't
+	// expose the resolved MorphName directly.
+	d, err := e.buildTmplData()
+	if err != nil {
+		t.Fatalf("buildTmplData: %v", err)
+	}
+	if len(d.Holders) != 1 {
+		t.Fatalf("Holders in tmplData = %d, want 1", len(d.Holders))
+	}
+	hd := d.Holders[0]
+	if hd.PivotIDField != "SourceableID" {
+		t.Errorf("PivotIDField = %q, want SourceableID (resolved from pivot MorphTo)", hd.PivotIDField)
+	}
+	if hd.PivotTypeField != "SourceableType" {
+		t.Errorf("PivotTypeField = %q, want SourceableType (resolved from pivot MorphTo)", hd.PivotTypeField)
+	}
+}
+
+// TestPreprocess_MorphedByMany_ExplicitMorphNameWins guarantees the
+// pivot lookup never overrides an explicit caller decision. If the user
+// chained .MorphName("custom") the resolved name must be "custom",
+// regardless of what the pivot's MorphTo says.
+func TestPreprocess_MorphedByMany_ExplicitMorphNameWins(t *testing.T) {
+	pivotMorphTo := edgeWithMarker(t, "sourceable", markerAnnotation{
+		Kind:         "morphTo",
+		MorphName:    "sourceable",
+		AllowedTypes: []string{"Post"},
+		IDType:       "string",
+	})
+	pivot := withDiscriminatorFields(&gen.Type{Name: "Pivot"}, "sourceable")
+	pivot.Edges = []*gen.Edge{pivotMorphTo}
+
+	holderMbM := edgeWithMarker(t, "items", markerAnnotation{
+		Kind:        "morphedByMany",
+		FieldName:   "items",
+		Target:      "Post",
+		Through:     "Pivot",
+		ThroughName: "source_links",
+		MorphName:   "custom", // explicit; must win over pivot's "sourceable"
+	})
+	holder := &gen.Type{Name: "Holder", Edges: []*gen.Edge{holderMbM}}
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{holder, pivot, {Name: "Post"}},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	d, _ := e.buildTmplData()
+	hd := d.Holders[0]
+	if hd.PivotIDField != "CustomID" {
+		t.Errorf("PivotIDField = %q, want CustomID (explicit MorphName wins)", hd.PivotIDField)
+	}
+}
+
+// TestPreprocess_MorphedByMany_FallbackToSingularise covers the third
+// branch in the resolution chain: no explicit MorphName, pivot type has
+// no MorphTo declared — fall back to singularise(ThroughName) so the
+// pre-fix behavior is preserved for users who relied on it.
+func TestPreprocess_MorphedByMany_FallbackToSingularise(t *testing.T) {
+	// Pivot without MorphTo (e.g. plain join table that entpoly didn't
+	// emit fields for — defensive case).
+	pivot := &gen.Type{Name: "Taggable"}
+
+	holderMbM := edgeWithMarker(t, "posts", markerAnnotation{
+		Kind:        "morphedByMany",
+		FieldName:   "posts",
+		Target:      "Post",
+		Through:     "Taggable",
+		ThroughName: "taggables",
+		// MorphName empty.
+	})
+	tag := &gen.Type{Name: "Tag", Edges: []*gen.Edge{holderMbM}}
+
+	g := &gen.Graph{
+		Config: &gen.Config{Package: "ent"},
+		Nodes:  []*gen.Type{tag, pivot, {Name: "Post"}},
+	}
+	e := NewExtension()
+	if err := e.preprocess(g); err != nil {
+		t.Fatalf("preprocess: %v", err)
+	}
+	d, _ := e.buildTmplData()
+	hd := d.Holders[0]
+	if hd.PivotIDField != "TaggableID" {
+		t.Errorf("PivotIDField = %q, want TaggableID (singularise fallback)", hd.PivotIDField)
+	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// MixinIndexName — composite index storage-key override
+// ──────────────────────────────────────────────────────────────────────────
+
+// TestMixinIndexName_StorageKeyApplied is the regression guard for the
+// cross-module index-name collision. The mixin's composite index now
+// accepts a storage-key override so two modules sharing a database can
+// each pick a unique index name (default ent name is derived from the
+// entity, which collides when both modules declare the same Go-named
+// entity).
+func TestMixinIndexName_StorageKeyApplied(t *testing.T) {
+	m, ok := MorphMixin("taggable",
+		MixinIndexName("media_tags_taggable_type_taggable_id"),
+	).(interface{ Indexes() []ent.Index })
+	if !ok {
+		t.Fatal("mixin does not implement Indexes()")
+	}
+	idxs := m.Indexes()
+	if len(idxs) != 1 {
+		t.Fatalf("Indexes() len = %d, want 1", len(idxs))
+	}
+	desc := idxs[0].Descriptor()
+	if desc.StorageKey != "media_tags_taggable_type_taggable_id" {
+		t.Errorf("index StorageKey = %q, want media_tags_taggable_type_taggable_id", desc.StorageKey)
+	}
+}
+
+// TestMixinIndexName_DefaultUnset verifies the option is opt-in: a
+// mixin built without MixinIndexName leaves StorageKey empty so ent's
+// default naming continues to apply for everyone who isn't hitting the
+// cross-module collision.
+func TestMixinIndexName_DefaultUnset(t *testing.T) {
+	m, _ := MorphMixin("taggable").(interface{ Indexes() []ent.Index })
+	idxs := m.Indexes()
+	if idxs[0].Descriptor().StorageKey != "" {
+		t.Errorf("default StorageKey = %q, want empty (ent picks the name)", idxs[0].Descriptor().StorageKey)
 	}
 }

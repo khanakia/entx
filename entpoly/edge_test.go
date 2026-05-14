@@ -151,9 +151,14 @@ func TestMorphedByMany_WithThrough(t *testing.T) {
 	if m.ThroughName != "taggables" {
 		t.Errorf("ThroughName = %q, want taggables", m.ThroughName)
 	}
-	// MorphName defaults to singularised through name.
-	if m.MorphName != "taggable" {
-		t.Errorf("MorphName = %q, want taggable (auto-derived)", m.MorphName)
+	// MorphName is intentionally left empty by the builder; preprocess
+	// resolves it from the pivot type's MorphTo declaration (with
+	// singularise(ThroughName) as the final fallback). Defaulting in
+	// the builder would lock in the wrong column accessors whenever
+	// the pivot table name doesn't share a stem with the pivot's
+	// MorphTo morph name (e.g. "source_links" + MorphTo("sourceable")).
+	if m.MorphName != "" {
+		t.Errorf("MorphName = %q, want empty (resolved later in preprocess)", m.MorphName)
 	}
 }
 

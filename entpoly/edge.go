@@ -644,14 +644,19 @@ func MorphedByMany(field string, parent any) *MorphedByManyBuilder {
 // Through configures the pivot for the relation. The pivot table name
 // (e.g. "taggables") is cosmetic; the pivot type (e.g. Taggable.Type) is
 // the ent schema that owns the pivot rows.
+//
+// MorphName is intentionally NOT defaulted here — preprocess resolves
+// it by first looking up the pivot type's MorphTo declaration (its
+// MorphName is the source of truth for the discriminator columns) and
+// only falling back to singularise(name) when no MorphTo is present.
+// Defaulting eagerly to singularise(name) would set the wrong
+// discriminator column whenever the pivot's table name doesn't share a
+// stem with its MorphTo morph name (e.g. "source_links" pivot with
+// MorphTo("sourceable", ...) — singularise gives "source_link" but
+// the correct relation is "sourceable").
 func (b *MorphedByManyBuilder) Through(name string, pivot any) *MorphedByManyBuilder {
 	b.ann.ThroughName = name
 	b.ann.Through = schemaName(pivot)
-	// Default the morph name from the pivot's name, matching Laravel's
-	// "taggables" → "taggable" convention.
-	if b.ann.MorphName == "" {
-		b.ann.MorphName = singularise(name)
-	}
 	b.syncAnnotation()
 	return b
 }

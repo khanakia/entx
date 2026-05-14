@@ -186,6 +186,7 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 			RelationCap:   pascalCase(c.MorphName),
 			IDField:       pascalGoFieldName(c.IDColumn),
 			TypeField:     pascalGoFieldName(c.TypeColumn),
+			TypeIsEnum:    c.TypeIsEnum,
 			IDIsInt:       c.IDType == "int",
 			Required:      c.Required,
 			Touch:         c.Touch,
@@ -243,6 +244,7 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 			MorphName:   p.MorphName,
 			IDField:     pascalGoFieldName(idCol),
 			TypeField:   pascalGoFieldName(typeCol),
+			TypeIsEnum:  p.TypeIsEnum,
 			Kind:        p.Kind,
 		})
 	}
@@ -290,6 +292,7 @@ func (e *Extension) buildTmplData() (*tmplData, error) {
 			HolderFKField:   pascalGoFieldName(holderFK),
 			PivotIDField:    pascalGoFieldName(idCol),
 			PivotTypeField:  pascalGoFieldName(typeCol),
+			TypeIsEnum:      h.TypeIsEnum,
 		})
 	}
 
@@ -479,6 +482,9 @@ type holderData struct {
 	HolderFKField    string // Pivot's column-method name for the holder FK (e.g. "TagID").
 	PivotIDField     string // Pivot's morph-id column method name (e.g. "TaggableID").
 	PivotTypeField   string // Pivot's morph-type column method name (e.g. "TaggableType").
+	TypeIsEnum       bool   // True when the pivot's morph-type column is a field.Enum;
+	// drives whether the back-ref methods cast through
+	// <pivot>.<TypeField> or pass the raw string.
 }
 
 // parentData drives the typed back-ref method emission on a parent entity
@@ -496,6 +502,9 @@ type parentData struct {
 	MorphName   string // The relation name on the child (e.g. "imageable").
 	IDField     string // Pascal column name on the child (e.g. "ImageableID").
 	TypeField   string // Pascal column name on the child (e.g. "ImageableType").
+	TypeIsEnum  bool   // True when the child's type column is a field.Enum;
+	// drives whether the back-ref methods cast through
+	// <ident>.<TypeField> or pass the raw string.
 	Kind        string // "morphOne" → single entity result; "morphMany" → query builder.
 }
 
@@ -508,6 +517,12 @@ type childData struct {
 	RelationCap  string             // The PascalCase of Relation (e.g. "Commentable").
 	IDField      string             // ent's Go-side field name for the id column.
 	TypeField    string             // ent's Go-side field name for the type column.
+	TypeIsEnum   bool               // True when ent emitted the type column as a real
+	// field.Enum (via MixinAllowed). When true, the
+	// identifier <ident>.<TypeField> is a named string
+	// type and the template uses it as a type conversion;
+	// when false, that identifier is the predicate-EQ
+	// shortcut function and the cast is omitted.
 	IDIsInt      bool               // True when the id column is int64 (vs string).
 	Required       bool             // True when MorphTo(...).Required() was set — the
 	// template emits a runtime hook that rejects
