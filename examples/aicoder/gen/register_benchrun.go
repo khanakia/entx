@@ -463,7 +463,7 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 
 		Edges: []runtime.EdgeSpec[*ent.BenchRun]{
 			{
-				Name: "results", Display: "BenchResults", Kind: runtime.EdgeDrill, Trigger: "enter",
+				Name: "results", Display: "BenchResults", Kind: runtime.EdgeDrill, Trigger: "e",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.

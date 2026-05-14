@@ -707,7 +707,7 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Name: "superseded_by", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "enter",
+				Name: "superseded_by", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "d",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.

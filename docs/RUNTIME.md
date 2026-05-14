@@ -10,7 +10,8 @@ enttui/runtime/
 ├── registry.go    Register[T](app, spec) + type-erased *anySpec
 ├── app.go         App, page stack, global key handler, picker / help modals
 ├── browser.go     One Browser page: list + preview + status bar
-├── picker.go      Kind picker modal (fuzzy)
+├── picker.go      Kind picker modal (fuzzy, k)
+├── sidebar.go     Persistent left-rail kind switcher (ctrl+b)
 ├── preview.go     text/template runners for preview + status
 ├── theme.go       tview.Styles overrides + tone → tcell color mapping
 └── templates/
@@ -145,6 +146,25 @@ Renders inside a centered `Pages` overlay. Two stacked widgets: a `tview.InputFi
 
 The picker always allocates a fresh `p.shown` slice — never aliases `p.all` — to avoid the "type query, clear, see duplicates" bug.
 
+## Sidebar  (`sidebar.go`)
+
+A persistent left-rail companion to the modal picker. Hidden by default, toggled with `ctrl+b`. Lives in `App.rootFlex` as a sibling of the pages container — NOT a tview Pages overlay — so it stays visible while the user interacts with the body.
+
+Layout: `[InputField (filter) | List (kinds)]` in a vertical Flex.
+
+Behavior:
+
+- Typing in the input filters by display name / kind id.
+- `↑ / ↓ / pgup / pgdn` and `ctrl+n / ctrl+p` inside the input forward to a `move(delta)` shim that nudges the list's selection — user never has to leave the input to navigate.
+- `tab` cycles input ↔ list focus.
+- The list's `SetChangedFunc` is the **live-preview engine**: every selection change calls `app.replaceTopKind(kind)` which removes the top stack page and pushes a fresh one for the new kind. Stack depth stays the same.
+- Re-entrance trap: a naive `syncSidebar` that calls full `populate()` (Clear + AddItem + SetCurrentItem) during a swap caused the cursor to teleport to the last item on the first arrow press — the nested SetCurrentItem corrupted the outer SetCurrentItem's bookkeeping. Fix: `syncSidebar` now only calls `highlightCurrent()` (cursor-only) under `suppressChange`.
+- Filter narrowing auto-opens `shown[0]` when the current page's kind drops out of the filtered set — typing "Task" while sitting on "Plan" jumps the body to Task immediately.
+- `\` (backslash) toggles focus between sidebar and body without closing the sidebar (`App.focusBody()`).
+- `ctrl+b` is caught at the very top of the global handler — BEFORE the typing-guard — so it can toggle even with focus inside the sidebar's own input. Plain `b` is just a filter character.
+
+Kind sync: `pushBrowser`, `pushBrowserList`, and the `swapTo*` toggles all stamp `pageEntry.kind` and call `App.syncSidebar()` so the sidebar's highlight tracks whichever kind is on top of the stack — regardless of how the user got there.
+
 ## Templates  (`preview.tmpl` + `status.tmpl`)
 
 Both live in `enttui/runtime/templates/` and are embedded via `//go:embed templates/*.tmpl`. Parsed once at package init with `template.ParseFS`.
@@ -171,9 +191,11 @@ Set on the tview Application in `App.Run`:
 
 | Key | Action | When suppressed |
 |-----|--------|-----------------|
+| `ctrl+b` | Toggle sidebar | Never (caught BEFORE the typing-guard) |
 | `k` | Open picker | While focus is in a tview.InputField |
 | `q` | Quit | While focus is in a tview.InputField |
 | `?` | Help modal | While focus is in a tview.InputField |
+| `\` | Focus sidebar (opens if hidden) | While focus is in a tview.InputField |
 | `esc` | Pop page | Always fires (even in inputs — there it closes the input first) |
 
 The "is focus an input field" check uses `a.tv.GetFocus().(*tview.InputField)`. If you add new modals with text input, the check still works.

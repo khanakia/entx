@@ -61,6 +61,14 @@ type browser struct {
 	pageSize int
 
 	idFilter map[string]bool // non-nil = restrict to this set (drill mode)
+
+	// Opaque cargo from the table view that the browser doesn't itself use
+	// but must preserve so a table→list→table round-trip keeps the user's
+	// per-column filters, multi-sort stack, and column visibility map.
+	// Set by applyState, returned verbatim by state().
+	carriedFilters         []FilterCondition
+	carriedSortStack       []SortKey
+	carriedColumnOverrides map[string]bool
 }
 
 // newBrowser builds the widget tree for one entity kind. It does NOT add
@@ -75,13 +83,30 @@ func (b *browser) state() viewState {
 		id = b.rows[idx].ID
 	}
 	return viewState{
-		Filter:     b.filter,
-		SortField:  b.sortField,
-		SortDir:    b.sortDir,
-		Page:       b.page,
-		PageSize:   b.pageSize,
-		SelectedID: id,
+		Filter:          b.filter,
+		Filters:         append([]FilterCondition(nil), b.carriedFilters...),
+		SortField:       b.sortField,
+		SortDir:         b.sortDir,
+		SortStack:       append([]SortKey(nil), b.carriedSortStack...),
+		Page:            b.page,
+		PageSize:        b.pageSize,
+		SelectedID:      id,
+		ColumnOverrides: cloneStringBoolMap(b.carriedColumnOverrides),
 	}
+}
+
+// cloneStringBoolMap returns a copy of m, or nil if m is nil. Used to
+// pass column visibility through the browser opaque-cargo path without
+// risk of two views aliasing the same map.
+func cloneStringBoolMap(m map[string]bool) map[string]bool {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // applyState seeds this browser from a previous view's state. Refresh
@@ -98,6 +123,12 @@ func (b *browser) applyState(s viewState) {
 		b.pageSize = s.PageSize
 	}
 	b.page = s.Page
+	// Stash the table-only fields so a table→list→table round-trip
+	// doesn't lose them. The browser doesn't render with these, but
+	// state() returns them verbatim on the way back.
+	b.carriedFilters = append([]FilterCondition(nil), s.Filters...)
+	b.carriedSortStack = append([]SortKey(nil), s.SortStack...)
+	b.carriedColumnOverrides = cloneStringBoolMap(s.ColumnOverrides)
 	b.refresh()
 	if s.SelectedID != "" {
 		b.focusID(s.SelectedID)
@@ -395,10 +426,11 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		b.activateEdgeOrPreview()
 		return nil
 	}
-	// Edge triggers (single-char).
+	// Edge triggers (single-char letters only — enter is reserved for
+	// preview focus, never auto-bound to a "primary" drill edge).
 	if r := ev.Rune(); r != 0 {
 		for _, e := range b.spec.edges {
-			if e.trigger == string(r) && e.trigger != "enter" {
+			if e.trigger == string(r) {
 				b.followEdge(e)
 				return nil
 			}
@@ -438,14 +470,8 @@ func (b *browser) focusList() {
 }
 
 func (b *browser) activateEdgeOrPreview() {
-	// `enter` follows the first edge whose trigger is "enter", if any.
-	for _, e := range b.spec.edges {
-		if e.trigger == "enter" {
-			b.followEdge(e)
-			return
-		}
-	}
-	// otherwise, just focus the preview pane.
+	// Enter focuses the preview pane. To drill an edge, press its
+	// single-char trigger (shown in the preview footer).
 	b.focusPreview()
 }
 

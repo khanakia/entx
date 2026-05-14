@@ -291,7 +291,7 @@ func registerAssembleRun(app *runtime.App, client *ent.Client) {
 
 		Edges: []runtime.EdgeSpec[*ent.AssembleRun]{
 			{
-				Name: "citations", Display: "AssembleCitations", Kind: runtime.EdgeDrill, Trigger: "enter",
+				Name: "citations", Display: "AssembleCitations", Kind: runtime.EdgeDrill, Trigger: "c",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.

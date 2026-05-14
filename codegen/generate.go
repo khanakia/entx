@@ -489,17 +489,15 @@ func edgeMetaOf(e *gen.Edge, targetKind string, used map[string]bool) EdgeMeta {
 	if e.Unique {
 		em.Kind = "EdgeUpward"
 		em.Display = "→ " + pluralize(e.Type.Name)
-		em.Trigger = pickTrigger(e.Name, used)
 	} else {
 		em.Kind = "EdgeDrill"
 		em.Display = pluralize(e.Type.Name)
-		em.Trigger = pickTrigger(e.Name, used)
-		// First non-unique edge can claim "enter".
-		if !used["enter"] {
-			em.Trigger = "enter"
-			used["enter"] = true
-		}
 	}
+	// Every edge gets a single-char letter trigger — no magic "first
+	// drill edge claims enter". With multiple drill edges (TaskList has
+	// tasks + subtasks + comments) the implicit primary was confusing.
+	// Enter always means "open preview"; drill via the visible letter.
+	em.Trigger = pickTrigger(e.Name, used)
 	return em
 }
 

@@ -305,7 +305,7 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Name: "memories", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "enter",
+				Name: "memories", Display: "Memories", Kind: runtime.EdgeDrill, Trigger: "m",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.

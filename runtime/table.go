@@ -328,6 +328,9 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyEnter:
+		// Enter always opens the preview overlay. To drill into an
+		// edge, press its single-char trigger (shown in the preview
+		// footer). No magic "primary drill" — every edge is explicit.
 		t.openPreviewOverlay()
 		return nil
 	}
@@ -408,15 +411,14 @@ func (t *tableView) openPreviewOverlay() {
 
 	// Trigger edges directly from inside the overlay too.
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		switch ev.Key() {
-		case tcell.KeyEscape:
+		if ev.Key() == tcell.KeyEscape {
 			t.app.pages.RemovePage("preview-overlay")
 			t.app.tv.SetFocus(t.table)
 			return nil
 		}
 		if rn := ev.Rune(); rn != 0 {
 			for _, e := range t.spec.edges {
-				if e.trigger == string(rn) && e.trigger != "enter" {
+				if e.trigger == string(rn) {
 					t.app.pages.RemovePage("preview-overlay")
 					t.followEdge(e, r.ID)
 					return nil

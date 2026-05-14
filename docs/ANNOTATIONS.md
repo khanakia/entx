@@ -26,7 +26,7 @@ func (Task) Annotations() []schema.Annotation {
 }
 ```
 
-Without `Browse()`, the convention `HasProjectID` rule decides. With `Browse()`, the entity is included regardless.
+Today every non-internal ent type with an ID is browsable, so `Browse()` is reserved for a future "exclude unless explicitly marked" mode. Including it now is a no-op.
 
 ### `Display(string)`
 
@@ -74,15 +74,26 @@ Override the default 200-row page size.
 enttui.PageSize(50)
 ```
 
-### `ProjectScope(field)`
+### Scope predicates
 
-Tell enttui which field carries the project_id (if it isn't literally named `project_id`).
+Scope is **config-driven**, not annotation-driven. Pass the snake_case field names you want wired as predicates via `enttui.Config.ScopeFields` (or `--scope` on the CLI):
 
 ```go
-enttui.ProjectScope("workspace_id")
+enttui.Generate("./schema", &enttui.Config{
+    Target:      "../tui/gen",
+    Package:     "tuigen",
+    EntPkg:      "myproject/ent",
+    ScopeFields: []string{"project_id", "tenant_id"},
+})
 ```
 
-Default: convention picks `project_id`.
+For each scope key an entity actually has on its schema, the generated Fetch closure reads `opts.Scope[<key>]` and applies a predicate (`pred.ProjectID(v)`, `pred.TenantID(v)`, …). Entities without that field skip the predicate. Drive at runtime:
+
+```go
+app.SetScope("project_id", projectID)
+```
+
+`enttui.ProjectScope("workspace_id")` is reserved for a future "this entity uses `workspace_id` as its `project_id`" remap — not wired yet.
 
 ## Field-level annotations
 

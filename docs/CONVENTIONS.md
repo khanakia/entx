@@ -7,9 +7,10 @@
 An ent.Type is **browsable** if and only if:
 
 1. It has an `ID` field (every ent type does unless explicitly disabled).
-2. It has a `project_id` field (string). This is the convention used by all aicoder-style projects to scope rows; it's how we tell business data from infrastructure tables.
-3. It's not on the **internal blocklist** (see below).
-4. It's not in the user's `--skip` flag.
+2. It's not on the **internal blocklist** (see below).
+3. It's not in the user's `--skip` flag.
+
+Scope filtering is independent of inclusion: pass `Config.ScopeFields` (CLI: `--scope project_id,tenant_id`) and the codegen emits one predicate per match for whichever scope fields each entity actually has. Entities without those fields stay browsable, just unscoped — driven at runtime via `app.SetScope(key, value)`.
 
 Internal blocklist (skipped automatically):
 
@@ -151,7 +152,7 @@ The "needs fmt" flag (`em.NeedsFmt`) is computed by walking columns and hero fie
 
 The annotations declared in `enttui/annotation.go` are the future overrides:
 
-- `enttui.Browse()` → opt-in even without `project_id`.
+- `enttui.Browse()` → reserved for the future "exclude unless explicitly marked" mode.
 - `enttui.Display("…")`, `Group("…")`, `Icon("…")` → override display labels.
 - `enttui.AsTitle()`, `AsBody()`, `AsStatus()` → override the field-name heuristic (e.g. use `name` even when both `title` and `name` exist).
 - `enttui.Sortable()` / `Filterable()` / `Hidden()` → per-field flags.

@@ -634,7 +634,15 @@ func (t *tableView) openColumnsModal() {
 		}
 	}
 
-	list := tview.NewList().ShowSecondaryText(false).SetHighlightFullLine(true)
+	// Selected bg/fg must be set explicitly — without them tview.List's
+	// "selected" style is the same as the surrounding rows, so the user
+	// can't tell the cursor is moving and it looks like arrow keys don't
+	// work. Matches the sort modal + sidebar.
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
 	var rebuild func()
 	rebuild = func() {
 		list.Clear()
@@ -642,12 +650,17 @@ func (t *tableView) openColumnsModal() {
 			if c.key == "body" {
 				continue
 			}
-			mark := "[ ]"
-			if t.columnOverrides[c.key] {
-				mark = "[x]"
+			// `✓` (green) = visible, `✗` (red) = hidden. Reads faster
+			// than `[x]` / `[ ]` at a glance — the red ✗ pops on the
+			// row that's been turned off.
+			mark := "[green]✓[-]"
+			if !t.columnOverrides[c.key] {
+				mark = "[red]✗[-]"
 			}
 			cKey := c.key
-			list.AddItem(mark+" "+c.label, c.key, 0, func() {
+			// Empty secondaryText — ShowSecondaryText(false) is set, so
+			// passing c.key was unused and just noise.
+			list.AddItem(mark+" "+c.label, "", 0, func() {
 				t.columnOverrides[cKey] = !t.columnOverrides[cKey]
 				cur := list.GetCurrentItem()
 				rebuild()
@@ -664,9 +677,66 @@ func (t *tableView) openColumnsModal() {
 	}
 	rebuild()
 
+	apply := func() {
+		t.app.pages.RemovePage("cols-modal")
+		t.refresh()
+	}
+
+	reset := func() {
+		// Reset overrides to whatever spec.Hidden says — i.e. the
+		// codegen-defined defaults. Keeps the modal open so the user
+		// can see the result before committing with `s`.
+		cur := list.GetCurrentItem()
+		for _, c := range t.spec.columns {
+			t.columnOverrides[c.key] = !c.hidden
+		}
+		rebuild()
+		list.SetCurrentItem(cur)
+	}
+
 	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyEscape {
+		switch ev.Key() {
+		case tcell.KeyEscape:
 			t.app.pages.RemovePage("cols-modal")
+			return nil
+		case tcell.KeyCtrlS:
+			apply()
+			return nil
+		case tcell.KeyCtrlR:
+			reset()
+			return nil
+		}
+		switch ev.Rune() {
+		case 's':
+			// Single-key apply — same convention as the condition
+			// builder. `space` is the vim-style toggle for the row,
+			// keeping enter free for "default" semantics.
+			apply()
+			return nil
+		case 'r':
+			// Reset to schema defaults (whatever the codegen marked
+			// with enttui.Hidden / the convention rules).
+			reset()
+			return nil
+		case ' ':
+			// Space toggles the focused row — same as enter on a
+			// non-button row, just without leaving the cursor.
+			i := list.GetCurrentItem()
+			// Compute the column matching this row index (rebuild
+			// iterates spec.columns and skips "body").
+			j := 0
+			for _, c := range t.spec.columns {
+				if c.key == "body" {
+					continue
+				}
+				if j == i {
+					t.columnOverrides[c.key] = !t.columnOverrides[c.key]
+					rebuild()
+					list.SetCurrentItem(i)
+					break
+				}
+				j++
+			}
 			return nil
 		}
 		return ev
@@ -675,7 +745,7 @@ func (t *tableView) openColumnsModal() {
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(list, 0, 1, true).
 		AddItem(tview.NewTextView().
-			SetText(" enter toggle · esc close ").
+			SetText(" enter / space toggle · s apply · r reset · esc close ").
 			SetTextColor(tcell.ColorGray), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" columns ").

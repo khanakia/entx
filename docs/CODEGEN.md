@@ -37,10 +37,12 @@ For each `*gen.Type` in the graph we call `extractEntity(n, opts, kindByType)`:
    - `n.ID == nil` → no id → not browsable.
    - `isInternal(n.Name)` → tables like `SchemaMigration`, `AuditLog`, FTS shadow tables.
    - `opts.Skip[n.Name]` → user opt-out via `--skip A,B,C`.
-   - `!em.HasProjectID` (convention) → entities without `project_id` are skipped today. Future: also include when `enttui.Browse()` annotation is present.
+
+   Scope predicates are **independent** of inclusion. For every name in `opts.ScopeFields` (e.g. `project_id`, `tenant_id`) the codegen records the `{Key, GoName}` pair for any matching field on the entity. The template emits one predicate per match using `gen.Field.StructField()` for the Go method name — `project_id` → `ProjectID`, `tenant_id` → `TenantID`, etc. Entities without any configured scope field stay browsable, just unscoped.
 
 2. **Field iteration** (Type.ID + Type.Fields combined):
-   - Sniff `project_id`, `created_at`, `updated_at` → boolean flags.
+   - Match each field name against `opts.ScopeFields` → append `{Key, GoName}` to `EntityMeta.ScopeFields`.
+   - Sniff `created_at`, `updated_at` → boolean flags.
    - First match on `title` / `name` / `display_name` → `TitleField`.
    - First match on `body` / `description` / `content` → `BodyField`.
    - First enum match on `status` / `severity` / `kind` / `state` → `StatusField`.
