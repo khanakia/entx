@@ -40,6 +40,16 @@ type App struct {
 	// instances maps a tview Pages entry name → the Go-side widget
 	// struct (*browser or *tableView). Used to recover state for v-toggle.
 	instances map[string]any
+
+	// rootFlex hosts the optional left sidebar + the pages container.
+	// When the sidebar is hidden, only pages occupies it.
+	rootFlex *tview.Flex
+	sidebar  *sidebar
+	// sidebarVisible mirrors the current state so toggleSidebar is a
+	// single source of truth.
+	sidebarVisible bool
+	// sidebarWidth in columns. Fixed; could be made configurable later.
+	sidebarWidth int
 }
 
 // SetInitialKind overrides which entity kind is shown when Run starts.
@@ -90,6 +100,7 @@ func (a *App) Scope() map[string]string {
 type pageEntry struct {
 	name  string // tview page name
 	title string // breadcrumb segment
+	kind  string // entity kind backing this page (for sidebar sync)
 }
 
 // New returns an empty App. Register entities, then Run.
@@ -137,6 +148,13 @@ func (a *App) Run() error {
 	// out from under it. See bug fix: opening preview via enter, pressing
 	// esc was emptying the table because popPage removed the table page.
 	a.tv.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		// Ctrl-prefixed sidebar toggle works EVERYWHERE — even with focus
+		// inside a text input — because it can't collide with normal
+		// typing (no plain letter can produce KeyCtrlB).
+		if ev.Key() == tcell.KeyCtrlB {
+			a.toggleSidebar()
+			return nil
+		}
 		// While typing into a text field, never intercept characters —
 		// `k` should type a `k`, not open the picker. esc inside an input
 		// is owned by the input itself (it knows whether to clear or
@@ -159,6 +177,18 @@ func (a *App) Run() error {
 		case 'k':
 			a.openPicker()
 			return nil
+		case '\\':
+			// `\` swings focus from the body INTO the sidebar (the
+			// sidebar's own handlers swing it back out). Opens the
+			// sidebar first if it's hidden — convenient one-key reach.
+			if !a.sidebarVisible {
+				a.showSidebar()
+				return nil
+			}
+			if a.sidebar != nil {
+				a.tv.SetFocus(a.sidebar.input)
+			}
+			return nil
 		case 'q':
 			a.tv.Stop()
 			return nil
@@ -173,7 +203,117 @@ func (a *App) Run() error {
 		return ev
 	})
 
-	return a.tv.SetRoot(a.pages, true).EnableMouse(true).Run()
+	// Build the root flex (sidebar | pages). Sidebar starts hidden — only
+	// the pages container is added until the user presses `b`.
+	a.sidebarWidth = 26
+	a.rootFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(a.pages, 0, 1, true)
+
+	return a.tv.SetRoot(a.rootFlex, true).EnableMouse(true).Run()
+}
+
+// toggleSidebar shows the sidebar if hidden, hides it otherwise.
+func (a *App) toggleSidebar() {
+	if a.sidebarVisible {
+		a.hideSidebar()
+	} else {
+		a.showSidebar()
+	}
+}
+
+// showSidebar mounts the left-rail kind picker and focuses its filter.
+// Constructed on every show so newly registered kinds appear and the
+// initial selection lines up with the current front page.
+func (a *App) showSidebar() {
+	if a.sidebarVisible || a.rootFlex == nil {
+		return
+	}
+	a.sidebar = newSidebar(a)
+	// Re-layout: insert sidebar before pages.
+	a.rootFlex.Clear().
+		AddItem(a.sidebar.root, a.sidebarWidth, 0, true).
+		AddItem(a.pages, 0, 1, false)
+	a.sidebarVisible = true
+	a.tv.SetFocus(a.sidebar.input)
+}
+
+// focusBody moves focus from the sidebar back to the front stack page's
+// primary widget (browser.list or tableView.table). No-op if the sidebar
+// is hidden or there's nothing on the stack.
+func (a *App) focusBody() {
+	if len(a.stack) == 0 {
+		return
+	}
+	inst := a.pageInstance(a.stack[len(a.stack)-1].name)
+	switch v := inst.(type) {
+	case *browser:
+		a.tv.SetFocus(v.list)
+	case *tableView:
+		a.tv.SetFocus(v.table)
+	}
+}
+
+// hideSidebar removes the sidebar and returns focus to the current page.
+func (a *App) hideSidebar() {
+	if !a.sidebarVisible || a.rootFlex == nil {
+		return
+	}
+	a.rootFlex.Clear().AddItem(a.pages, 0, 1, true)
+	a.sidebar = nil
+	a.sidebarVisible = false
+	// Hand focus back to the front page widget.
+	if len(a.stack) > 0 {
+		if inst := a.pageInstance(a.stack[len(a.stack)-1].name); inst != nil {
+			switch v := inst.(type) {
+			case *browser:
+				a.tv.SetFocus(v.list)
+			case *tableView:
+				a.tv.SetFocus(v.table)
+			}
+		}
+	}
+}
+
+// syncSidebar nudges the sidebar's highlight onto the front page's kind.
+// Critical: uses highlightCurrent (cursor-only) rather than populate
+// (Clear + AddItem + SetCurrentItem). Calling populate from within a
+// SetChangedFunc-triggered swap caused the cursor to jump to the last
+// item on the first arrow press — the inner SetCurrentItem corrupted
+// the outer one's bookkeeping.
+func (a *App) syncSidebar() {
+	if !a.sidebarVisible || a.sidebar == nil {
+		return
+	}
+	a.sidebar.suppressChange = true
+	a.sidebar.highlightCurrent()
+	a.sidebar.suppressChange = false
+}
+
+// currentKind returns the kind backing the front stack page. Empty if
+// stack is empty.
+func (a *App) currentKind() string {
+	if len(a.stack) == 0 {
+		return ""
+	}
+	return a.stack[len(a.stack)-1].kind
+}
+
+// replaceTopKind swaps the top stack page for a fresh browser/table page
+// of `kind`. Used by the sidebar's live-preview navigation. Stack depth
+// stays the same (no growth, no shrink to drill ancestors).
+func (a *App) replaceTopKind(kind string) {
+	if _, ok := a.specs[kind]; !ok {
+		return
+	}
+	if len(a.stack) == 0 {
+		a.pushBrowser(kind, "")
+		return
+	}
+	top := a.stack[len(a.stack)-1]
+	a.pages.RemovePage(top.name)
+	a.clearInstance(top.name)
+	a.stack = a.stack[:len(a.stack)-1]
+	a.pushBrowser(kind, "")
 }
 
 // pushBrowser opens a page for the given kind in the appropriate view
@@ -207,7 +347,7 @@ func (a *App) pushBrowser(kind, focusID string) {
 		t := newTableView(a, spec)
 		name := pageName("table", kind, "")
 		a.pages.AddPage(name, t.root, true, true)
-		a.stack = append(a.stack, pageEntry{name: name, title: title + " (table)"})
+		a.stack = append(a.stack, pageEntry{name: name, title: title + " (table)", kind: kind})
 		a.tv.SetFocus(t.table)
 		a.registerInstance(name, t)
 		return
@@ -216,12 +356,13 @@ func (a *App) pushBrowser(kind, focusID string) {
 	b := newBrowser(a, spec)
 	name := pageName("browse", kind, focusID)
 	a.pages.AddPage(name, b.root, true, true)
-	a.stack = append(a.stack, pageEntry{name: name, title: title})
+	a.stack = append(a.stack, pageEntry{name: name, title: title, kind: kind})
 	a.tv.SetFocus(b.list)
 	a.registerInstance(name, b)
 	if focusID != "" {
 		b.focusID(focusID)
 	}
+	a.syncSidebar()
 }
 
 // swapToTable replaces the current top page with a table view of the
@@ -246,7 +387,7 @@ func (a *App) swapToTable(spec *anySpec) {
 
 	t := newTableView(a, spec)
 	name := pageName("table", spec.kind, "")
-	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display + " (table)"}
+	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display + " (table)", kind: spec.kind}
 	a.pages.AddPage(name, t.root, true, true)
 	a.tv.SetFocus(t.table)
 	a.registerInstance(name, t)
@@ -273,7 +414,7 @@ func (a *App) swapToBrowser(spec *anySpec) {
 
 	b := newBrowser(a, spec)
 	name := pageName("browse", spec.kind, "")
-	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display}
+	a.stack[len(a.stack)-1] = pageEntry{name: name, title: spec.display, kind: spec.kind}
 	a.pages.AddPage(name, b.root, true, true)
 	a.tv.SetFocus(b.list)
 	a.registerInstance(name, b)
@@ -316,9 +457,10 @@ func (a *App) pushBrowserList(refs EntityRefList) {
 	name := pageName("drill", refs.Kind, "")
 	title := spec.display + " (drilled)"
 	a.pages.AddPage(name, b.root, true, true)
-	a.stack = append(a.stack, pageEntry{name: name, title: title})
+	a.stack = append(a.stack, pageEntry{name: name, title: title, kind: refs.Kind})
 	a.tv.SetFocus(b.list)
 	a.registerInstance(name, b)
+	a.syncSidebar()
 }
 
 // frontIsModal returns true when the front tview page is NOT one of the

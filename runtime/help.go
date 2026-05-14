@@ -30,7 +30,14 @@ type helpEntry struct {
 // shortcuts MUST be added here so the help palette stays accurate.
 var helpEntries = []helpEntry{
 	// --- Global (work everywhere) ---
-	{Category: "Global", Keys: "k", Action: "Open kind picker"},
+	{Category: "Global", Keys: "k", Action: "Open kind picker (modal)"},
+	{Category: "Global", Keys: "ctrl+b", Action: "Toggle sidebar (works inside text inputs too)"},
+	{Category: "Global", Keys: "\\", Action: "Focus sidebar from body (opens if hidden)"},
+	{Category: "Sidebar", Keys: "type", Action: "Filter kinds by display name / kind id"},
+	{Category: "Sidebar", Keys: "↑ ↓ pgup pgdn", Action: "Move selection (live-swaps the body)"},
+	{Category: "Sidebar", Keys: "tab", Action: "Cycle focus input ↔ list"},
+	{Category: "Sidebar", Keys: "\\", Action: "Send focus to body (sidebar stays open)"},
+	{Category: "Sidebar", Keys: "enter / esc / ctrl+b", Action: "Close sidebar"},
 	{Category: "Global", Keys: "?", Action: "Open this help palette"},
 	{Category: "Global", Keys: "q", Action: "Quit"},
 	{Category: "Global", Keys: "esc", Action: "Back / close modal"},
