@@ -154,6 +154,13 @@ type FieldMeta struct {
 	// value picker.
 	EnumValues []string
 
+	// Ref-picker metadata (RelatedColumn{Pick:true}). RefKind is the
+	// registered kind of the target whose rows the picker lists.
+	// GoName holds the host FK field's struct name (the setter target);
+	// RefNillable says whether that FK column is clearable.
+	RefKind     string
+	RefNillable bool
+
 	// Related fields render a column drawn from an eager-loaded edge
 	// target instead of the row itself. EdgeGoName + TargetTitleField
 	// drive the template's `r.Edges.<EdgeGoName>.<TargetTitleField>`
@@ -519,6 +526,42 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			GoName: tfm.GoName,
 		})
 		em.NeedsSQL = true
+
+		// Pick → an editable reference. Resolve the host FK column
+		// (the edge's relation column; fall back to "<edge>_id") and
+		// emit a ref FormField so the form opens a target-row picker
+		// and writes that FK instead of the user typing an opaque id.
+		if rc.Pick {
+			fkCol := ""
+			if len(e.Rel.Columns) > 0 {
+				fkCol = e.Rel.Columns[0]
+			}
+			if fkCol == "" {
+				fkCol = rc.Edge + "_id"
+			}
+			var hf *gen.Field
+			for _, f := range n.Fields {
+				if f.Name == fkCol {
+					hf = f
+					break
+				}
+			}
+			if hf != nil {
+				if tk, ok := kindByType[e.Type.Name]; ok {
+					hfm := fieldMetaOf(hf)
+					em.EditableFields = append(em.EditableFields, FieldMeta{
+						Key:         fkCol,
+						Label:       label,
+						Kind:        "ref",
+						Required:    !hf.Optional && !hf.Nillable,
+						GoName:      hfm.GoName, // host FK setter target
+						RefKind:     tk,         // registered target kind
+						RefNillable: hf.Optional || hf.Nillable,
+					})
+				}
+			}
+		}
+
 		// Avoid duplicate WithX() calls if the user picks multiple
 		// fields off the same edge.
 		alreadyLoaded := false

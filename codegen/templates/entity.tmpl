@@ -210,6 +210,9 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 			{{- range .EditableFields }}
 			{
 				Key: "{{ .Key }}", Label: "{{ .Label }}", Kind: "{{ .Kind }}", Required: {{ .Required }},
+				{{- if .RefKind }}
+				RefKind: "{{ .RefKind }}",
+				{{- end }}
 				{{- if .EnumValues }}
 				EnumValues: []string{
 					{{- range .EnumValues }}
@@ -351,6 +354,16 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 				} else {
 					u.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
 				}
+{{- else if eq .Kind "ref" }}
+				{{- if .RefNillable }}
+				if v == "" {
+					u.Clear{{ .GoName }}()
+				} else {
+					u.Set{{ .GoName }}(v)
+				}
+				{{- else }}
+				if v != "" { u.Set{{ .GoName }}(v) }
+				{{- end }}
 {{- else }}
 				_ = v // unsupported kind for codegen update setter — extend the template
 {{- end }}
@@ -367,6 +380,8 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 				c.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
 {{- else if eq .Kind "enumPtr" }}
 				c.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
+{{- else if eq .Kind "ref" }}
+				c.Set{{ .GoName }}(v)
 {{- else }}
 				_ = v
 {{- end }}

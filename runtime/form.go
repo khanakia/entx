@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -92,6 +93,123 @@ func openCreateForm(app *App, spec *anySpec, notify func(string), onSaved func()
 	)
 }
 
+// openRefPicker shows a searchable list of the target kind's rows
+// (by rowLabel) and calls pick(id, label) with the chosen row. Used by
+// ref FormFields so the user selects a parent instead of typing an
+// opaque foreign-key id. v1: first 1000 rows + in-memory fzf filter,
+// scope-aware — same shape as the enum/column pickers.
+func openRefPicker(app *App, refKind string, pick func(id, label string)) {
+	cs := app.specs[refKind]
+	if cs == nil {
+		app.flash("ref target kind '" + refKind + "' not registered")
+		return
+	}
+	ctx, cancel := context.WithTimeout(app.ctx, 5*time.Second)
+	rows, _, err := cs.fetch(ctx, ListOpts{Limit: 1000, Scope: app.Scope()})
+	cancel()
+	if err != nil {
+		app.flash("ref load failed: " + err.Error())
+		return
+	}
+
+	input := tview.NewInputField().
+		SetLabel("pick " + cs.display + " › ").
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldWidth(40).
+		SetFieldBackgroundColor(tcell.ColorDefault)
+
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
+	shown := append([]Row(nil), rows...)
+	repaint := func() {
+		list.Clear()
+		// First entry clears the FK (only meaningful for nullable, but
+		// harmless otherwise — generated setter no-ops empty for
+		// required fields).
+		list.AddItem("[gray](clear)[-]", "", 0, nil)
+		for _, r := range shown {
+			list.AddItem(rowLabel(r), "", 0, nil)
+		}
+		list.SetCurrentItem(0)
+	}
+	repaint()
+
+	close := func() { app.pages.RemovePage("ref-picker") }
+	commit := func() {
+		i := list.GetCurrentItem()
+		if i == 0 {
+			pick("", "(none)")
+			close()
+			return
+		}
+		r := shown[i-1]
+		pick(r.ID, rowLabel(r))
+		close()
+	}
+
+	input.SetChangedFunc(func(text string) {
+		q := strings.ToLower(strings.TrimSpace(text))
+		if q == "" {
+			shown = append([]Row(nil), rows...)
+		} else {
+			shown = shown[:0]
+			for _, r := range rows {
+				if strings.Contains(strings.ToLower(rowLabel(r)+" "+r.ID), q) {
+					shown = append(shown, r)
+				}
+			}
+		}
+		repaint()
+	})
+	input.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyDown, tcell.KeyCtrlN:
+			if c := list.GetCurrentItem() + 1; c < list.GetItemCount() {
+				list.SetCurrentItem(c)
+			}
+			return nil
+		case tcell.KeyUp, tcell.KeyCtrlP:
+			if c := list.GetCurrentItem() - 1; c >= 0 {
+				list.SetCurrentItem(c)
+			}
+			return nil
+		case tcell.KeyEnter:
+			commit()
+			return nil
+		case tcell.KeyEscape:
+			close()
+			return nil
+		}
+		return ev
+	})
+	list.SetSelectedFunc(func(int, string, string, rune) { commit() })
+
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(input, 1, 0, true).
+		AddItem(list, 0, 1, false).
+		AddItem(tview.NewTextView().
+			SetTextColor(tcell.ColorGray).
+			SetText(" type to filter · ↑/↓ · enter pick · (clear) unsets · esc cancel "), 1, 0, false)
+	body.SetBorder(true).
+		SetTitle(" pick " + cs.display + " ").
+		SetTitleColor(tcell.ColorYellow).
+		SetBorderColor(tcell.ColorDodgerBlue)
+	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyEscape {
+			close()
+			return nil
+		}
+		return ev
+	})
+
+	app.pages.AddPage("ref-picker", centerModal(body, 70, 24), true, true)
+	app.tv.SetFocus(input)
+}
+
 // openForm is the shared implementation. submit runs the typed save and
 // returns an error; on success the modal closes and onSaved fires so
 // the caller can refresh its row list AFTER the DB write completed.
@@ -111,9 +229,26 @@ func openForm(app *App, spec *anySpec, prefill map[string]string, title string, 
 		SetButtonTextColor(tcell.ColorWhite).
 		SetLabelColor(tcell.ColorYellow)
 
+	// Ref fields get a post-loop InputCapture wired to a picker; track
+	// (label, key, RefKind) so we can fetch the *tview.InputField after
+	// the form is built.
+	type refWire struct{ label, key, refKind string }
+	var refWires []refWire
+
 	for _, f := range spec.formFields {
 		key := f.Key
 		switch f.Kind {
+		case "ref":
+			label := f.Label
+			if f.Required {
+				label += " *"
+			}
+			label += " ↵pick"
+			// Display the current FK value (id) until the user picks;
+			// the changed func is nil so typing can't corrupt the id —
+			// only the picker writes values[key].
+			form.AddInputField(label, values[key], 0, nil, nil)
+			refWires = append(refWires, refWire{label: label, key: key, refKind: f.RefKind})
 		case "enum", "enumPtr":
 			opts := append([]string(nil), f.EnumValues...)
 			// Prepend a blank option for enumPtr so the user can clear it.
@@ -166,6 +301,31 @@ func openForm(app *App, spec *anySpec, prefill map[string]string, title string, 
 		if onSaved != nil {
 			onSaved()
 		}
+	}
+
+	// Wire each ref field: Enter on it opens a picker of the target
+	// kind's rows; the chosen row's ID is stored, its label shown.
+	for _, rw := range refWires {
+		item := form.GetFormItemByLabel(rw.label)
+		in, ok := item.(*tview.InputField)
+		if !ok {
+			continue
+		}
+		key, refKind, input := rw.key, rw.refKind, in
+		in.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+			if ev.Key() == tcell.KeyEnter {
+				openRefPicker(app, refKind, func(id, label string) {
+					values[key] = id
+					input.SetText(label)
+				})
+				return nil
+			}
+			// Swallow text edits — the id is picker-managed only.
+			if ev.Key() == tcell.KeyRune || ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+				return nil
+			}
+			return ev
+		})
 	}
 
 	form.AddButton("Save", saveBtn).

@@ -225,6 +225,11 @@ type RelatedColumn struct {
 	Edge  string // ent edge name on the host (e.g. "author")
 	Field string // ent field name on the target type (e.g. "name", "email")
 	Label string // optional display label; defaults to "<Edge> <Field>"
+	// Pick makes this related column EDITABLE via a reference picker.
+	// Editing it (in the e/N form) opens a searchable list of the
+	// target kind's rows shown by their label; selecting one writes
+	// the host's foreign-key column. No opaque-id typing.
+	Pick bool
 }
 
 // RelatedColumnsAnnot is the multi-entry annotation read by the codegen.

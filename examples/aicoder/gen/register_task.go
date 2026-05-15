@@ -741,6 +741,18 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					"urgent",
 				},
 			},
+			{
+				Key: "tasklist_id", Label: "Tasklist", Kind: "ref", Required: false,
+				RefKind: "tasklist",
+			},
+			{
+				Key: "mission_id", Label: "Mission", Kind: "ref", Required: false,
+				RefKind: "mission",
+			},
+			{
+				Key: "plan_id", Label: "Plan", Kind: "ref", Required: false,
+				RefKind: "plan",
+			},
 		},
 
 		// Update wires the typed setters for each Editable field. The
@@ -767,6 +779,27 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					u.SetPriority(entTask.Priority(v))
 				}
 			}
+			if v, ok := vals["tasklist_id"]; ok {
+				if v == "" {
+					u.ClearTasklistID()
+				} else {
+					u.SetTasklistID(v)
+				}
+			}
+			if v, ok := vals["mission_id"]; ok {
+				if v == "" {
+					u.ClearMissionID()
+				} else {
+					u.SetMissionID(v)
+				}
+			}
+			if v, ok := vals["plan_id"]; ok {
+				if v == "" {
+					u.ClearPlanID()
+				} else {
+					u.SetPlanID(v)
+				}
+			}
 			_, err := u.Save(ctx)
 			return err
 		},
@@ -784,6 +817,15 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			}
 			if v, ok := vals["priority"]; ok && v != "" {
 				c.SetPriority(entTask.Priority(v))
+			}
+			if v, ok := vals["tasklist_id"]; ok && v != "" {
+				c.SetTasklistID(v)
+			}
+			if v, ok := vals["mission_id"]; ok && v != "" {
+				c.SetMissionID(v)
+			}
+			if v, ok := vals["plan_id"]; ok && v != "" {
+				c.SetPlanID(v)
 			}
 			// Scope key wired in via app.SetScope — typically required
 			// for the row to land in the right tenant / project / etc.

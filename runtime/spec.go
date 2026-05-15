@@ -164,6 +164,10 @@ type FormField struct {
 	Kind       string   // mirrors Column kind: string / stringPtr / enum / enumPtr / time / scalar
 	Required   bool     // schema-side NotEmpty / non-nillable
 	EnumValues []string // populated for enum / enumPtr kinds; drives the dropdown
+	// RefKind is set for Kind=="ref": the registered kind whose rows
+	// the picker lists. Selecting a row stores its ID into this FK
+	// field's value.
+	RefKind string
 }
 
 // DefaultView captures the entity's preferred sort/filter + view mode at

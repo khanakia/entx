@@ -72,7 +72,12 @@ func annotInt(annots map[string]any, name, key string) (int, bool) {
 // {Edge, Field, Label} entries. The annotation arrives JSON-decoded:
 //
 //	{"Columns": [{"Edge": "author", "Field": "name", "Label": "Author"}]}
-func annotRelatedColumns(annots map[string]any) []struct{ Edge, Field, Label string } {
+type relatedColumnAnnot struct {
+	Edge, Field, Label string
+	Pick               bool
+}
+
+func annotRelatedColumns(annots map[string]any) []relatedColumnAnnot {
 	m, ok := annotMap(annots, "EntTUI.RelatedColumns")
 	if !ok {
 		return nil
@@ -81,7 +86,7 @@ func annotRelatedColumns(annots map[string]any) []struct{ Edge, Field, Label str
 	if !ok {
 		return nil
 	}
-	out := make([]struct{ Edge, Field, Label string }, 0, len(raw))
+	out := make([]relatedColumnAnnot, 0, len(raw))
 	for _, item := range raw {
 		row, ok := item.(map[string]any)
 		if !ok {
@@ -90,10 +95,11 @@ func annotRelatedColumns(annots map[string]any) []struct{ Edge, Field, Label str
 		edge, _ := row["Edge"].(string)
 		field, _ := row["Field"].(string)
 		label, _ := row["Label"].(string)
+		pick, _ := row["Pick"].(bool)
 		if edge == "" || field == "" {
 			continue
 		}
-		out = append(out, struct{ Edge, Field, Label string }{edge, field, label})
+		out = append(out, relatedColumnAnnot{Edge: edge, Field: field, Label: label, Pick: pick})
 	}
 	return out
 }
