@@ -371,8 +371,16 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		t.app.openKindInfo(t.spec)
 		return nil
 	case '#':
+		// Capture the focused DATA column before the offset changes so
+		// the cursor stays on the same column after toggling (otherwise
+		// hiding the # column shifted the cursor one column right).
+		dataCol := t.focusedDataCol()
+		selRow, _ := t.table.GetSelection()
 		t.showRowNum = !t.showRowNum
 		t.refresh()
+		if selRow >= 1 {
+			t.table.Select(selRow, dataCol+t.colOffset())
+		}
 		return nil
 	case ':':
 		_, col := t.table.GetSelection()
