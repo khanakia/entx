@@ -61,8 +61,9 @@ type tableView struct {
 	columnOverrides map[string]bool
 
 	// Row-selection set (driven by space / V / * / 0; consumed by `y`).
-	selection *selectionSet
-	selAnchor int // V-range anchor data-row index; -1 = unset
+	selection  *selectionSet
+	selAnchor  int  // V-range anchor data-row index; -1 = unset
+	showRowNum bool // `#` toggles a 1-based index prefix in column 0
 }
 
 // state captures the current view state for handoff to the browser view
@@ -148,9 +149,10 @@ func newTableView(app *App, spec *anySpec) *tableView {
 	t := &tableView{
 		app:       app,
 		spec:      spec,
-		selection: newSelection(),
-		selAnchor: -1,
-		sortField: spec.defaultView.SortField,
+		selection:  newSelection(),
+		selAnchor:  -1,
+		showRowNum: true,
+		sortField:  spec.defaultView.SortField,
 		sortDir:   spec.defaultView.SortDir,
 		pageSize:  ps,
 	}
@@ -252,10 +254,13 @@ func (t *tableView) refresh() {
 		for c, col := range cols {
 			v := row.Columns[col.key]
 			label := truncate(v, 60)
-			// Selection marker in the first column. Doesn't change
-			// the underlying value — only the rendered prefix.
-			if c == 0 && t.selection.has(row.ID) {
-				label = "[yellow]✓[-] " + label
+			// Column-0 gets the row-number prefix + selection marker.
+			// Neither changes the value — only the rendered cell.
+			if c == 0 {
+				if t.selection.has(row.ID) {
+					label = "[yellow]✓[-] " + label
+				}
+				label = rowNumPrefix(t.showRowNum, r, len(rows)) + label
 			}
 			cell := tview.NewTableCell(label).SetExpansion(1)
 			if col.chip != nil {
@@ -320,6 +325,16 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case 'i':
 		t.app.openKindInfo(t.spec)
+		return nil
+	case '#':
+		t.showRowNum = !t.showRowNum
+		t.refresh()
+		return nil
+	case ':':
+		_, col := t.table.GetSelection()
+		openGotoRow(t.app, len(t.rows), func(idx int) {
+			t.table.Select(idx+1, col) // +1: row 0 is the header
+		})
 		return nil
 	case ' ':
 		if !t.spec.allowBulkCopy {

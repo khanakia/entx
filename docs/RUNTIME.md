@@ -169,6 +169,12 @@ Two read-only overlays, both built from `App.capRows()` (iterates `kindListSorte
 
 Neither view mutates anything — pure introspection over the registry.
 
+## Row numbers + goto  (`selection.go` / browser / table)
+
+`showRowNum` (default true) on both views. `rowNumPrefix(show, idx, total)` returns a gray right-aligned `%*d` prefix sized to the page total — browser prepends it to the list label, table to the column-0 cell (composed with the ✓ selection marker; neither alters the underlying value). `#` toggles.
+
+`openGotoRow(app, n, jump)` is a tiny input modal. Parses `$`/`last`/`end` → `n-1`, `^`/`first`/`1` → `0`, integers → 1-based, anything else ignored; clamps to `[0,n-1]`. Browser passes `b.list.SetCurrentItem`; table passes `t.table.Select(idx+1, col)` (preserving the focused column, +1 to skip the header row). Bound to `:`. Independent of the existing `g`/`G` page-first/last + `n`/`p` page nav.
+
 ## Sidebar  (`sidebar.go`)
 
 A persistent left-rail companion to the modal picker. Hidden by default, toggled with `ctrl+b`. Lives in `App.rootFlex` as a sibling of the pages container — NOT a tview Pages overlay — so it stays visible while the user interacts with the body.

@@ -76,6 +76,20 @@ type browser struct {
 	selection *selectionSet
 	// selAnchor is the V-range anchor row index; -1 = unset.
 	selAnchor int
+	// showRowNum prefixes each row with its 1-based index. Default on;
+	// toggle with `#`.
+	showRowNum bool
+}
+
+// rowNumPrefix returns a right-aligned "<n> " prefix (width sized to
+// the page total) or "" when row numbers are off. Shared by browser +
+// table so the formatting matches.
+func rowNumPrefix(show bool, idx, total int) string {
+	if !show {
+		return ""
+	}
+	w := len(fmt.Sprintf("%d", total))
+	return fmt.Sprintf("[gray]%*d[-] ", w, idx+1)
 }
 
 // newBrowser builds the widget tree for one entity kind. It does NOT add
@@ -204,9 +218,10 @@ func newBrowser(app *App, spec *anySpec) *browser {
 	b := &browser{
 		app:       app,
 		spec:      spec,
-		selection: newSelection(),
-		selAnchor: -1,
-		sortField: spec.defaultView.SortField,
+		selection:  newSelection(),
+		selAnchor:  -1,
+		showRowNum: true,
+		sortField:  spec.defaultView.SortField,
 		sortDir:   spec.defaultView.SortDir,
 		pageSize:  ps,
 	}
@@ -302,11 +317,11 @@ func (b *browser) refresh() {
 	b.total = total
 
 	b.list.Clear()
-	for _, r := range rows {
+	for i, r := range rows {
 		// Generic label: use whichever common-name column the spec
 		// happens to have. None of these are required — schemas with
 		// none fall back to the id, which always exists.
-		label := rowLabel(r)
+		label := rowNumPrefix(b.showRowNum, i, len(rows)) + rowLabel(r)
 		if b.selection.has(r.ID) {
 			label = "[yellow]✓[-] " + label
 		}
@@ -395,6 +410,16 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'i':
 		// Capabilities card for THIS view.
 		b.app.openKindInfo(b.spec)
+		return nil
+	case '#':
+		b.showRowNum = !b.showRowNum
+		b.refreshDisplayOnly()
+		return nil
+	case ':':
+		// vim-style goto: number / $ / first.
+		openGotoRow(b.app, len(b.rows), func(idx int) {
+			b.list.SetCurrentItem(idx)
+		})
 		return nil
 	case 'f':
 		// Same condition builder the table view opens — operates on the
@@ -784,8 +809,8 @@ func colorChip(chip map[string]string, value string) string {
 func (b *browser) refreshDisplayOnly() {
 	cur := b.list.GetCurrentItem()
 	b.list.Clear()
-	for _, r := range b.rows {
-		label := rowLabel(r)
+	for i, r := range b.rows {
+		label := rowNumPrefix(b.showRowNum, i, len(b.rows)) + rowLabel(r)
 		if b.selection.has(r.ID) {
 			label = "[yellow]✓[-] " + label
 		}

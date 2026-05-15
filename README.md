@@ -368,9 +368,13 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`i`**        | Capabilities card for the current view (what's on/off + how to enable) |
 | **`F`**        | Capabilities matrix — every kind × feature flags (filter, CSV, enter to jump) |
 | **`M`**        | Toggle mouse capture (off by default → terminal text selection / copy works) |
+| **`#`**        | Toggle the 1-based row-number prefix (default on)        |
+| **`:`**        | Go to row — `42`, `$`/`last`, `1`/`first` (vim-style)    |
 | **`q`**        | Quit                                                    |
 | **`ctrl+f / pgdn / space`** | Scroll preview down half page              |
 | **`ctrl+b / pgup`** | Scroll preview up half page                        |
+
+**Row numbers + jump:** every row carries a gray 1-based index (`#` toggles it off/on, default on). `:` opens a goto prompt — type a number, or `$`/`last`, or `1`/`first`; out-of-range clamps. Independent of `g`/`G` (first/last *page*) and `n`/`p` (page nav).
 
 **Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live with `M`.
 

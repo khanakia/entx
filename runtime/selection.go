@@ -133,6 +133,71 @@ func (s *selectionSet) filteredRows(rows []Row) []Row {
 	return out
 }
 
+// openGotoRow shows a tiny prompt for vim-style row jumping. `n` is the
+// number of rows on the current page; `jump` receives a 0-based index.
+// Accepts: a 1-based integer, `$` / `last`, `1` / `^` / `first`. Out of
+// range clamps. Enter commits, esc cancels.
+func openGotoRow(app *App, n int, jump func(idx int)) {
+	if n == 0 {
+		return
+	}
+	input := tview.NewInputField().
+		SetLabel(fmt.Sprintf(":goto (1-%d, $=last) ", n)).
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldWidth(10).
+		SetFieldBackgroundColor(tcell.ColorDefault)
+
+	close := func() { app.pages.RemovePage("goto-row") }
+
+	input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			close()
+			return
+		}
+		if key != tcell.KeyEnter {
+			return
+		}
+		s := strings.TrimSpace(strings.ToLower(input.GetText()))
+		close()
+		switch s {
+		case "", "^", "first", "g":
+			jump(0)
+			return
+		case "$", "last", "end":
+			jump(n - 1)
+			return
+		}
+		v := 0
+		for _, r := range s {
+			if r < '0' || r > '9' {
+				return // ignore junk
+			}
+			v = v*10 + int(r-'0')
+		}
+		idx := v - 1 // 1-based → 0-based
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= n {
+			idx = n - 1
+		}
+		jump(idx)
+	})
+
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(input, 1, 0, true).
+		AddItem(tview.NewTextView().
+			SetTextColor(tcell.ColorGray).
+			SetText(" number · $ last · 1 first · enter go · esc cancel "), 1, 0, false)
+	body.SetBorder(true).
+		SetTitle(" go to row ").
+		SetTitleColor(tcell.ColorYellow).
+		SetBorderColor(tcell.ColorDodgerBlue)
+
+	app.pages.AddPage("goto-row", centerModal(body, 50, 5), true, true)
+	app.tv.SetFocus(input)
+}
+
 // --- format chooser modal ---
 
 // formatChoice enumerates the four bulk-copy variants + the two export

@@ -47,6 +47,8 @@ var helpEntries = []helpEntry{
 	{Category: "Global", Keys: "F", Action: "Capabilities matrix — every kind × edit/new/del/bulk/export"},
 	{Category: "Global", Keys: "i", Action: "Capabilities card for the CURRENT view (what's on/off + how to enable)"},
 	{Category: "Global", Keys: "M", Action: "Toggle mouse capture (default off → terminal text selection / copy works)"},
+	{Category: "Global", Keys: "#", Action: "Toggle row-number prefix (default on)"},
+	{Category: "Global", Keys: ":", Action: "Go to row — number / $ last / 1 first (vim-style)"},
 	{Category: "Global", Keys: "q", Action: "Quit"},
 	{Category: "Global", Keys: "esc", Action: "Back / close modal"},
 
