@@ -60,6 +60,14 @@ type statusData struct {
 	Page      int // 1-indexed; 0 hides the segment
 	Pages     int
 	PageSize  int
+	// Capability chips — shown so the user knows whether e/N/D/X will
+	// work before pressing. Empty when the schema didn't opt in.
+	CanEdit      bool
+	CanCreate    bool
+	CanDelete    bool
+	CanBulkCopy  bool
+	CanExport    bool
+	SelCount     int // non-zero → " [yellow]N selected[-]" chip
 }
 
 func renderStatus(data statusData) string {

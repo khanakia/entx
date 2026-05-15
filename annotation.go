@@ -92,6 +92,29 @@ type CountEdges struct{ schema.Annotation }
 
 func (CountEdges) Name() string { return "EntTUI.CountEdges" }
 
+// AllowBulkCopy enables row-selection (`space` / `a` / `c`) and the
+// multi-row `y` flow — pressing `y` with one or more rows selected
+// opens a format chooser (JSON array / CSV / focused-column JSON / CSV)
+// and copies the result to the clipboard. Off by default.
+type AllowBulkCopy struct{ schema.Annotation }
+
+func (AllowBulkCopy) Name() string { return "EntTUI.AllowBulkCopy" }
+
+// AllowExport enables the `X` shortcut — re-fetches every row matching
+// the current filter + sort (capped at 10_000 to keep clipboards sane),
+// opens a JSON / CSV chooser, copies the result. Off by default.
+type AllowExport struct{ schema.Annotation }
+
+func (AllowExport) Name() string { return "EntTUI.AllowExport" }
+
+// AllowCreate enables the `N` (new row) shortcut. The form opens with
+// every Editable() field empty, plus any scope keys from app.SetScope()
+// pre-injected so the new row lands in the right tenant / project /
+// etc. Off by default.
+type AllowCreate struct{ schema.Annotation }
+
+func (AllowCreate) Name() string { return "EntTUI.AllowCreate" }
+
 // AllowDelete enables the `D` (delete with confirm) shortcut. Off by
 // default — destructive actions opt-in only.
 type AllowDelete struct{ schema.Annotation }

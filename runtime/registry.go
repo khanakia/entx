@@ -21,6 +21,8 @@ type anySpec struct {
 	pageSize       int
 	multiSort      bool
 	showEdgeCounts bool
+	allowBulkCopy  bool
+	allowExport    bool
 	defaultView    DefaultView
 
 	// fetch returns the row IDs + their typed display data.
@@ -31,10 +33,11 @@ type anySpec struct {
 	columns []anyColumn
 	edges   []anyEdge
 
-	// Form support — driven by enttui.Editable() / AllowDelete().
+	// Form support — driven by enttui.Editable() / AllowCreate / AllowDelete.
 	// Nil closures mean the corresponding operation is disabled.
 	formFields []FormField
 	update     func(ctx context.Context, id string, vals map[string]string) error
+	create     func(ctx context.Context, vals map[string]string) (string, error)
 	deleteRow  func(ctx context.Context, id string) error
 }
 
@@ -210,6 +213,8 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		pageSize:       spec.PageSize,
 		multiSort:      spec.MultiSort,
 		showEdgeCounts: spec.ShowEdgeCounts,
+		allowBulkCopy:  spec.AllowBulkCopy,
+		allowExport:    spec.AllowExport,
 		defaultView:    spec.Default,
 		fetch:       fetch,
 		getOne:      getOne,
@@ -217,6 +222,7 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		edges:       edges,
 		formFields: spec.FormFields,
 		update:     spec.Update,
+		create:     spec.Create,
 		deleteRow:  spec.Delete,
 	}
 	app.kindOrder = append(app.kindOrder, spec.Kind)

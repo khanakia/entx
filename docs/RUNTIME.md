@@ -14,7 +14,10 @@ enttui/runtime/
 ├── sidebar.go     Persistent left-rail kind switcher (ctrl+b)
 ├── table.go       Table-mode view (one row per ent record)
 ├── table_phases.go Shared filter / sort / columns modals (see modalHost)
-├── clipboard.go   y / Y copy shortcuts (uses atotto/clipboard)
+├── clipboard.go   y / Y / J single-row copy (uses atotto/clipboard)
+├── form.go        edit / create form + delete confirm modals
+├── selection.go   row selection set, bulk copy, full export, format chooser
+├── capabilities.go F (all-kinds matrix) + i (this-view card)
 ├── preview.go     text/template runners for preview + status
 ├── theme.go       tview.Styles overrides + tone → tcell color mapping
 └── templates/
@@ -149,6 +152,23 @@ Renders inside a centered `Pages` overlay. Two stacked widgets: a `tview.InputFi
 
 The picker always allocates a fresh `p.shown` slice — never aliases `p.all` — to avoid the "type query, clear, see duplicates" bug.
 
+## Help palette  (`help.go`)
+
+`?` opens a `tview.Table` (Category · Key · Action) over the canonical `helpEntries` slice — the single source of truth; every new shortcut MUST be appended there or the palette drifts.
+
+- `applyFilter` has two modes: plain text → full-text contains across all three columns; `@<cat>` prefix → scope to one category (`strings.Cut` on the first space lets `@table sort` AND-compose a term within the category).
+- `ctrl+e` → `exportCSV`: writes the *currently-filtered* `shown` slice to `<cwd>/enttui-keybindings-<ts>.csv` via stdlib `encoding/csv`. The footer TextView is mutable so success/error renders inline (green path / red error) without a separate modal.
+- The palette documents itself — a `Help` category in `helpEntries` lists `@cat`, `ctrl+e`, nav.
+
+## Capabilities views  (`capabilities.go`)
+
+Two read-only overlays, both built from `App.capRows()` (iterates `kindListSortedByDisplay`, derives per-spec flags: `update!=nil && len(formFields)>0` → edit, `create!=nil` → new, `deleteRow!=nil` → delete, plus `allowBulkCopy` / `allowExport` / column + edge counts).
+
+- **`F` → `openCapabilities`**: full matrix `tview.Table`, one row per kind. Filter modes: free text on kind/display/group, or `cap:edit|new|del|bulk|export` (also `@edit` etc.) to isolate a capability column. `ctrl+e` → CSV of the shown rows. `enter` closes + `pushBrowser`s the selected kind.
+- **`i` → `openKindInfo(spec)`**: single-kind card. Lists EVERY flag (on and off) — off ones carry the `enttui.*{}` annotation to add. Sourced from the same spec fields; no separate state. `F` from the card escalates to the matrix.
+
+Neither view mutates anything — pure introspection over the registry.
+
 ## Sidebar  (`sidebar.go`)
 
 A persistent left-rail companion to the modal picker. Hidden by default, toggled with `ctrl+b`. Lives in `App.rootFlex` as a sibling of the pages container — NOT a tview Pages overlay — so it stays visible while the user interacts with the body.
@@ -205,7 +225,24 @@ Columns with `EnumValues` declared (set by codegen for ent `field.Enum(...)` fie
 
 ## Clipboard  (`clipboard.go`)
 
-`y` and `Y` shortcuts. Backed by `github.com/atotto/clipboard`. `copyToClipboard(h *modalHost, text, label string)` does the write + surfaces `copied <label>: <preview…>` (or `clipboard error: …` if the OS can't reach a clipboard target — typical on headless boxes without xclip/pbcopy). Each view exposes its own thin wrappers (`copyFocusedCell` / `copyFocusedRow` on tableView; `copyFocusedID` / `copyFocusedRow` on browser).
+Single-row `y` / `Y` / `J` shortcuts. Backed by `github.com/atotto/clipboard`. `copyToClipboard(h *modalHost, text, label string)` does the write + surfaces `copied <label>: <preview…>` (or `clipboard error: …` if the OS can't reach a clipboard target — typical on headless boxes without xclip/pbcopy). Each view exposes its own thin wrappers (`copyFocusedCell` / `copyFocusedRow` / `copyFocusedRowJSON` on tableView; `copyFocusedID` / `copyFocusedRow` / `copyFocusedRowJSON` on browser).
+
+## Edit / create / delete  (`form.go`)
+
+Opt-in via `enttui.Editable{}` (per field) + `enttui.AllowCreate{}` / `enttui.AllowDelete{}` (per entity). The generated spec carries `FormFields []FormField` plus `Update` / `Create` / `Delete` closures (nil = disabled).
+
+- `openEditForm` / `openCreateForm` build a `tview.Form` — text input per string field, dropdown per enum (declared values; `*enum` gets a blank "clear" entry). Required fields (schema `.NotEmpty()` / non-nillable) are flagged before the DB round-trip. `onSaved` fires only AFTER a successful write so the row list refreshes with the new values (calling refresh before the modal closed was a bug).
+- `openDeleteConfirm` is a hand-rolled Flex+Form dialog (NOT `tview.Modal` — its focused-button style is invisible in many color schemes). `←`/`→` remapped to Backtab/Tab so arrows switch buttons.
+- Disabled-capability keypresses surface a status hint pointing at the missing annotation — never a silent no-op.
+
+## Selection, bulk copy, export  (`selection.go`)
+
+Gated by `enttui.AllowBulkCopy{}` / `enttui.AllowExport{}`.
+
+- `selectionSet` is a `map[string]bool` of row IDs. Browser + tableView each embed one; `space` toggles the focused row, `*` selects the visible page, `0` clears. Selected rows render a `[yellow]✓[-]` prefix (browser label / table column-0 cell).
+- `y` is dual-mode: empty selection → single-row clipboard copy (clipboard.go); non-empty → `openFormatChooser` → `formatRows`. Variants: JSON array of `{id,…cols}`, CSV (id + visible cols header), and — table view only — focused-column JSON / CSV (one cell value × selected rows).
+- `X` → `runExport`: **selection precedence** — non-empty selection exports those exact rows (no re-fetch); empty selection re-fetches with current `Filter/Filters/Sort/SortField/SortDir/Scope`, `Offset=0`, `Limit=exportRowCap` (10 000). Format chooser → `openExportDestination`: editable path field (default `<cwd>/<kind>-<timestamp>.<ext>`) with Save-to-file / Copy-to-clipboard / Cancel. Truncation when `total > len(rows)` surfaced in the status message.
+- Formatters use stdlib `encoding/json` (indented) + `encoding/csv`. No third-party dep beyond the existing clipboard package.
 
 ## Templates  (`preview.tmpl` + `status.tmpl`)
 

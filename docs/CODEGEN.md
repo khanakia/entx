@@ -68,7 +68,15 @@ For each `*gen.Type` in the graph we call `extractEntity(n, opts, kindByType)`:
    - **Sort** (`Sortable: true`): the multi-sort dispatch's `related` branch emits `pred.By<Edge>Field(targetPred.Field<GoName>, sql.OrderAsc())` using ent's generated edge-order helper. Toggles `EntityMeta.NeedsSQL` so the file imports `entgo.io/ent/dialect/sql`.
    - Unknown edge name or unknown target field → entry is silently dropped.
 
-7. **`NeedsFmt` flag.** Set true if any column or hero accessor (`title/body`) renders a non-string scalar. Used to gate the `"fmt"` import in the emitted file.
+7. **Form support** (from `enttui.Editable{}` per-field + entity-level `AllowCreate{}` / `AllowDelete{}`):
+   - Each `Editable{}` field → a `FormField` entry (Key, Label, Kind, Required, EnumValues) plus a setter line in the generated `Update` closure (`u.SetX(v)`; pointer fields get `Clear<F>()` on empty input; enum fields cast via the pre-computed `EnumGoTypeCast`).
+   - `AllowCreate{}` → a `Create` closure (`client.X.Create().SetX(v)…Save`), scope-keyed setters injected from `opts`.
+   - `AllowDelete{}` → a `Delete` closure (`client.X.DeleteOneID(id).Exec`).
+   - `Required` mirrors `!f.Optional && !f.Nillable && name != "id"`.
+
+8. **Bulk-copy / export flags** (from entity-level `AllowBulkCopy{}` / `AllowExport{}`): emitted as plain `AllowBulkCopy: true` / `AllowExport: true` booleans on the spec literal. No closures — the runtime owns selection + format + file-write; codegen only flips the gates.
+
+9. **`NeedsFmt` flag.** Set true if any column accessor renders a non-string scalar — gates the `"fmt"` import. (`NeedsStrings` / `NeedsSQL` similarly gate `strings` / `entgo.io/ent/dialect/sql` for enum-In and related-sort dispatch.)
 
 ### 3. Template rendering
 

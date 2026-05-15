@@ -142,26 +142,90 @@ Codegen behavior:
   when at least one related column is present.
 - Unknown edge name or unknown field name → entry is silently dropped.
 
+### `AllowBulkCopy{}` — entity-level
+
+Enables row-selection (`space` toggles, `*` selects all visible, `0`
+clears) and the multi-row `y` copy flow. Pressing `y` with one or more
+rows selected opens a format-chooser modal:
+
+- **JSON array** of `{id, col1, col2, ...}` objects
+- **CSV** with `id` + every visible column as header
+- **focused-column JSON** (table view only) — array of strings, one per
+  selected row, drawn from whichever column has cursor focus
+- **focused-column CSV** — same, single-column CSV
+
+All copies go to the OS clipboard via `atotto/clipboard`. Status bar
+shows `[blue]☐ space select · y copy[-]` plus `[yellow]N selected[-]`
+when any row is marked.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{enttui.AllowBulkCopy{}}
+}
+```
+
+### `AllowExport{}` — entity-level
+
+Enables the **`X`** shortcut. With rows selected (`space`), exports
+exactly those — your pick overrides the filter. With no selection,
+re-fetches every row matching the current filter / sort / scope (capped
+at 10 000). Then the JSON / CSV chooser, then a destination modal: an
+editable path field (default `<cwd>/<kind>-<timestamp>.<ext>`) with
+**Save to file** / **Copy to clipboard** / **Cancel**. Truncation is
+surfaced in the status message.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{enttui.AllowExport{}}
+}
+```
+
+Status bar shows `[blue]⇩ X export[-]` when active.
+
+### `AllowCreate{}` — entity-level
+
+Enables the **`N`** (new row) keybinding. The form opens with every
+Editable field empty; scope keys from `app.SetScope(...)` are
+auto-injected so the new row lands in the right tenant / project / etc.
+Generated code emits a `Create: func(ctx, vals) (id, err)` closure that
+calls `client.X.Create().SetX(v)…Save(ctx)`.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{enttui.AllowCreate{}}
+}
+```
+
+Status bar shows `[green]+ N new[-]` when active.
+
+### `AllowDelete{}` — entity-level
+
+Enables the **`D`** (delete with confirm) keybinding for this entity.
+Off by default — destructive actions opt-in only. Generated code emits a
+`Delete: func(ctx, id) error { return client.X.DeleteOneID(id).Exec(ctx) }`
+closure. Status bar shows `[red]✗ D delete[-]` when active.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{enttui.AllowDelete{}}
+}
+```
+
 ## Field-level annotations
 
 Attached to a field builder:
 
 ```go
 field.String("title").
-    Annotations(enttui.AsTitle()),
+    Annotations(enttui.Sortable(), enttui.Filterable(), enttui.Editable{}),
 ```
 
-### `AsTitle()`
-
-Marks this field as the row title (overrides title/name/display_name heuristic).
-
-### `AsBody()`
-
-Marks this field as the preview body (overrides body/description/content heuristic).
-
-### `AsStatus()`
-
-Marks this field as the status chip source (overrides status/severity/kind heuristic).
+> **Note:** `AsTitle()` / `AsBody()` / `AsStatus()` were removed. The
+> library no longer has a hero-field concept — every field is just a
+> column, and the row label / preview body are picked by convention
+> (`title` → `name` → `display_name` → `id` for the label;
+> `body` / `description` / `content` rendered as the preview body).
+> See [CONVENTIONS.md](CONVENTIONS.md).
 
 ### `Sortable()`
 
@@ -170,6 +234,27 @@ Lets the runtime cycle sort through this field. Multiple `Sortable()` fields cyc
 ### `Filterable()`
 
 Includes this field in the substring filter predicate (defaults to title + body + name only).
+
+### `Editable{}`
+
+Marks a field as user-editable in the **`e`** (edit form) modal. Opt-in
+per field — a schema with no `Editable{}` annotations has no edit UI at
+all. Generated code emits a setter for each editable field in the
+`Update` closure:
+
+- string / stringPtr → `u.SetX(v)` (stringPtr clears on empty input)
+- enum / enumPtr → `u.SetX(targetPkg.Type(v))` (enumPtr clears on empty)
+
+```go
+field.String("title").NotEmpty().
+    Annotations(enttui.Editable{}),
+field.Enum("status").Values("draft", "published").
+    Annotations(enttui.Editable{}),
+```
+
+When any field on the entity carries `Editable{}`, the status bar shows
+`[green]✎ e edit[-]`. Pressing `e` on a schema with none → status hint
+points at this annotation.
 
 ### `Hidden()`
 

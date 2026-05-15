@@ -26,6 +26,8 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 		PageSize:       200,
 		MultiSort:      true,
 		ShowEdgeCounts: true,
+		AllowBulkCopy:  false,
+		AllowExport:    false,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,

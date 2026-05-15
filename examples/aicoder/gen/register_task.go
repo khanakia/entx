@@ -31,6 +31,8 @@ func registerTask(app *runtime.App, client *ent.Client) {
 		PageSize:       200,
 		MultiSort:      true,
 		ShowEdgeCounts: true,
+		AllowBulkCopy:  true,
+		AllowExport:    true,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -760,6 +762,36 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			}
 			_, err := u.Save(ctx)
 			return err
+		},
+
+		Create: func(ctx context.Context, vals map[string]string) (string, error) {
+			c := client.Task.Create()
+			if v, ok := vals["title"]; ok && v != "" {
+				c.SetTitle(v)
+			}
+			if v, ok := vals["body"]; ok && v != "" {
+				c.SetBody(v)
+			}
+			if v, ok := vals["status"]; ok && v != "" {
+				c.SetStatus(entTask.Status(v))
+			}
+			if v, ok := vals["priority"]; ok && v != "" {
+				c.SetPriority(entTask.Priority(v))
+			}
+			// Scope key wired in via app.SetScope — typically required
+			// for the row to land in the right tenant / project / etc.
+			if v, ok := vals["project_id"]; ok && v != "" {
+				c.SetProjectID(v)
+			}
+			saved, err := c.Save(ctx)
+			if err != nil {
+				return "", err
+			}
+			return saved.ID, nil
+		},
+
+		Delete: func(ctx context.Context, id string) error {
+			return client.Task.DeleteOneID(id).Exec(ctx)
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.Task]{

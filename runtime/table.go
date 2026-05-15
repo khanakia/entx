@@ -59,6 +59,10 @@ type tableView struct {
 
 	// User-overridden visible columns (Phase G). Nil = use spec defaults.
 	columnOverrides map[string]bool
+
+	// Row-selection set (driven by space / V / * / 0; consumed by `y`).
+	selection *selectionSet
+	selAnchor int // V-range anchor data-row index; -1 = unset
 }
 
 // state captures the current view state for handoff to the browser view
@@ -144,6 +148,8 @@ func newTableView(app *App, spec *anySpec) *tableView {
 	t := &tableView{
 		app:       app,
 		spec:      spec,
+		selection: newSelection(),
+		selAnchor: -1,
 		sortField: spec.defaultView.SortField,
 		sortDir:   spec.defaultView.SortDir,
 		pageSize:  ps,
@@ -245,11 +251,13 @@ func (t *tableView) refresh() {
 	for r, row := range rows {
 		for c, col := range cols {
 			v := row.Columns[col.key]
-			cell := tview.NewTableCell(truncate(v, 60)).
-				SetExpansion(1)
-			// Per-column chip color (Phase C wires .chip via annotations;
-			// today the existing spec.columns[].chip is still respected
-			// when set by the codegen's convention path).
+			label := truncate(v, 60)
+			// Selection marker in the first column. Doesn't change
+			// the underlying value — only the rendered prefix.
+			if c == 0 && t.selection.has(row.ID) {
+				label = "[yellow]✓[-] " + label
+			}
+			cell := tview.NewTableCell(label).SetExpansion(1)
 			if col.chip != nil {
 				if tone, ok := col.chip[v]; ok {
 					cell.SetTextColor(tcellColor(tone))
@@ -310,11 +318,73 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'r':
 		t.refresh()
 		return nil
+	case 'i':
+		t.app.openKindInfo(t.spec)
+		return nil
+	case ' ':
+		if !t.spec.allowBulkCopy {
+			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			return nil
+		}
+		row, _ := t.table.GetSelection()
+		if row >= 1 && row-1 < len(t.rows) {
+			t.selection.toggle(t.rows[row-1].ID)
+			t.refresh()
+		}
+		return nil
+	case 'V':
+		if !t.spec.allowBulkCopy {
+			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			return nil
+		}
+		rsel, _ := t.table.GetSelection()
+		cur := rsel - 1 // data-row index (row 0 = header)
+		if cur < 0 {
+			return nil
+		}
+		if t.selAnchor < 0 {
+			t.selAnchor = cur
+			t.updateStatus("range anchor set — move to the other end, press V again")
+		} else {
+			n, sel := t.selection.toggleRange(t.rows, t.selAnchor, cur)
+			t.selAnchor = -1
+			t.refresh()
+			verb := "deselected"
+			if sel {
+				verb = "selected"
+			}
+			t.updateStatus(fmt.Sprintf("%s %d rows in range", verb, n))
+		}
+		return nil
+	case '*':
+		if t.spec.allowBulkCopy {
+			t.selection.addAll(t.rows)
+			t.refresh()
+		}
+		return nil
+	case '0':
+		if t.spec.allowBulkCopy {
+			t.selection.clear()
+			t.selAnchor = -1
+			t.refresh()
+		}
+		return nil
 	case 'y':
+		if t.spec.allowBulkCopy && t.selection.count() > 0 {
+			t.openBulkCopy()
+			return nil
+		}
 		t.copyFocusedCell()
 		return nil
 	case 'Y':
 		t.copyFocusedRow()
+		return nil
+	case 'X':
+		if !t.spec.allowExport {
+			t.updateStatus("export not enabled — add enttui.AllowExport{} to the schema")
+			return nil
+		}
+		t.openExport()
 		return nil
 	case 'J':
 		t.copyFocusedRowJSON()
@@ -325,11 +395,14 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			openEditForm(t.app, t.spec, t.rows[row-1], t.updateStatus, t.refresh)
 		}
 		return nil
+	case 'N':
+		openCreateForm(t.app, t.spec, t.updateStatus, t.refresh)
+		return nil
 	case 'D':
 		row, _ := t.table.GetSelection()
 		if row >= 1 && row-1 < len(t.rows) {
 			r := t.rows[row-1]
-			openDeleteConfirm(t.app, t.spec, r, func() { t.refresh() })
+			openDeleteConfirm(t.app, t.spec, r, t.updateStatus, t.refresh)
 		}
 		return nil
 	case 'n':
@@ -589,6 +662,12 @@ func (t *tableView) updateStatus(msg string) {
 		Page:      page,
 		Pages:     pages,
 		PageSize:  t.pageSize,
+		CanEdit:     t.spec.update != nil && len(t.spec.formFields) > 0,
+		CanCreate:   t.spec.create != nil && len(t.spec.formFields) > 0,
+		CanDelete:   t.spec.deleteRow != nil,
+		CanBulkCopy: t.spec.allowBulkCopy,
+		CanExport:   t.spec.allowExport,
+		SelCount:    t.selection.count(),
 	}))
 }
 
@@ -649,4 +728,42 @@ func (t *tableView) host() *modalHost {
 		resetPage:         func() { t.page = 0 },
 		updateStatus:      t.updateStatus,
 	}
+}
+
+// openBulkCopy runs the format chooser against the table's selection.
+// The focused column is offered as a per-column variant, so users can
+// copy just the one cell value across every selected row.
+func (t *tableView) openBulkCopy() {
+	rows := t.selection.filteredRows(t.rows)
+	if len(rows) == 0 {
+		return
+	}
+	cols := t.visibleColumns()
+	focused := ""
+	_, c := t.table.GetSelection()
+	if c >= 0 && c < len(cols) {
+		focused = cols[c].key
+	}
+	openFormatChooser(t.app, focused, func(choice formatChoice) {
+		text, err := formatRows(rows, cols, focused, choice)
+		if err != nil {
+			t.updateStatus("format failed: " + err.Error())
+			return
+		}
+		copyToClipboard(t.host(), text, fmt.Sprintf("%d rows as %s", len(rows), formatLabel(choice)))
+	})
+}
+
+// openExport re-fetches every row matching the current filter+sort and
+// copies as JSON or CSV.
+func (t *tableView) openExport() {
+	opts := ListOpts{
+		Filter:    t.filter,
+		Filters:   t.colFilters,
+		Sort:      t.sortStack,
+		SortField: t.sortField,
+		SortDir:   t.sortDir,
+		Scope:     t.app.Scope(),
+	}
+	runExport(t.host(), t.spec.fetch, opts, t.visibleColumns(), t.selection.filteredRows(t.rows))
 }

@@ -51,6 +51,47 @@ func openEditForm(app *App, spec *anySpec, row Row, notify func(string), onSaved
 	)
 }
 
+// openCreateForm shows the new-row modal. Empty pre-fill except for
+// scope keys (e.g. tenant_id, project_id) — those are injected so the
+// new row lands in the right scope without the user retyping them.
+//
+// `notify` surfaces a status hint when the entity hasn't opted into
+// enttui.AllowCreate; without it the keybinding looked broken.
+func openCreateForm(app *App, spec *anySpec, notify func(string), onSaved func()) {
+	if spec.create == nil {
+		if notify != nil {
+			notify("create not enabled — add enttui.AllowCreate{} to the schema")
+		}
+		return
+	}
+	if len(spec.formFields) == 0 {
+		if notify != nil {
+			notify("no editable fields — annotate with enttui.Editable() per field")
+		}
+		return
+	}
+	prefill := map[string]string{}
+	for k, v := range app.Scope() {
+		prefill[k] = v
+	}
+	openForm(app, spec, prefill, "new "+spec.kind,
+		func(vals map[string]string) error {
+			ctx, cancel := context.WithTimeout(app.ctx, 10*time.Second)
+			defer cancel()
+			// Scope keys go in even if no form widget shows them — the
+			// generated Create closure looks for them by key.
+			for k, v := range app.Scope() {
+				if _, ok := vals[k]; !ok {
+					vals[k] = v
+				}
+			}
+			_, err := spec.create(ctx, vals)
+			return err
+		},
+		onSaved,
+	)
+}
+
 // openForm is the shared implementation. submit runs the typed save and
 // returns an error; on success the modal closes and onSaved fires so
 // the caller can refresh its row list AFTER the DB write completed.
@@ -162,38 +203,105 @@ func openForm(app *App, spec *anySpec, prefill map[string]string, title string, 
 }
 
 // openDeleteConfirm shows a yes/no overlay; runs spec.deleteRow on Y.
-func openDeleteConfirm(app *App, spec *anySpec, row Row, onDone func()) {
+// Surfaces a status hint when the entity hasn't opted in via
+// enttui.AllowDelete{} — without this `D` looked broken.
+func openDeleteConfirm(app *App, spec *anySpec, row Row, notify func(string), onDone func()) {
 	if spec.deleteRow == nil {
+		if notify != nil {
+			notify("delete not enabled — add enttui.AllowDelete{} to the schema")
+		}
 		return
 	}
-	modal := tview.NewModal().
-		SetText("Delete " + spec.kind + " " + row.ID + "?\nThis cannot be undone.").
-		AddButtons([]string{"Cancel", "Delete"}).
-		SetDoneFunc(func(idx int, label string) {
-			if label == "Delete" {
-				ctx, cancel := context.WithTimeout(app.ctx, 10*time.Second)
-				defer cancel()
-				if err := spec.deleteRow(ctx, row.ID); err != nil {
-					// Re-render with the error in place of the prompt.
-					app.pages.RemovePage("delete-modal")
-					openDeleteError(app, err)
-					return
-				}
-				app.pages.RemovePage("delete-modal")
-				if onDone != nil {
-					onDone()
-				}
+	// Roll our own confirm dialog rather than tview.Modal. Reason: the
+	// built-in modal's focused-button style is invisible in many color
+	// schemes — users couldn't tell whether tab/arrows were doing
+	// anything. A Form gives us proper DarkSlateGray button bg with
+	// terminal default for the focused button.
+	prompt := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter).
+		SetText("Delete [yellow]" + spec.kind + " " + row.ID + "[-]?\nThis cannot be undone.")
+
+	form := tview.NewForm().
+		SetButtonsAlign(tview.AlignCenter).
+		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
+		SetButtonTextColor(tcell.ColorWhite)
+
+	close := func() { app.pages.RemovePage("delete-modal") }
+
+	form.AddButton("Cancel", close).
+		AddButton("Delete", func() {
+			ctx, cancelCtx := context.WithTimeout(app.ctx, 10*time.Second)
+			defer cancelCtx()
+			if err := spec.deleteRow(ctx, row.ID); err != nil {
+				close()
+				openDeleteError(app, err)
 				return
 			}
-			app.pages.RemovePage("delete-modal")
+			close()
+			if onDone != nil {
+				onDone()
+			}
 		})
-	app.pages.AddPage("delete-modal", modal, true, true)
+
+	hint := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetTextColor(tcell.ColorGray).
+		SetText("← → / tab : switch · enter : confirm · esc : cancel")
+
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(prompt, 0, 1, false).
+		AddItem(form, 3, 0, true).
+		AddItem(hint, 1, 0, false)
+	body.SetBorder(true).
+		SetTitle(" confirm delete ").
+		SetTitleColor(tcell.ColorYellow).
+		SetBorderColor(tcell.ColorRed)
+
+	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyEscape:
+			close()
+			return nil
+		case tcell.KeyLeft:
+			// tview.Form only moves focus on Tab/Backtab by default —
+			// remap arrows so ← / → feel natural between buttons.
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
+		case tcell.KeyRight:
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		}
+		return ev
+	})
+
+	app.pages.AddPage("delete-modal", centerModal(body, 60, 9), true, true)
+	app.tv.SetFocus(form)
 }
 
 func openDeleteError(app *App, err error) {
-	m := tview.NewModal().
-		SetText("Delete failed:\n" + err.Error()).
-		AddButtons([]string{"OK"}).
-		SetDoneFunc(func(int, string) { app.pages.RemovePage("delete-error") })
-	app.pages.AddPage("delete-error", m, true, true)
+	close := func() { app.pages.RemovePage("delete-error") }
+	msg := tview.NewTextView().
+		SetTextAlign(tview.AlignCenter).
+		SetTextColor(tcell.ColorRed).
+		SetText("Delete failed:\n" + err.Error())
+	form := tview.NewForm().
+		SetButtonsAlign(tview.AlignCenter).
+		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
+		SetButtonTextColor(tcell.ColorWhite).
+		AddButton("OK", close)
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(msg, 0, 1, false).
+		AddItem(form, 3, 0, true)
+	body.SetBorder(true).
+		SetTitle(" error ").
+		SetTitleColor(tcell.ColorRed).
+		SetBorderColor(tcell.ColorRed)
+	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyEnter {
+			close()
+			return nil
+		}
+		return ev
+	})
+	app.pages.AddPage("delete-error", centerModal(body, 60, 9), true, true)
+	app.tv.SetFocus(form)
 }

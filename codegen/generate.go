@@ -101,9 +101,12 @@ type EntityMeta struct {
 	ShowEdgeCounts bool   // enttui.CountEdges() — enables count fetch in preview
 
 	// Form support — driven by enttui.Editable() per-field +
-	// AllowDelete() at the entity level.
+	// AllowCreate / AllowDelete at the entity level.
 	EditableFields []FieldMeta
+	AllowCreate    bool
 	AllowDelete    bool
+	AllowBulkCopy  bool
+	AllowExport    bool
 
 	// Phase C/D — fields the user marked Sortable() (in declaration order).
 	SortableFields []FieldMeta
@@ -311,6 +314,15 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	}
 	if hasAnnot(n.Annotations, "EntTUI.CountEdges") {
 		em.ShowEdgeCounts = true
+	}
+	if hasAnnot(n.Annotations, "EntTUI.AllowCreate") {
+		em.AllowCreate = true
+	}
+	if hasAnnot(n.Annotations, "EntTUI.AllowBulkCopy") {
+		em.AllowBulkCopy = true
+	}
+	if hasAnnot(n.Annotations, "EntTUI.AllowExport") {
+		em.AllowExport = true
 	}
 	if hasAnnot(n.Annotations, "EntTUI.AllowDelete") {
 		em.AllowDelete = true

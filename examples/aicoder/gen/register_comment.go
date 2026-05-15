@@ -25,6 +25,8 @@ func registerComment(app *runtime.App, client *ent.Client) {
 		PageSize:       200,
 		MultiSort:      true,
 		ShowEdgeCounts: true,
+		AllowBulkCopy:  false,
+		AllowExport:    false,
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -239,6 +241,71 @@ func registerComment(app *runtime.App, client *ent.Client) {
 					return *r.CreatedByActorID
 				},
 			},
+		},
+
+		// Form support — see enttui.Editable() / AllowCreate() / AllowDelete().
+		FormFields: []runtime.FormField{
+			{
+				Key: "entity_table", Label: "Entity Table", Kind: "string", Required: true,
+			},
+			{
+				Key: "entity_id", Label: "Entity Id", Kind: "string", Required: true,
+			},
+			{
+				Key: "body", Label: "Body", Kind: "string", Required: true,
+			},
+			{
+				Key: "created_by_actor_id", Label: "Created By Actor Id", Kind: "stringPtr", Required: false,
+			},
+		},
+
+		// Update wires the typed setters for each Editable field. The
+		// runtime collects form input as strings; we cast / parse here.
+		Update: func(ctx context.Context, id string, vals map[string]string) error {
+			u := client.Comment.UpdateOneID(id)
+			if v, ok := vals["entity_table"]; ok {
+				u.SetEntityTable(v)
+			}
+			if v, ok := vals["entity_id"]; ok {
+				u.SetEntityID(v)
+			}
+			if v, ok := vals["body"]; ok {
+				u.SetBody(v)
+			}
+			if v, ok := vals["created_by_actor_id"]; ok {
+				if v == "" {
+					u.ClearCreatedByActorID()
+				} else {
+					u.SetCreatedByActorID(v)
+				}
+			}
+			_, err := u.Save(ctx)
+			return err
+		},
+
+		Create: func(ctx context.Context, vals map[string]string) (string, error) {
+			c := client.Comment.Create()
+			if v, ok := vals["entity_table"]; ok && v != "" {
+				c.SetEntityTable(v)
+			}
+			if v, ok := vals["entity_id"]; ok && v != "" {
+				c.SetEntityID(v)
+			}
+			if v, ok := vals["body"]; ok && v != "" {
+				c.SetBody(v)
+			}
+			if v, ok := vals["created_by_actor_id"]; ok && v != "" {
+				c.SetCreatedByActorID(v)
+			}
+			saved, err := c.Save(ctx)
+			if err != nil {
+				return "", err
+			}
+			return saved.ID, nil
+		},
+
+		Delete: func(ctx context.Context, id string) error {
+			return client.Comment.DeleteOneID(id).Exec(ctx)
 		},
 	})
 }

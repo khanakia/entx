@@ -354,16 +354,44 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`f`**        | Open condition builder (per-column filters)             |
 | **`S`**        | Open sort-stack modal (multi-column sort, reorder)      |
 | **`c`**        | Open columns show/hide modal                            |
-| **`y`**        | Copy current row's id (browser) / cell value (table)    |
+| **`y`**        | With no selection: copy id (browser) / cell value (table). With selection: open format chooser → bulk copy |
 | **`Y`**        | Copy whole row as TSV                                   |
 | **`J`**        | Copy whole row as pretty-printed JSON                   |
+| **`space`**    | Toggle row selection (requires `enttui.AllowBulkCopy{}`) |
+| **`*` / `0`**  | Select all visible / clear selection                    |
+| **`X`**        | Export full filtered+sorted dataset (requires `enttui.AllowExport{}`) |
+| **`e`**        | Edit current row (requires `enttui.Editable{}` per field) |
+| **`N`**        | New row (requires `enttui.AllowCreate{}`; scope keys auto-filled) |
+| **`D`**        | Delete current row with confirm (requires `enttui.AllowDelete{}`) |
 | **`esc`**      | Pop the current page (back-stack)                       |
-| **`?`**        | Show keybindings help                                   |
+| **`?`**        | Searchable keybindings palette (`@cat` to scope, `ctrl+e` to export CSV) |
+| **`i`**        | Capabilities card for the current view (what's on/off + how to enable) |
+| **`F`**        | Capabilities matrix — every kind × feature flags (filter, CSV, enter to jump) |
+| **`M`**        | Toggle mouse capture (off by default → terminal text selection / copy works) |
 | **`q`**        | Quit                                                    |
 | **`ctrl+f / pgdn / space`** | Scroll preview down half page              |
 | **`ctrl+b / pgup`** | Scroll preview up half page                        |
 
+**Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live with `M`.
+
 When an input field has focus (filter, picker, sidebar), single-letter shortcuts go to the input — `k` types a `k`, not "open picker." `esc` always closes the input. `ctrl+b` is the one exception: it's caught BEFORE the typing-guard so it can toggle the sidebar even while you're mid-filter.
+
+### Keybindings palette (`?`)
+
+Searchable table of every shortcut (Category · Key · Action). It self-documents — there's a `Help` category describing its own controls.
+
+- **Type** anything → full-text filter across category / key / action.
+- **`@<cat>`** → scope to one category. `@table`, `@modals`, `@sidebar`, etc. Add a space + term to AND-compose within it: `@table sort` → Table rows mentioning "sort".
+- **`ctrl+e`** → export the *currently-shown* rows (filter respected) to `<cwd>/enttui-keybindings-<timestamp>.csv` (`category,keys,action` header). Footer turns green with the path on success.
+- **`↑ ↓ pgup pgdn`** navigate; **`enter` / `esc`** close.
+
+### Discovering capabilities
+
+Three levels, increasing scope:
+
+1. **Status-bar chips** — passive glance on every view: `✎ e edit`, `+ N new`, `✗ D delete`, `☐ space sel · y copy`, `⇩ X export`. Only shown when the schema opted in.
+2. **`i` — this-view card.** Lists every feature flag for the current kind, **on _and_ off**, each off-flag annotated with the exact `enttui.*{}` to add. Plus column / filterable / sortable / edge counts. `F` from here jumps to the full matrix.
+3. **`F` — capabilities matrix.** Searchable table of *every* registered kind × `EDIT NEW DEL BULK EXPORT COLS FILT SORT EDGES`. Filter with free text or `cap:edit` / `cap:export` / … to isolate one capability. `ctrl+e` dumps the shown rows to `<cwd>/enttui-capabilities-<ts>.csv`. `enter` on a row opens that kind.
 
 ### Sidebar (left rail)
 
@@ -390,10 +418,88 @@ All three operate on the SAME state regardless of which view opened them. Toggle
 
 ### Clipboard
 
-- **`y`** copies the current row's id (browser) or focused cell value (table).
+- **`y`** with no selection — copies the current row's id (browser) or focused cell value (table).
 - **`Y`** copies the whole row as TAB-separated values.
+- **`J`** copies the row as pretty-printed JSON (uses ent's native struct serialization, includes `edges:` for eager-loaded relations).
 
 Status bar surfaces `copied <label>: <preview…>` on success, or `clipboard error: …` on headless hosts without `xclip` / `pbcopy`.
+
+### Bulk copy + export
+
+Opt-in via `enttui.AllowBulkCopy{}` (selection + multi-row copy) and `enttui.AllowExport{}` (full filtered/sorted dataset export):
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.AllowBulkCopy{},
+        enttui.AllowExport{},
+    }
+}
+```
+
+**Selection** — visible only when `AllowBulkCopy{}` is on:
+
+- **`space`** toggles the focused row's selection. Selected rows get a `[yellow]✓[-]` marker.
+- **`V`** range toggle (vim-visual style): first `V` drops an anchor at the cursor, move to the far end, second `V` selects the whole span — or *deselects* it if every row in the span was already selected. Order-independent; adds to any existing selection.
+- **`*`** selects every row on the visible page.
+- **`0`** clears all. **`esc`** also clears the selection first — it only pops the page once nothing is selected (so "esc to deselect" never navigates you away by surprise).
+- Status bar shows `[yellow]N selected[-]` while non-empty, and the chip `☐ space sel · * all · 0 clear · y copy`.
+
+**Bulk copy** — `y` upgrades when one or more rows are selected:
+
+- Opens a format chooser modal: **JSON array** · **CSV** · in the table view, also **focused-column JSON** + **focused-column CSV** (copies just that one cell value across every selected row).
+- ← / → / tab switch options, enter picks.
+
+**Export** — **`X`**. Scope precedence:
+
+- **With a selection** → exports *exactly the selected rows* (your explicit pick wins; no re-fetch). Status: `selected N rows`.
+- **No selection** → re-fetches every row matching the current filter + sort + scope (capped at 10 000).
+
+Then the JSON / CSV chooser, then a **destination modal**:
+
+- An editable **path** field pre-filled with `<cwd>/<kind>-<YYYYMMDD-HHMMSS>.<ext>`. Edit it to anywhere you want.
+- **Save to file** → writes there; status shows `wrote N rows as CSV → /full/path`.
+- **Copy to clipboard** → for the small case.
+- If the dataset overflowed the cap, the status message includes `(truncated from M — cap 10000)` so you know to narrow your filter.
+
+Bulk copy (`y` with a selection) is always clipboard — it's a yank, small by nature.
+
+Pressing `space` / `X` on an entity that hasn't opted in surfaces a status hint pointing at the missing annotation — never a silent no-op.
+
+### Editing
+
+Opt-in per field + per entity. By default a schema gets a fully read-only browser — annotate to enable.
+
+**Per-field:** `enttui.Editable{}` on each field you want the form to expose.
+
+```go
+field.String("title").NotEmpty().
+    Annotations(enttui.Editable{}),
+field.Enum("status").Values("draft", "published", "archived").
+    Annotations(enttui.Editable{}),
+```
+
+**Per-entity:** `enttui.AllowCreate{}` enables the new-row shortcut; `enttui.AllowDelete{}` enables the destructive one.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.AllowCreate{},
+        enttui.AllowDelete{},
+    }
+}
+```
+
+**At runtime:**
+
+- **`e`** → edit form pre-filled with the row's current values. Tab navigates fields, ctrl+s saves, esc cancels. Required fields (schema-side `.NotEmpty()` / non-nillable) get a red flag if left empty.
+  - String / `*string` → text input
+  - Enum / `*enum` → dropdown (declared values; `*enum` gets a blank "clear" entry)
+  - Refresh fires only after a successful save, so the row updates in place — not before the modal closes.
+- **`N`** → new-row form. Same widgets as edit; empty by default. Any keys passed to `app.SetScope(...)` (e.g. `project_id`, `tenant_id`) are auto-injected into the insert so the row lands in the right scope without the user retyping them.
+- **`D`** → delete with a yes/no confirm modal. ← / → / tab switch between Cancel and Delete; enter confirms; esc cancels.
+
+**Discoverability:** the status bar shows `[green]✎ e edit[-]`, `[green]+ N new[-]`, and `[red]✗ D delete[-]` chips only when the schema opted in. Pressing the shortcut on an entity that didn't opt in surfaces a one-line hint pointing at the missing annotation — never a silent no-op.
 
 ---
 

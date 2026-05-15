@@ -69,6 +69,13 @@ type browser struct {
 	carriedFilters         []FilterCondition
 	carriedSortStack       []SortKey
 	carriedColumnOverrides map[string]bool
+
+	// Row-selection set (driven by space/a/c, consumed by `y` bulk
+	// copy). Always allocated; empty when the user hasn't marked
+	// anything. Independent of view toggles — selection IS view-local.
+	selection *selectionSet
+	// selAnchor is the V-range anchor row index; -1 = unset.
+	selAnchor int
 }
 
 // newBrowser builds the widget tree for one entity kind. It does NOT add
@@ -197,6 +204,8 @@ func newBrowser(app *App, spec *anySpec) *browser {
 	b := &browser{
 		app:       app,
 		spec:      spec,
+		selection: newSelection(),
+		selAnchor: -1,
 		sortField: spec.defaultView.SortField,
 		sortDir:   spec.defaultView.SortDir,
 		pageSize:  ps,
@@ -297,7 +306,11 @@ func (b *browser) refresh() {
 		// Generic label: use whichever common-name column the spec
 		// happens to have. None of these are required — schemas with
 		// none fall back to the id, which always exists.
-		b.list.AddItem(rowLabel(r), "", 0, nil)
+		label := rowLabel(r)
+		if b.selection.has(r.ID) {
+			label = "[yellow]✓[-] " + label
+		}
+		b.list.AddItem(label, "", 0, nil)
 	}
 	if len(rows) == 0 {
 		b.prev.SetText("[gray](no items)")
@@ -379,6 +392,10 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'r':
 		b.refresh()
 		return nil
+	case 'i':
+		// Capabilities card for THIS view.
+		b.app.openKindInfo(b.spec)
+		return nil
 	case 'f':
 		// Same condition builder the table view opens — operates on the
 		// shared carried-filters state, so adding a condition here is
@@ -391,11 +408,72 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'c':
 		openColumnsModal(b.host())
 		return nil
+	case ' ':
+		// Toggle selection on the focused row. AllowBulkCopy gates this
+		// so read-only library users don't trip over an unexpected key.
+		if !b.spec.allowBulkCopy {
+			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			return nil
+		}
+		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
+			b.selection.toggle(b.rows[idx].ID)
+			b.refreshDisplayOnly()
+		}
+		return nil
+	case 'V':
+		// Range select. First V drops an anchor at the cursor; move
+		// to the far end; second V marks the whole span. Saves
+		// space-tapping N times for 1..N.
+		if !b.spec.allowBulkCopy {
+			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			return nil
+		}
+		cur := b.list.GetCurrentItem()
+		if b.selAnchor < 0 {
+			b.selAnchor = cur
+			b.updateStatus("range anchor set — move to the other end, press V again")
+		} else {
+			n, sel := b.selection.toggleRange(b.rows, b.selAnchor, cur)
+			b.selAnchor = -1
+			b.refreshDisplayOnly()
+			verb := "deselected"
+			if sel {
+				verb = "selected"
+			}
+			b.updateStatus(fmt.Sprintf("%s %d rows in range", verb, n))
+		}
+		return nil
+	case '*':
+		if b.spec.allowBulkCopy {
+			b.selection.addAll(b.rows)
+			b.refreshDisplayOnly()
+		}
+		return nil
+	case '0':
+		if b.spec.allowBulkCopy {
+			b.selection.clear()
+			b.selAnchor = -1
+			b.refreshDisplayOnly()
+		}
+		return nil
 	case 'y':
+		// Multi-row branch when selection is non-empty.
+		if b.spec.allowBulkCopy && b.selection.count() > 0 {
+			b.openBulkCopy("")
+			return nil
+		}
 		b.copyFocusedID()
 		return nil
 	case 'Y':
 		b.copyFocusedRow()
+		return nil
+	case 'X':
+		// Full export — re-fetch all filtered/sorted rows and copy.
+		if !b.spec.allowExport {
+			b.updateStatus("export not enabled — add enttui.AllowExport{} to the schema")
+			return nil
+		}
+		b.openExport()
 		return nil
 	case 'J':
 		b.copyFocusedRowJSON()
@@ -409,10 +487,15 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			openEditForm(b.app, b.spec, b.rows[idx], b.updateStatus, b.refresh)
 		}
 		return nil
+	case 'N':
+		// New row. Capital N because lowercase n is the next-page key.
+		// Scope keys (e.g. project_id) pre-injected via app.SetScope().
+		openCreateForm(b.app, b.spec, b.updateStatus, b.refresh)
+		return nil
 	case 'D':
 		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
 			row := b.rows[idx]
-			openDeleteConfirm(b.app, b.spec, row, func() { b.refresh() })
+			openDeleteConfirm(b.app, b.spec, row, b.updateStatus, b.refresh)
 		}
 		return nil
 	case 'v':
@@ -647,6 +730,12 @@ func (b *browser) updateStatus(msg string) {
 		Page:      page,
 		Pages:     pages,
 		PageSize:  b.pageSize,
+		CanEdit:     b.spec.update != nil && len(b.spec.formFields) > 0,
+		CanCreate:   b.spec.create != nil && len(b.spec.formFields) > 0,
+		CanDelete:   b.spec.deleteRow != nil,
+		CanBulkCopy: b.spec.allowBulkCopy,
+		CanExport:   b.spec.allowExport,
+		SelCount:    b.selection.count(),
 	}))
 }
 
@@ -688,4 +777,68 @@ func colorChipFor(spec *anySpec, status string) string {
 
 func colorChip(chip map[string]string, value string) string {
 	return fmt.Sprintf("[%s::b]%s[-:-:-]", toneColor(chip[value]), value)
+}
+
+// refreshDisplayOnly redraws the list labels without re-fetching. Used
+// when toggling selection markers — the underlying rows haven't changed.
+func (b *browser) refreshDisplayOnly() {
+	cur := b.list.GetCurrentItem()
+	b.list.Clear()
+	for _, r := range b.rows {
+		label := rowLabel(r)
+		if b.selection.has(r.ID) {
+			label = "[yellow]✓[-] " + label
+		}
+		b.list.AddItem(label, "", 0, nil)
+	}
+	if cur >= 0 && cur < len(b.rows) {
+		b.list.SetCurrentItem(cur)
+	}
+	b.updateStatus("")
+}
+
+// openBulkCopy runs the format chooser against the current selection.
+// In the browser, no column is "focused" — only the all-columns
+// variants are offered. `focused` is plumbed for parity with table.
+func (b *browser) openBulkCopy(focused string) {
+	rows := b.selection.filteredRows(b.rows)
+	if len(rows) == 0 {
+		return
+	}
+	cols := b.visibleColumnsForExport()
+	openFormatChooser(b.app, focused, func(choice formatChoice) {
+		text, err := formatRows(rows, cols, focused, choice)
+		if err != nil {
+			b.updateStatus("format failed: " + err.Error())
+			return
+		}
+		copyToClipboard(b.host(), text, fmt.Sprintf("%d rows as %s", len(rows), formatLabel(choice)))
+	})
+}
+
+// openExport re-fetches every row matching the current filter+sort
+// (capped at exportRowCap) and copies it as JSON or CSV.
+func (b *browser) openExport() {
+	opts := ListOpts{
+		Filter:    b.filter,
+		Filters:   b.carriedFilters,
+		Sort:      b.carriedSortStack,
+		SortField: b.sortField,
+		SortDir:   b.sortDir,
+		Scope:     b.app.Scope(),
+	}
+	runExport(b.host(), b.spec.fetch, opts, b.visibleColumnsForExport(), b.selection.filteredRows(b.rows))
+}
+
+// visibleColumnsForExport returns the columns to include in CSV/JSON
+// output — every visible column on the spec.
+func (b *browser) visibleColumnsForExport() []anyColumn {
+	out := make([]anyColumn, 0, len(b.spec.columns))
+	for _, c := range b.spec.columns {
+		if c.hidden {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }

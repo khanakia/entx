@@ -189,6 +189,8 @@ type EntitySpec[T any] struct {
 	PageSize       int  // initial page size; runtime caps at 1000
 	MultiSort      bool // allow sort stack (true by default; false = single column only)
 	ShowEdgeCounts bool // when true, the preview pane calls each edge's Count closure and renders the result next to the trigger label
+	AllowBulkCopy  bool // enables space/a/c row selection + multi-row `y` copy
+	AllowExport    bool // enables `X` — re-fetch all (filter/sort honored) → JSON/CSV
 	Default        DefaultView
 
 	// Data
@@ -211,8 +213,13 @@ type EntitySpec[T any] struct {
 	// Nil = no edit support.
 	Update func(ctx context.Context, id string, vals map[string]string) error
 
+	// Create inserts a new row using the form values (same convention as
+	// Update). Returns the new row's ID. Nil = entity not creatable
+	// (no enttui.AllowCreate annotation).
+	Create func(ctx context.Context, vals map[string]string) (id string, err error)
+
 	// Delete removes the row by ID. Nil = entity not deletable
-	// (no enttui.AllowDelete() annotation).
+	// (no enttui.AllowDelete annotation).
 	Delete func(ctx context.Context, id string) error
 
 	// Display accessors — all visible columns in declaration order.

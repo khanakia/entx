@@ -33,6 +33,8 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 		PageSize:       {{ if .PageSize }}{{ .PageSize }}{{ else }}200{{ end }},
 		MultiSort:      {{ .MultiSort }},
 		ShowEdgeCounts: {{ .ShowEdgeCounts }},
+		AllowBulkCopy:  {{ .AllowBulkCopy }},
+		AllowExport:    {{ .AllowExport }},
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -228,6 +230,27 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 			_, err := u.Save(ctx)
 			return err
 		},
+		{{- if .AllowCreate }}
+
+		Create: func(ctx context.Context, vals map[string]string) (string, error) {
+			c := client.{{ $.Name }}.Create()
+			{{- range .EditableFields }}
+			if v, ok := vals["{{ .Key }}"]; ok && v != "" {
+				{{- template "createSetterExpr" . }}
+			}
+			{{- end }}
+			{{- range .ScopeFields }}
+			// Scope key wired in via app.SetScope — typically required
+			// for the row to land in the right tenant / project / etc.
+			if v, ok := vals["{{ .Key }}"]; ok && v != "" {
+				c.Set{{ .GoName }}(v)
+			}
+			{{- end }}
+			saved, err := c.Save(ctx)
+			if err != nil { return "", err }
+			return saved.ID, nil
+		},
+		{{- end }}
 		{{- if .AllowDelete }}
 
 		Delete: func(ctx context.Context, id string) error {
@@ -327,6 +350,22 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 				}
 {{- else }}
 				_ = v // unsupported kind for codegen update setter — extend the template
+{{- end }}
+{{- end }}
+
+{{- /* createSetterExpr: same as setterExpr but for Create builder. No */ -}}
+{{- /* Clear path — empty values are skipped by the wrapping `if v != "" `. */ -}}
+{{- define "createSetterExpr" -}}
+{{- if eq .Kind "string" }}
+				c.Set{{ .GoName }}(v)
+{{- else if eq .Kind "stringPtr" }}
+				c.Set{{ .GoName }}(v)
+{{- else if eq .Kind "enum" }}
+				c.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
+{{- else if eq .Kind "enumPtr" }}
+				c.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
+{{- else }}
+				_ = v
 {{- end }}
 {{- end }}
 

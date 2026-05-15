@@ -37,6 +37,13 @@ type App struct {
 	// "list". Default: "list".
 	defaultViewMode string
 
+	// mouseEnabled controls tview's mouse capture. Default OFF — when
+	// tview grabs the mouse the terminal's native click-drag text
+	// selection (and the copy that depends on it) stops working, which
+	// surprises users. Opt in via SetMouseEnabled(true) or toggle live
+	// with `M`.
+	mouseEnabled bool
+
 	// instances maps a tview Pages entry name → the Go-side widget
 	// struct (*browser or *tableView). Used to recover state for v-toggle.
 	instances map[string]any
@@ -63,6 +70,12 @@ func (a *App) SetInitialKind(kind string) { a.initialKind = kind }
 //
 //	app.SetDefaultViewMode("table")
 func (a *App) SetDefaultViewMode(mode string) { a.defaultViewMode = mode }
+
+// SetMouseEnabled opts into tview mouse capture (click rows, scroll
+// wheel, click buttons). Default is OFF so the terminal's own text
+// selection / copy keeps working. Can also be toggled at runtime with
+// the `M` shortcut.
+func (a *App) SetMouseEnabled(on bool) { a.mouseEnabled = on }
 
 // SetScope attaches a generic scope filter. Generated Fetch closures look
 // up whichever keys they understand and apply them as predicates.
@@ -195,8 +208,29 @@ func (a *App) Run() error {
 		case '?':
 			a.openHelp()
 			return nil
+		case 'F':
+			a.openCapabilities()
+			return nil
+		case 'M':
+			// Live mouse toggle. Off → terminal text selection / copy
+			// works; on → click + scroll-wheel inside the TUI.
+			a.mouseEnabled = !a.mouseEnabled
+			a.tv.EnableMouse(a.mouseEnabled)
+			st := "off (terminal selection restored)"
+			if a.mouseEnabled {
+				st = "on (TUI click + scroll)"
+			}
+			a.flash("mouse " + st)
+			return nil
 		}
 		if ev.Key() == tcell.KeyEscape {
+			// Visual-mode pattern: esc first clears an active row
+			// selection (one level), only popping the page once
+			// nothing is selected. Prevents "esc to deselect" from
+			// surprise-navigating away.
+			if a.clearFrontSelection() {
+				return nil
+			}
 			a.popPage()
 			return nil
 		}
@@ -209,7 +243,7 @@ func (a *App) Run() error {
 	a.rootFlex = tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(a.pages, 0, 1, true)
 
-	return a.tv.SetRoot(a.rootFlex, true).EnableMouse(true).Run()
+	return a.tv.SetRoot(a.rootFlex, true).EnableMouse(a.mouseEnabled).Run()
 }
 
 // toggleSidebar shows the sidebar if hidden, hides it otherwise.
@@ -363,6 +397,47 @@ func (a *App) pushBrowser(kind, focusID string) {
 		b.focusID(focusID)
 	}
 	a.syncSidebar()
+}
+
+// flash pushes a one-line message into the front view's status bar.
+// Used for app-level feedback (mouse toggle, etc.) that has no modal.
+func (a *App) flash(msg string) {
+	if len(a.stack) == 0 {
+		return
+	}
+	switch v := a.pageInstance(a.stack[len(a.stack)-1].name).(type) {
+	case *browser:
+		v.updateStatus(msg)
+	case *tableView:
+		v.updateStatus(msg)
+	}
+}
+
+// clearFrontSelection clears the row selection on the front stack
+// page's view, if any rows are selected. Returns true when it actually
+// cleared something (caller then suppresses the page pop).
+func (a *App) clearFrontSelection() bool {
+	if len(a.stack) == 0 {
+		return false
+	}
+	inst := a.pageInstance(a.stack[len(a.stack)-1].name)
+	switch v := inst.(type) {
+	case *browser:
+		if v.selection != nil && v.selection.count() > 0 {
+			v.selection.clear()
+			v.selAnchor = -1
+			v.refreshDisplayOnly()
+			return true
+		}
+	case *tableView:
+		if v.selection != nil && v.selection.count() > 0 {
+			v.selection.clear()
+			v.selAnchor = -1
+			v.refresh()
+			return true
+		}
+	}
+	return false
 }
 
 // swapToTable replaces the current top page with a table view of the
