@@ -1,0 +1,88 @@
+version: "3"
+
+# testenttui — the runnable demo + test bed for the enttui library.
+#
+# enttui itself (github.com/khanakia/entx/enttui) is a pure library: it
+# has NO Taskfile and ships no example. Everything you need to exercise
+# it lives here. Run from this directory:
+#
+#   task            # list tasks
+#   task gen        # ent codegen + enttui register codegen
+#   task build      # compile everything
+#   task test       # run the test suite
+#   task run        # launch the demo TUI (in-memory sqlite, seeded)
+#
+# Or from the repo root:  task -d testenttui <task>
+
+vars:
+  ENTTUI_CMD: github.com/khanakia/entx/enttui/cmd/enttui
+  ENT_PKG: github.com/khanakia/entx/testenttui/ent
+  GEN_OUT: ./tui/gen
+  GEN_PKG: gen
+
+tasks:
+  default:
+    desc: List tasks
+    cmds:
+      - task --list
+
+  gen:
+    desc: "Full regen — ent codegen THEN enttui register glue (this is what produced ./tui/gen)"
+    cmds:
+      - task: gen:ent
+      - task: gen:tui
+
+  gen:ent:
+    desc: "ent codegen → ./ent (runs entc.go)"
+    cmds:
+      - go run entc.go
+
+  gen:tui:
+    desc: "enttui register codegen → ./tui/gen (reads ./schema, writes register_*.go)"
+    cmds:
+      - go run {{.ENTTUI_CMD}} --schema ./schema --out {{.GEN_OUT}} --package {{.GEN_PKG}} --ent-pkg {{.ENT_PKG}}
+
+  build:
+    desc: Build all packages
+    cmds:
+      - go build ./...
+
+  vet:
+    desc: go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run the test suite (ID-type conversion + CRUD round-trip)
+    cmds:
+      - go test ./... -count=1
+
+  test:v:
+    desc: Run the test suite (verbose)
+    cmds:
+      - go test ./... -count=1 -v
+
+  run:
+    desc: "Launch the demo TUI (in-memory sqlite, seeded). Flags after --, e.g. task run -- --kind user --view list"
+    cmds:
+      - go run ./cmd/tui {{.CLI_ARGS}}
+
+  tidy:
+    desc: go mod tidy
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove GENERATED code only (./ent + tui/gen/register_*.go). Hand-written tests in tui/gen are preserved.
+    cmds:
+      - rm -rf ./ent
+      - find ./tui/gen -name 'register_*.go' -delete 2>/dev/null || true
+
+  regen:
+    desc: clean + gen + build + test (full from-scratch verification)
+    cmds:
+      - task: clean
+      - task: gen
+      - task: tidy
+      - task: build
+      - task: test

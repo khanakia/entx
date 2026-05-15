@@ -3,6 +3,7 @@ version: "3"
 vars:
   TESTENT_DIR: ./testent
   TESTENTGQLMULTI_DIR: ./testentgqlmulti
+  TESTENTTUI_DIR: ./testenttui
 
 tasks:
   default:
@@ -40,18 +41,51 @@ tasks:
     cmds:
       - task: test
 
+  # enttui has no Taskfile of its own (pure library). All demo / gen /
+  # test workflow lives in testenttui/Taskfile.yml — these just delegate
+  # so they're discoverable from the repo root too.
+  enttui:generate:
+    desc: "Regenerate testenttui (ent + enttui register glue) — delegates to testenttui"
+    cmds:
+      - task -d {{.TESTENTTUI_DIR}} gen
+
+  enttui:run:
+    desc: "Launch the testenttui demo TUI — delegates to testenttui"
+    cmds:
+      - task -d {{.TESTENTTUI_DIR}} run -- {{.CLI_ARGS}}
+
+  enttui:test:
+    desc: "Run the enttui demo test suite (ID-type + CRUD) — delegates to testenttui"
+    cmds:
+      - task -d {{.TESTENTTUI_DIR}} test
+
+  enttui:regen:
+    desc: "Clean-room verify: clean → gen → tidy → build → test — delegates to testenttui"
+    cmds:
+      - task -d {{.TESTENTTUI_DIR}} regen
+
+  enttui:build:
+    desc: Build enttui + testenttui
+    cmds:
+      - go build ./enttui/...
+      - go build ./testenttui/...
+
   build:
     desc: Build all workspace modules
     cmds:
       - go build ./entcascade/...
       - go build ./entgqlmulti/...
+      - go build ./enttui/...
       - go build ./testent/...
       - go build ./testentgqlmulti/...
+      - go build ./testenttui/...
 
   tidy:
     desc: Run go mod tidy on all modules
     cmds:
       - cd entcascade && go mod tidy
       - cd entgqlmulti && go mod tidy
+      - cd enttui && go mod tidy
       - cd testent && go mod tidy
       - cd testentgqlmulti && go mod tidy
+      - cd testenttui && go mod tidy

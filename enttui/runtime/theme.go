@@ -163,7 +163,7 @@ func themeFilePath() string {
 	if err != nil || dir == "" {
 		return ""
 	}
-	return filepath.Join(dir, "enttui", "theme")
+	return filepath.Join(dir, "github.com/khanakia/entx/enttui", "theme")
 }
 
 // loadPersistedTheme reads the saved theme name (best-effort). Default dark.

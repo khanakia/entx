@@ -4,7 +4,9 @@ use (
 	./entcascade
 	./entgqlmulti
 	./entpoly
+	./enttui
 	./testent
 	./testentgqlmulti
 	./testentpoly
+	./testenttui
 )

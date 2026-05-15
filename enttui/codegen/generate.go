@@ -81,6 +81,20 @@ type EntityMeta struct {
 	LabelKey string
 	BodyKey  string
 	IDKey    string
+	// IDGoType is this entity's ID field Go type as ent reports it
+	// ("string", "int", "int64", "uuid.UUID", …). The runtime is
+	// type-erased (Row.ID is always string), so the generated glue
+	// converts: inbound (UpdateOneID/DeleteOneID) string→IDGoType via
+	// the per-file parseID helper; outbound (Create return, edge
+	// refs) IDGoType→string via fmt.Sprint. Per-entity — two tables
+	// with different ID types each get their own correct conversion.
+	IDGoType string
+	// NeedsStrconv / NeedsUUID gate the conditional imports the ID
+	// (or a Pick-ref FK) conversion needs. UUIDImport is the import
+	// path for the uuid type when NeedsUUID.
+	NeedsStrconv bool
+	NeedsUUID    bool
+	UUIDImport   string
 	// ScopeFields are the subset of Options.ScopeFields this entity
 	// actually has on its schema. Template emits one predicate per entry.
 	ScopeFields      []ScopeFieldMeta
@@ -168,6 +182,10 @@ type FieldMeta struct {
 	// RefNillable says whether that FK column is clearable.
 	RefKind     string
 	RefNillable bool
+	// RefIDGoType is the TARGET entity's ID Go type — the type the
+	// host FK setter expects. The runtime hands the picked id back as
+	// a string, so the ref setter converts string→RefIDGoType.
+	RefIDGoType string
 
 	// Related fields render a column drawn from an eager-loaded edge
 	// target instead of the row itself. EdgeGoName + TargetTitleField
@@ -237,7 +255,7 @@ func Generate(opts Options) error {
 		return fmt.Errorf("enttui/codegen: OutDir is required")
 	}
 	if opts.Package == "" {
-		opts.Package = "enttui"
+		opts.Package = "github.com/khanakia/entx/enttui"
 	}
 	if opts.EntPkgPath == "" {
 		opts.EntPkgPath = "dbent/gen/ent"
@@ -350,6 +368,13 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	// the generated Get accessor stringifies via fieldKind.
 	if n.ID != nil {
 		em.IDKey = n.ID.Name
+	}
+	em.IDGoType = goIDType(n)
+	if isUUIDType(em.IDGoType) {
+		em.NeedsUUID = true
+		em.UUIDImport = uuidImportPath(n)
+	} else if isNumericType(em.IDGoType) {
+		em.NeedsStrconv = true
 	}
 
 	// Iterate ID field separately — gen.Type stores it on .ID, not in .Fields.
@@ -591,6 +616,15 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			if hf != nil {
 				if tk, ok := kindByType[e.Type.Name]; ok {
 					hfm := fieldMetaOf(hf)
+					refIDType := goIDType(e.Type)
+					if isUUIDType(refIDType) {
+						em.NeedsUUID = true
+						if em.UUIDImport == "" {
+							em.UUIDImport = uuidImportPath(e.Type)
+						}
+					} else if isNumericType(refIDType) {
+						em.NeedsStrconv = true
+					}
 					em.EditableFields = append(em.EditableFields, FieldMeta{
 						Key:         fkCol,
 						Label:       label,
@@ -599,6 +633,7 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 						GoName:      hfm.GoName, // host FK setter target
 						RefKind:     tk,         // registered target kind
 						RefNillable: hf.Optional || hf.Nillable,
+						RefIDGoType: refIDType,
 					})
 				}
 			}
@@ -638,8 +673,10 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		}
 	}
 
-	// Decide whether the generated file needs to import "fmt".
-	em.NeedsFmt = columnsNeedFmt(em.Columns)
+	// Decide whether the generated file needs to import "fmt". Beyond
+	// column rendering, the ID→string conversions (Create return,
+	// edge ResolveUpward/Drill) all go through fmt.Sprint.
+	em.NeedsFmt = columnsNeedFmt(em.Columns) || em.AllowCreate || len(em.Edges) > 0
 
 	// "strings" is needed when any filterable field is an enum — the
 	// OpIn / OpNotIn dispatch splits a "|"-joined value.
@@ -863,4 +900,47 @@ func renderToFile(tmplName string, data any, path string) error {
 		return fmt.Errorf("gofmt: %w (raw written to %s.unformatted)", err, path)
 	}
 	return os.WriteFile(path, formatted, 0o644)
+}
+
+// --- ID Go-type helpers -----------------------------------------------------
+//
+// The runtime is type-erased (Row.ID is always string). These helpers let
+// the generated glue convert correctly for whatever Go type each schema's
+// ID field actually is — per entity, so an int-PK table and a uuid-PK
+// table each get the right conversion.
+
+func goIDType(n *gen.Type) string {
+	if n == nil || n.ID == nil {
+		return "string"
+	}
+	f := n.ID
+	switch {
+	case f.IsUUID():
+		return "uuid.UUID"
+	case f.IsString():
+		return "string"
+	case f.IsInt():
+		return "int"
+	}
+	if f.Type != nil {
+		if s := f.Type.String(); s != "" {
+			return s
+		}
+	}
+	return "string"
+}
+
+func isNumericType(t string) bool {
+	return strings.HasPrefix(t, "int") || strings.HasPrefix(t, "uint")
+}
+
+func isUUIDType(t string) bool {
+	return t == "uuid.UUID" || strings.HasSuffix(t, ".UUID")
+}
+
+func uuidImportPath(n *gen.Type) string {
+	if n != nil && n.ID != nil && n.ID.Type != nil && n.ID.Type.PkgPath != "" {
+		return n.ID.Type.PkgPath
+	}
+	return "github.com/google/uuid"
 }

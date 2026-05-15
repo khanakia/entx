@@ -16,13 +16,13 @@ import (
 	"os"
 	"strings"
 
-	"enttui/codegen"
+	"github.com/khanakia/entx/enttui/codegen"
 )
 
 func main() {
 	schema := flag.String("schema", "", "path to the ent schema directory")
 	out := flag.String("out", "", "output directory for generated .go files")
-	pkg := flag.String("package", "enttui", "package name declared in generated files")
+	pkg := flag.String("package", "github.com/khanakia/entx/enttui", "package name declared in generated files")
 	entPkg := flag.String("ent-pkg", "dbent/gen/ent", "import path of the generated ent client package")
 	skipCSV := flag.String("skip", "", "comma-separated list of ent Type names to skip")
 	scopeCSV := flag.String("scope", "", "comma-separated list of snake_case field names to wire as scope predicates (e.g. project_id,tenant_id)")

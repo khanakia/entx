@@ -6,17 +6,19 @@ import (
 	"context"
 	"encoding/json"
 	{{ if .NeedsFmt }}"fmt"
+	{{ end }}{{ if .NeedsStrconv }}"strconv"
 	{{ end }}{{ if .NeedsStrings }}"strings"
 	{{ end -}}
 	{{ if .NeedsSQL }}
 	"entgo.io/ent/dialect/sql"
+	{{ end }}{{ if .NeedsUUID }}"{{ .UUIDImport }}"
 	{{ end }}"{{ .EntPkgPath }}"
 	{{ .PredAlias }} "{{ .EntPkgPath }}/{{ .PredPkg }}"
 	{{- range .RelatedImports }}
 	{{ .Alias }} "{{ .Path }}"
 	{{- end }}
 
-	"enttui/runtime"
+	"github.com/khanakia/entx/enttui/runtime"
 )
 
 // register{{ .Name }} wires *ent.{{ .Name }} into the enttui runtime.
@@ -230,13 +232,15 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 		// Update wires the typed setters for each Editable field. The
 		// runtime collects form input as strings; we cast / parse here.
 		Update: func(ctx context.Context, id string, vals map[string]string) error {
-			u := client.{{ $.Name }}.UpdateOneID(id)
+			pid, err := parse{{ $.Name }}ID(id)
+			if err != nil { return err }
+			u := client.{{ $.Name }}.UpdateOneID(pid)
 			{{- range .EditableFields }}
 			if v, ok := vals["{{ .Key }}"]; ok {
 				{{- template "setterExpr" . }}
 			}
 			{{- end }}
-			_, err := u.Save(ctx)
+			_, err = u.Save(ctx)
 			return err
 		},
 		{{- if .AllowCreate }}
@@ -257,13 +261,15 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 			{{- end }}
 			saved, err := c.Save(ctx)
 			if err != nil { return "", err }
-			return saved.ID, nil
+			return fmt.Sprint(saved.ID), nil
 		},
 		{{- end }}
 		{{- if .AllowDelete }}
 
 		Delete: func(ctx context.Context, id string) error {
-			return client.{{ $.Name }}.DeleteOneID(id).Exec(ctx)
+			pid, err := parse{{ $.Name }}ID(id)
+			if err != nil { return err }
+			return client.{{ $.Name }}.DeleteOneID(pid).Exec(ctx)
 		},
 		{{- end }}
 		{{- end }}
@@ -286,7 +292,7 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 					if err != nil {
 						return runtime.EntityRef{}, err
 					}
-					return runtime.EntityRef{Kind: "{{ .TargetKind }}", ID: tgt.ID}, nil
+					return runtime.EntityRef{Kind: "{{ .TargetKind }}", ID: fmt.Sprint(tgt.ID)}, nil
 				},
 				{{- else }}
 				ResolveDrill: func(ctx context.Context, r *ent.{{ $.Name }}) (runtime.EntityRefList, error) {
@@ -294,7 +300,9 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 					if err != nil {
 						return runtime.EntityRefList{}, err
 					}
-					return runtime.EntityRefList{Kind: "{{ .TargetKind }}", IDs: ids}, nil
+					sids := make([]string, len(ids))
+					for i, v := range ids { sids[i] = fmt.Sprint(v) }
+					return runtime.EntityRefList{Kind: "{{ .TargetKind }}", IDs: sids}, nil
 				},
 				{{- end }}
 			},
@@ -303,7 +311,21 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 		{{- end }}
 	})
 }
-
+{{ if .EditableFields }}
+// parseID converts the runtime's string row id into {{ .Name }}'s actual
+// ID Go type ({{ .IDGoType }}). enttui is type-erased (Row.ID is always
+// string); this is the inbound conversion for UpdateOneID / DeleteOneID.
+func parse{{ .Name }}ID(s string) ({{ .IDGoType }}, error) {
+{{- if eq .IDGoType "uuid.UUID" }}
+	return uuid.Parse(s)
+{{- else if or (eq .IDGoType "string") (eq .IDGoType "") }}
+	return s, nil
+{{- else }}
+	n, err := strconv.Atoi(s)
+	return {{ .IDGoType }}(n), err
+{{- end }}
+}
+{{ end }}
 {{- /* valueExpr: emit the body of a func(r) string for a FieldMeta. */ -}}
 {{- define "valueExpr" }}
 {{- if eq .Kind "related" }}
@@ -358,14 +380,24 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 					u.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
 				}
 {{- else if eq .Kind "ref" }}
+				{{- if eq .RefIDGoType "uuid.UUID" }}
 				{{- if .RefNillable }}
-				if v == "" {
-					u.Clear{{ .GoName }}()
-				} else {
-					u.Set{{ .GoName }}(v)
-				}
+				if v == "" { u.Clear{{ .GoName }}() } else if pv, e := uuid.Parse(v); e == nil { u.Set{{ .GoName }}(pv) }
+				{{- else }}
+				if v != "" { if pv, e := uuid.Parse(v); e == nil { u.Set{{ .GoName }}(pv) } }
+				{{- end }}
+				{{- else if or (eq .RefIDGoType "string") (eq .RefIDGoType "") }}
+				{{- if .RefNillable }}
+				if v == "" { u.Clear{{ .GoName }}() } else { u.Set{{ .GoName }}(v) }
 				{{- else }}
 				if v != "" { u.Set{{ .GoName }}(v) }
+				{{- end }}
+				{{- else }}
+				{{- if .RefNillable }}
+				if v == "" { u.Clear{{ .GoName }}() } else if n, e := strconv.Atoi(v); e == nil { u.Set{{ .GoName }}({{ .RefIDGoType }}(n)) }
+				{{- else }}
+				if v != "" { if n, e := strconv.Atoi(v); e == nil { u.Set{{ .GoName }}({{ .RefIDGoType }}(n)) } }
+				{{- end }}
 				{{- end }}
 {{- else }}
 				_ = v // unsupported kind for codegen update setter — extend the template
@@ -384,7 +416,13 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 {{- else if eq .Kind "enumPtr" }}
 				c.Set{{ .GoName }}({{ .EnumGoTypeCast }}(v))
 {{- else if eq .Kind "ref" }}
+				{{- if eq .RefIDGoType "uuid.UUID" }}
+				if pv, e := uuid.Parse(v); e == nil { c.Set{{ .GoName }}(pv) }
+				{{- else if or (eq .RefIDGoType "string") (eq .RefIDGoType "") }}
 				c.Set{{ .GoName }}(v)
+				{{- else }}
+				if n, e := strconv.Atoi(v); e == nil { c.Set{{ .GoName }}({{ .RefIDGoType }}(n)) }
+				{{- end }}
 {{- else }}
 				_ = v
 {{- end }}
