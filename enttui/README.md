@@ -30,8 +30,26 @@ go get github.com/khanakia/entx/enttui
 
 ---
 
+## Screenshots
+
+The ent / entgo terminal UI in action — generated entirely from a Go schema:
+
+| | |
+|---|---|
+| ![enttui ent terminal UI — main list + preview browser](docs/screenshots/main.jpg) | ![enttui ent table view — sortable, filterable data grid](docs/screenshots/view.jpg) |
+| **Main browser** — list + live preview pane per entity | **Table view** — sortable / filterable data grid |
+| ![enttui keyboard shortcuts — vim navigation help palette](docs/screenshots/quick-help.jpg) | ![enttui leader menu — which-key actions for ent entities](docs/screenshots/actions.jpg) |
+| **Searchable keybindings palette** (`?`) | **Leader / which-key menu** (`,`) — actions |
+
+![enttui edit form — create / update ent records from the terminal](docs/screenshots/edit.jpg)
+
+*Edit / create form — type-safe, generated from your ent schema (opt-in per entity).*
+
+---
+
 ## Table of contents
 
+- [Screenshots](#screenshots)
 - [What you get](#what-you-get)
 - [Requirements](#requirements)
 - [Step 1 — generate glue for your schema](#step-1--generate-glue-for-your-schema)
