@@ -57,14 +57,14 @@ func newSidebar(app *App) *sidebar {
 
 	s.input = tview.NewInputField().
 		SetLabel("/ ").
-		SetLabelColor(tcell.ColorYellow).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetLabelColor(theme.Title).
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	s.list = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	// Live preview: selection change → swap top stack page to that kind.
 	s.list.SetChangedFunc(func(i int, _, _ string, _ rune) {
@@ -148,8 +148,8 @@ func newSidebar(app *App) *sidebar {
 		AddItem(s.list, 0, 1, false)
 	s.body.SetBorder(true).
 		SetTitle(" kinds (^b close · \\ body) ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	s.populate()
 

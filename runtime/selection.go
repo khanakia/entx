@@ -147,9 +147,9 @@ func openGotoRow(app *App, n int, jump func(idx int)) {
 	}
 	input := tview.NewInputField().
 		SetLabel(fmt.Sprintf(":goto (1-%d, $=last) ", n)).
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(10).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	close := func() { app.pages.RemovePage("goto-row") }
 
@@ -191,12 +191,12 @@ func openGotoRow(app *App, n int, jump func(idx int)) {
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(input, 1, 0, true).
 		AddItem(tview.NewTextView().
-			SetTextColor(tcell.ColorGray).
+			SetTextColor(theme.Muted).
 			SetText(" number · $ last · 1 first · enter go · esc cancel "), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" go to row ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	app.pages.AddPage("goto-row", centerModal(body, 50, 5), true, true)
 	app.tv.SetFocus(input)
@@ -225,8 +225,8 @@ func openFormatChooser(app *App, focusedCol string, onPick func(formatChoice)) {
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite)
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text)
 
 	form.AddButton("JSON array", func() { close(); onPick(formatJSONArray) })
 	form.AddButton("CSV", func() { close(); onPick(formatCSV) })
@@ -237,7 +237,7 @@ func openFormatChooser(app *App, focusedCol string, onPick func(formatChoice)) {
 
 	hint := tview.NewTextView().
 		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(theme.Muted).
 		SetText("← → / tab : switch · enter : pick · esc : cancel")
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -245,8 +245,8 @@ func openFormatChooser(app *App, focusedCol string, onPick func(formatChoice)) {
 		AddItem(hint, 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" copy as ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
@@ -442,17 +442,17 @@ func openExportDestination(host *modalHost, kind string, choice formatChoice, te
 
 	input := tview.NewInputField().
 		SetLabel("path  ").
-		SetLabelColor(tcell.ColorYellow).
-		SetFieldBackgroundColor(tcell.ColorDefault).
+		SetLabelColor(theme.Title).
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted).
 		SetText(def)
 
-	status := tview.NewTextView().SetDynamicColors(true).SetTextColor(tcell.ColorGray)
+	status := tview.NewTextView().SetDynamicColors(true).SetTextColor(theme.Muted)
 	close := func() { host.app.pages.RemovePage("export-dest") }
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite).
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text).
 		AddButton("Save to file", func() {
 			path := strings.TrimSpace(input.GetText())
 			if path == "" {
@@ -474,7 +474,7 @@ func openExportDestination(host *modalHost, kind string, choice formatChoice, te
 
 	hint := tview.NewTextView().
 		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(theme.Muted).
 		SetText("← → / tab : switch · enter : pick · esc : cancel")
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -484,8 +484,8 @@ func openExportDestination(host *modalHost, kind string, choice formatChoice, te
 		AddItem(hint, 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(fmt.Sprintf(" export %s ", formatLabel(choice))).
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {

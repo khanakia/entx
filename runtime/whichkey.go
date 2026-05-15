@@ -57,12 +57,12 @@ func openWhichKey(app *App, title string, items []wkItem) {
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tv, 0, 1, true).
 		AddItem(tview.NewTextView().
-			SetTextColor(tcell.ColorGray).
+			SetTextColor(theme.Muted).
 			SetText(" press a key · esc cancel "), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" " + title + " ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	app.pages.AddPage("which-key", centerModal(body, 56, h+2), true, true)
 	app.tv.SetFocus(tv)

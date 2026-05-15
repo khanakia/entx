@@ -22,15 +22,15 @@ func newPicker(app *App) *picker {
 
 	p.input = tview.NewInputField().
 		SetLabel("kind › ").
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(40).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	p.list = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 	p.populate()
 
 	p.input.SetChangedFunc(func(text string) {
@@ -108,8 +108,8 @@ func newPicker(app *App) *picker {
 		AddItem(p.list, 0, 1, false)
 	body.SetBorder(true).
 		SetTitle(" pick a kind ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	// Center the modal-ish body inside the page.
 	p.root = tview.NewFlex().SetDirection(tview.FlexColumn).

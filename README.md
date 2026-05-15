@@ -397,7 +397,8 @@ Press `,` then the shown key. The popup lists everything live, so the table belo
 | **`f`** | Condition builder (per-column filters)                |
 | **`o`** | Sort-stack modal (multi-column, reorderable)          |
 | **`s`** | Cycle sort direction on the focused column            |
-| **`c`** | Columns show/hide modal                               |
+| **`l`** | Columns show/hide modal (layout)                      |
+| **`c`** | Color theme: dark ⇄ light (persists)                  |
 | **`x`** | Export full filtered+sorted dataset (`enttui.AllowExport{}`) |
 | **`m`** | Master-detail split (`enttui.DetailEdge{}`); tabbed when >1 edge |
 | **`i`** | Capabilities card for the current view                |
@@ -417,6 +418,8 @@ Press `,` then the shown key. The popup lists everything live, so the table belo
 **Row numbers + jump:** every row carries a gray 1-based index — in the list a label prefix; in the table a dedicated non-selectable `#` column (not jammed into the id cell). `,t#` toggles it off/on (default on). `:` opens a goto prompt — number, or `$`/`last`, or `1`/`first`; out-of-range clamps. `gg`/`G` jump to first/last row; `n`/`p` page.
 
 **Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live via `,tm`.
+
+**Theme:** two built-in palettes — **Catppuccin Mocha** (dark, default) and **Latte** (light). Toggle live with `,c`; the choice persists to `~/.config/enttui/theme` and reloads next run. Set explicitly from code with `app.SetTheme("dark"|"light")` before `Run()`. Colors are semantic roles (bg / surface / border / accent / selection / success-warn-danger), so selection and inputs always keep contrast in both themes. JSON-configurable custom themes are planned; the `Theme` struct is already hex-string based for that.
 
 When an input field has focus (filter, picker, sidebar), single-letter shortcuts go to the input — `,` types a `,`, not "open leader." `esc` always closes the input. `ctrl+b` is the one exception: caught BEFORE the typing-guard so it toggles the sidebar even mid-filter.
 
@@ -456,7 +459,7 @@ A view is purely a layout: the same modals work in both list+preview and table m
 
 - **`,f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
 - **`,o`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
-- **`,c`** opens the **columns show/hide modal** — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
+- **`,l`** opens the **columns show/hide modal** (layout) — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
 
 All three operate on the SAME state regardless of which view opened them. Toggle `v` and the dataset stays narrowed, sorted, and the column set you picked remains.
 

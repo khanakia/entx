@@ -41,6 +41,7 @@ func (t *tableView) copyFocusedCell() {
 		return
 	}
 	cols := t.visibleColumns()
+	col -= t.colOffset() // skip the dedicated # row-number column
 	if col < 0 || col >= len(cols) {
 		return
 	}

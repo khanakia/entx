@@ -209,14 +209,11 @@ func newTableView(app *App, spec *anySpec) *tableView {
 		SetSelectable(true, true).
 		SetFixed(1, 0).
 		SetSeparator(' ').
-		SetSelectedStyle(tcell.StyleDefault.
-			Background(tcell.ColorDodgerBlue).
-			Foreground(tcell.ColorBlack).
-			Attributes(tcell.AttrBold))
+		SetSelectedStyle(selStyle())
 	t.table.SetBorder(true).
 		SetTitle(" " + spec.display + " (table) ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorOrange) // table is the focused pane
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.BorderFocus) // table is the focused pane
 
 	t.stat = tview.NewTextView().SetDynamicColors(true)
 
@@ -250,7 +247,7 @@ func (t *tableView) refresh() {
 	rows, total, err := t.spec.fetch(ctx, opts)
 	if err != nil {
 		t.table.Clear()
-		t.table.SetCell(0, 0, tview.NewTableCell("[red]error: "+err.Error()).SetTextColor(tcell.ColorRed))
+		t.table.SetCell(0, 0, tview.NewTableCell("[red]error: "+err.Error()).SetTextColor(theme.Danger))
 		t.updateStatus(err.Error())
 		return
 	}
@@ -287,7 +284,7 @@ func (t *tableView) refresh() {
 	if off == 1 {
 		// Dedicated, non-selectable row-number / selection column.
 		t.table.SetCell(0, 0, tview.NewTableCell("#").
-			SetTextColor(tcell.ColorYellow).
+			SetTextColor(theme.Title).
 			SetAttributes(tcell.AttrBold).
 			SetSelectable(false))
 	}
@@ -304,7 +301,7 @@ func (t *tableView) refresh() {
 			}
 		}
 		cell := tview.NewTableCell(label).
-			SetTextColor(tcell.ColorYellow).
+			SetTextColor(theme.Title).
 			SetAttributes(tcell.AttrBold).
 			SetSelectable(false).
 			SetExpansion(1)
@@ -322,7 +319,7 @@ func (t *tableView) refresh() {
 				num = "[yellow]✓[-]" + num
 			}
 			t.table.SetCell(r+1, 0, tview.NewTableCell(num).
-				SetTextColor(tcell.ColorGray).
+				SetTextColor(theme.Muted).
 				SetSelectable(false))
 		}
 		for c, col := range cols {
@@ -390,7 +387,8 @@ func (t *tableView) leaderItems() []wkItem {
 		{'f', "filter — condition builder", t.openConditionBuilder},
 		{'o', "order — sort-stack modal", t.openSortModal},
 		{'s', "sort focused column", t.cycleSortOnFocused},
-		{'c', "columns show/hide", t.openColumnsModal},
+		{'l', "columns show/hide (layout)", t.openColumnsModal},
+		{'c', "color theme: dark ⇄ light", func() { app.toggleTheme() }},
 		{'x', "export (JSON/CSV → file)", func() {
 			if !spec.allowExport {
 				t.updateStatus("export not enabled — add enttui.AllowExport{}")
@@ -642,8 +640,8 @@ func (t *tableView) openPreviewOverlay() {
 	body.SetText(renderPreview(data))
 	body.SetBorder(true).
 		SetTitle(" " + rowLabel(r, t.spec.labelKey) + " ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorOrange)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.BorderFocus)
 
 	// Trigger edges directly from inside the overlay too.
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -715,7 +713,7 @@ func (t *tableView) openFilter() {
 	input := tview.NewInputField().
 		SetLabel("/ ").
 		SetText(t.filter).
-		SetFieldBackgroundColor(tcell.ColorDefault).
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted).
 		SetFieldWidth(40)
 
 	close := func() {
@@ -821,17 +819,17 @@ func visibleColumns(spec *anySpec) []anyColumn {
 func tcellColor(tone string) tcell.Color {
 	switch tone {
 	case "success":
-		return tcell.ColorGreen
+		return theme.Success
 	case "warn":
-		return tcell.ColorOrange
+		return theme.Warning
 	case "danger":
-		return tcell.ColorRed
+		return theme.Danger
 	case "info":
-		return tcell.ColorDodgerBlue
+		return theme.Accent
 	case "muted":
-		return tcell.ColorGray
+		return theme.Muted
 	}
-	return tcell.ColorWhite
+	return theme.Text
 }
 
 // truncate cuts s to n runes, appending an ellipsis if shortened.

@@ -102,8 +102,8 @@ func openSortModal(h *modalHost) {
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	rebuild := func() {
 		// Preserve selection across rebuilds so move-up/down feels stable.
@@ -216,11 +216,11 @@ func openSortModal(h *modalHost) {
 		AddItem(list, 0, 1, true).
 		AddItem(tview.NewTextView().
 			SetText(" ↑↓ nav · ctrl+↑/↓ or K/J move · enter flip · d delete · c clear · esc close ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" sort stack ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	h.app.pages.AddPage("sort-modal", centerModal(body, 60, 20), true, true)
 	h.app.tv.SetFocus(list)
@@ -248,8 +248,8 @@ func openConditionBuilder(h *modalHost) {
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	apply := func() {
 		*h.filtersPtr = work
@@ -311,8 +311,8 @@ func openConditionBuilder(h *modalHost) {
 		AddButton("Apply", apply).
 		AddButton("Cancel", cancel)
 	form.SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite)
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text)
 
 	// Wrap the conditions list + form in a vertical flex.
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -320,11 +320,11 @@ func openConditionBuilder(h *modalHost) {
 		AddItem(form, 3, 0, false).
 		AddItem(tview.NewTextView().
 			SetText(" a add · enter/e edit · d delete · s apply · esc cancel · tab cycle buttons ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" filter — condition builder ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	// Page-wide hotkeys: ctrl+s = apply; esc = cancel; tab between regions.
 	page := centerModal(body, 80, 24)
@@ -379,15 +379,15 @@ func openColumnPicker(h *modalHost, cols []anyColumn, work *[]FilterCondition, p
 	// fzf-style: input at top, filtered list below.
 	input := tview.NewInputField().
 		SetLabel("filter › ").
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(40).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	// `shown` is the currently-filtered subset; the SelectedFunc indexes
 	// into it (not the full cols slice).
@@ -499,11 +499,11 @@ func openColumnPicker(h *modalHost, cols []anyColumn, work *[]FilterCondition, p
 		AddItem(list, 0, 1, false).
 		AddItem(tview.NewTextView().
 			SetText(" type to filter · ↑/↓ nav · enter pick · esc cancel ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(title).
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	h.app.pages.AddPage("cb-col", centerModal(body, 50, 22), true, true)
 	h.app.tv.SetFocus(input)
@@ -528,8 +528,8 @@ func openPickOperator(h *modalHost, col anyColumn, work *[]FilterCondition, pare
 	opSel := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	for _, op := range ops {
 		opSel.AddItem(string(op), "", 0, nil)
@@ -571,15 +571,15 @@ func openPickOperator(h *modalHost, col anyColumn, work *[]FilterCondition, pare
 		AddItem(opSel, 0, 1, true).
 		AddItem(tview.NewTextView().
 			SetText(" enter pick · esc cancel ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	title := " 2/3 operator (" + col.label + ") "
 	if editIdx >= 0 {
 		title = " edit — operator (" + col.label + ") "
 	}
 	body.SetBorder(true).
 		SetTitle(title).
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 	h.app.pages.AddPage("cb-op", centerModal(body, 30, 18), true, true)
 	h.app.tv.SetFocus(opSel)
 	opSel.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -612,8 +612,8 @@ func openEnterValue(h *modalHost, col anyColumn, op FilterOp, work *[]FilterCond
 
 	input := tview.NewInputField().
 		SetLabel(col.label + " " + string(op) + " ").
-		SetLabelColor(tcell.ColorYellow).
-		SetFieldBackgroundColor(tcell.ColorDefault).
+		SetLabelColor(theme.Title).
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted).
 		SetFieldWidth(40)
 
 	// Edit mode → pre-populate the input with the existing value.
@@ -641,15 +641,15 @@ func openEnterValue(h *modalHost, col anyColumn, op FilterOp, work *[]FilterCond
 		AddItem(input, 1, 0, true).
 		AddItem(tview.NewTextView().
 			SetText(" enter submit · esc cancel ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	title := " 3/3 value "
 	if editIdx >= 0 {
 		title = " edit — value "
 	}
 	body.SetBorder(true).
 		SetTitle(title).
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 	h.app.pages.AddPage("cb-val", centerModal(body, 50, 6), true, true)
 	h.app.tv.SetFocus(input)
 }
@@ -674,8 +674,8 @@ func openEnumValuePicker(h *modalHost, col anyColumn, op FilterOp, work *[]Filte
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	var rebuildList func()
 	rebuildList = func() {
@@ -761,15 +761,15 @@ func openEnumValuePicker(h *modalHost, col anyColumn, op FilterOp, work *[]Filte
 		AddItem(list, 0, 1, true).
 		AddItem(tview.NewTextView().
 			SetText(hint).
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	title := " 3/3 value (" + col.label + " " + string(op) + ") "
 	if editIdx >= 0 {
 		title = " edit — value (" + col.label + " " + string(op) + ") "
 	}
 	body.SetBorder(true).
 		SetTitle(title).
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 	h.app.pages.AddPage("cb-val", centerModal(body, 40, min(len(col.enumValues)+4, 20)), true, true)
 	h.app.tv.SetFocus(list)
 }
@@ -811,8 +811,8 @@ func openColumnsModal(h *modalHost) {
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 	var rebuild func()
 	rebuild = func() {
 		list.Clear()
@@ -916,11 +916,11 @@ func openColumnsModal(h *modalHost) {
 		AddItem(list, 0, 1, true).
 		AddItem(tview.NewTextView().
 			SetText(" enter / space toggle · s apply · r reset · esc close ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" columns ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	h.app.pages.AddPage("cols-modal", centerModal(body, 40, 20), true, true)
 	h.app.tv.SetFocus(list)

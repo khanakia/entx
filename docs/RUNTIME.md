@@ -226,7 +226,7 @@ Kind sync: `pushBrowser`, `pushBrowserList`, and the `swapTo*` toggles all stamp
 
 ## Shared modals — `modalHost`  (`table_phases.go`)
 
-The condition builder (`,f`), sort-stack modal (`,o`), and column show/hide modal (`,c`) used to be receiver-methods on `*tableView`. They're now **view-agnostic free functions** taking a `*modalHost`:
+The condition builder (`,f`), sort-stack modal (`,o`), and column show/hide modal (`,l`) used to be receiver-methods on `*tableView`. They're now **view-agnostic free functions** taking a `*modalHost`:
 
 ```go
 type modalHost struct {
@@ -291,14 +291,18 @@ Editing the templates → reflow / retheme without touching Go code.
 
 ## Theme  (`theme.go`)
 
-Installed via `applyTheme()` called from `runtime.New()`. Overrides `tview.Styles` to set:
+Semantic palette. `Theme` is a struct of **roles** (Bg, Surface, Border, BorderFocus, Accent, Title, Text, Muted, SelectionBg/Fg, Success/Warning/Danger), not raw colors — so the whole UI re-themes by swapping one value. Two built-ins: `themeDark` = Catppuccin Mocha (default), `themeLight` = Latte. Package var `theme` holds the live one.
 
-- **Backgrounds** → `ColorDefault` (terminal-native) so the app blends into light + dark themes.
-- **Borders** → DodgerBlue (matches k9s).
-- **Titles** → Yellow.
-- **Selected row** → DodgerBlue bg + Black fg.
+`applyTheme()` (called from `New()` after `loadPersistedTheme()`) does two things:
 
-Tone → tcell color name mapping lives in `toneColor()` — `success` → green, `warn` → orange, `danger` → red, `info` → dodgerblue, `muted` → gray.
+1. Sets `tview.Styles` from the live `theme` (real bg/surface/border/title/text — no more `ColorDefault`).
+2. **Remaps `tcell.ColorNames`** (`yellow`→Warning, `red`→Danger, `blue`→Accent, `gray`→Muted, …). This is the key lever: every existing inline `[yellow]`/`[red]` tview color tag resolves through that table, so the hundreds of tag sites re-theme — and flip on toggle — with zero source edits.
+
+`selStyle()` is the canonical high-contrast selected-row style (SelectionBg + SelectionFg + bold) used by every Table/List; this is what fixed the invisible black-on-blue selection. Input fields are themed Surface bg + Text fg + Muted placeholder.
+
+**Switching:** `App.toggleTheme()` (leader `,c`) swaps `theme`, re-applies, restyles persistent chrome, rebuilds the **front** page (tview reads colors at construction, so the page must be rebuilt; deeper stack pages re-theme when revisited), and persists the name to `~/.config/enttui/theme` (`os.UserConfigDir`). `App.SetTheme("dark"|"light")` is the pre-`Run()` API. No `Draw()` is called from inside the which-key handler — that would re-lock tview's mutex on the same goroutine and deadlock; tview auto-redraws after the handler returns.
+
+Tone → tag-name mapping lives in `toneColor()` (`success`→green, `warn`→orange, `danger`→red, `info`→dodgerblue, `muted`→gray); the names are theme-remapped so tones follow the live palette. JSON custom themes are deferred — `Theme` is already hex-string based for that.
 
 ## Global key handler
 

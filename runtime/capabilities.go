@@ -123,12 +123,12 @@ func (a *App) openKindInfo(s *anySpec) {
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tv, 0, 1, false).
 		AddItem(tview.NewTextView().
-			SetTextColor(tcell.ColorGray).
+			SetTextColor(theme.Muted).
 			SetText(" F : full matrix · esc : close "), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" this view ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case ev.Key() == tcell.KeyEscape, ev.Key() == tcell.KeyEnter:
@@ -153,19 +153,16 @@ func (a *App) openCapabilities() {
 
 	input := tview.NewInputField().
 		SetLabel("filter › ").
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(50).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	tbl := tview.NewTable().
 		SetBorders(false).
 		SetSelectable(true, false).
 		SetFixed(1, 0).
 		SetSeparator(' ').
-		SetSelectedStyle(tcell.StyleDefault.
-			Background(tcell.ColorDodgerBlue).
-			Foreground(tcell.ColorBlack).
-			Attributes(tcell.AttrBold))
+		SetSelectedStyle(selStyle())
 
 	headers := []string{"KIND", "DISPLAY", "GROUP", "EDIT", "NEW", "DEL", "BULK", "EXPORT", "COLS", "FILT", "SORT", "EDGES"}
 
@@ -174,7 +171,7 @@ func (a *App) openCapabilities() {
 		tbl.Clear()
 		for c, h := range headers {
 			tbl.SetCell(0, c, tview.NewTableCell(h).
-				SetTextColor(tcell.ColorYellow).
+				SetTextColor(theme.Title).
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false).
 				SetExpansion(1))
@@ -185,18 +182,18 @@ func (a *App) openCapabilities() {
 				tbl.SetCell(row, col, tview.NewTableCell(txt).
 					SetTextColor(color).SetExpansion(1))
 			}
-			set(0, r.Kind, tcell.ColorAqua)
-			set(1, r.Display, tcell.ColorWhite)
-			set(2, r.Group, tcell.ColorGray)
-			set(3, tick(r.Edit), tcell.ColorWhite)
-			set(4, tick(r.Create), tcell.ColorWhite)
-			set(5, tick(r.Delete), tcell.ColorWhite)
-			set(6, tick(r.Bulk), tcell.ColorWhite)
-			set(7, tick(r.Export), tcell.ColorWhite)
-			set(8, fmt.Sprintf("%d", r.Cols), tcell.ColorWhite)
-			set(9, fmt.Sprintf("%d", r.Filter), tcell.ColorWhite)
-			set(10, fmt.Sprintf("%d", r.Sort), tcell.ColorWhite)
-			set(11, fmt.Sprintf("%d", r.Edges), tcell.ColorWhite)
+			set(0, r.Kind, theme.Accent2)
+			set(1, r.Display, theme.Text)
+			set(2, r.Group, theme.Muted)
+			set(3, tick(r.Edit), theme.Text)
+			set(4, tick(r.Create), theme.Text)
+			set(5, tick(r.Delete), theme.Text)
+			set(6, tick(r.Bulk), theme.Text)
+			set(7, tick(r.Export), theme.Text)
+			set(8, fmt.Sprintf("%d", r.Cols), theme.Text)
+			set(9, fmt.Sprintf("%d", r.Filter), theme.Text)
+			set(10, fmt.Sprintf("%d", r.Sort), theme.Text)
+			set(11, fmt.Sprintf("%d", r.Edges), theme.Text)
 		}
 		if len(shown) > 0 {
 			tbl.Select(1, 0)
@@ -241,7 +238,7 @@ func (a *App) openCapabilities() {
 
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(theme.Muted).
 		SetText(" type to filter · [yellow]cap:edit|new|del|bulk|export[-] · [yellow]ctrl+e[-] CSV · enter open · esc close ")
 
 	exportCSV := func() {
@@ -349,8 +346,8 @@ func (a *App) openCapabilities() {
 		AddItem(footer, 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" capabilities — kinds × features ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	a.pages.AddPage("capabilities", centerModal(body, 100, 34), true, true)
 	a.tv.SetFocus(input)

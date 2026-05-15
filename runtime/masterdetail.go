@@ -76,7 +76,7 @@ func (a *App) pushMasterDetail(masterSpec *anySpec) {
 		AddItem(md.slot, 0, 1, false).
 		AddItem(tview.NewTextView().
 			SetDynamicColors(true).
-			SetTextColor(tcell.ColorGray).
+			SetTextColor(theme.Muted).
 			SetText(" tab: switch pane · ] [ : detail tabs · m: exit · esc: back "), 1, 0, false)
 
 	// Master cursor move → re-filter the active detail tab.
@@ -256,11 +256,11 @@ func (md *masterDetailView) toggleFocus() {
 // paneWrap puts a titled border around a pane; orange = focused.
 func paneWrap(p tview.Primitive, title string, focused bool) tview.Primitive {
 	f := tview.NewFlex().AddItem(p, 0, 1, true)
-	f.SetBorder(true).SetTitle(title).SetTitleColor(tcell.ColorYellow)
+	f.SetBorder(true).SetTitle(title).SetTitleColor(theme.Title)
 	if focused {
-		f.SetBorderColor(tcell.ColorOrange)
+		f.SetBorderColor(theme.BorderFocus)
 	} else {
-		f.SetBorderColor(tcell.ColorDodgerBlue)
+		f.SetBorderColor(theme.Border)
 	}
 	return f
 }

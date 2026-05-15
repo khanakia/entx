@@ -109,7 +109,8 @@ func (b *browser) leaderItems() []wkItem {
 		{'f', "filter — condition builder", func() { openConditionBuilder(b.host()) }},
 		{'o', "order — sort-stack modal", func() { openSortModal(b.host()) }},
 		{'s', "sort: cycle direction", func() { b.cycleSort() }},
-		{'c', "columns show/hide", func() { openColumnsModal(b.host()) }},
+		{'l', "columns show/hide (layout)", func() { openColumnsModal(b.host()) }},
+		{'c', "color theme: dark ⇄ light", func() { app.toggleTheme() }},
 		{'x', "export (JSON/CSV → file)", func() {
 			if !spec.allowExport {
 				b.updateStatus("export not enabled — add enttui.AllowExport{}")
@@ -299,12 +300,12 @@ func newBrowser(app *App, spec *anySpec) *browser {
 	b.list = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 	b.list.SetBorder(true).
 		SetTitle(" " + spec.display + " ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	b.prev = tview.NewTextView().
 		SetDynamicColors(true).
@@ -312,15 +313,15 @@ func newBrowser(app *App, spec *anySpec) *browser {
 		SetWordWrap(true)
 	b.prev.SetBorder(true).
 		SetTitle(" preview ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	b.stat = tview.NewTextView().
 		SetDynamicColors(true)
 
 	b.input = tview.NewInputField().
 		SetLabel("/ ").
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	listPane := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(b.list, 0, 1, true)
@@ -340,8 +341,8 @@ func newBrowser(app *App, spec *anySpec) *browser {
 
 	b.refresh()
 	// Start with list focused — paint its border orange to show focus.
-	b.list.SetBorderColor(tcell.ColorOrange)
-	b.list.SetTitleColor(tcell.ColorOrange)
+	b.list.SetBorderColor(theme.BorderFocus)
+	b.list.SetTitleColor(theme.Warning)
 	return b
 }
 
@@ -629,18 +630,18 @@ func (b *browser) previewKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 
 func (b *browser) focusPreview() {
 	b.app.tv.SetFocus(b.prev)
-	b.list.SetBorderColor(tcell.ColorDodgerBlue)
-	b.list.SetTitleColor(tcell.ColorDodgerBlue)
-	b.prev.SetBorderColor(tcell.ColorOrange)
-	b.prev.SetTitleColor(tcell.ColorOrange)
+	b.list.SetBorderColor(theme.Border)
+	b.list.SetTitleColor(theme.Accent)
+	b.prev.SetBorderColor(theme.BorderFocus)
+	b.prev.SetTitleColor(theme.Warning)
 }
 
 func (b *browser) focusList() {
 	b.app.tv.SetFocus(b.list)
-	b.prev.SetBorderColor(tcell.ColorDodgerBlue)
-	b.prev.SetTitleColor(tcell.ColorYellow)
-	b.list.SetBorderColor(tcell.ColorOrange)
-	b.list.SetTitleColor(tcell.ColorOrange)
+	b.prev.SetBorderColor(theme.Border)
+	b.prev.SetTitleColor(theme.Title)
+	b.list.SetBorderColor(theme.BorderFocus)
+	b.list.SetTitleColor(theme.Warning)
 }
 
 func (b *browser) activateEdgeOrPreview() {
@@ -684,7 +685,7 @@ func (b *browser) openFilter() {
 	input := tview.NewInputField().
 		SetLabel("/ ").
 		SetText(b.filter).
-		SetFieldBackgroundColor(tcell.ColorDefault).
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted).
 		SetFieldWidth(40)
 
 	close := func() {

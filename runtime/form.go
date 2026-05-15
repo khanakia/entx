@@ -114,15 +114,15 @@ func openRefPicker(app *App, refKind string, pick func(id, label string)) {
 
 	input := tview.NewInputField().
 		SetLabel("pick " + cs.display + " › ").
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(40).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	list := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
-		SetSelectedTextColor(tcell.ColorBlack)
+		SetSelectedBackgroundColor(theme.SelectionBg).
+		SetSelectedTextColor(theme.SelectionFg)
 
 	shown := append([]Row(nil), rows...)
 	repaint := func() {
@@ -192,12 +192,12 @@ func openRefPicker(app *App, refKind string, pick func(id, label string)) {
 		AddItem(input, 1, 0, true).
 		AddItem(list, 0, 1, false).
 		AddItem(tview.NewTextView().
-			SetTextColor(tcell.ColorGray).
+			SetTextColor(theme.Muted).
 			SetText(" type to filter · ↑/↓ · enter pick · (clear) unsets · esc cancel "), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" pick " + cs.display + " ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyEscape {
 			close()
@@ -221,13 +221,13 @@ func openForm(app *App, spec *anySpec, prefill map[string]string, title string, 
 
 	status := tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextColor(tcell.ColorGray)
+		SetTextColor(theme.Muted)
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite).
-		SetLabelColor(tcell.ColorYellow)
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text).
+		SetLabelColor(theme.Title)
 
 	// Ref fields get a post-loop InputCapture wired to a picker; track
 	// (label, key, RefKind) so we can fetch the *tview.InputField after
@@ -336,11 +336,11 @@ func openForm(app *App, spec *anySpec, prefill map[string]string, title string, 
 		AddItem(status, 1, 0, false).
 		AddItem(tview.NewTextView().
 			SetText(" tab next · ctrl+s save · esc cancel ").
-			SetTextColor(tcell.ColorGray), 1, 0, false)
+			SetTextColor(theme.Muted), 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" " + title + " ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
@@ -384,8 +384,8 @@ func openDeleteConfirm(app *App, spec *anySpec, row Row, notify func(string), on
 
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite)
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text)
 
 	close := func() { app.pages.RemovePage("delete-modal") }
 
@@ -406,7 +406,7 @@ func openDeleteConfirm(app *App, spec *anySpec, row Row, notify func(string), on
 
 	hint := tview.NewTextView().
 		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(theme.Muted).
 		SetText("← → / tab : switch · enter : confirm · esc : cancel")
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -415,8 +415,8 @@ func openDeleteConfirm(app *App, spec *anySpec, row Row, notify func(string), on
 		AddItem(hint, 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" confirm delete ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorRed)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Danger)
 
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
@@ -441,20 +441,20 @@ func openDeleteError(app *App, err error) {
 	close := func() { app.pages.RemovePage("delete-error") }
 	msg := tview.NewTextView().
 		SetTextAlign(tview.AlignCenter).
-		SetTextColor(tcell.ColorRed).
+		SetTextColor(theme.Danger).
 		SetText("Delete failed:\n" + err.Error())
 	form := tview.NewForm().
 		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tcell.ColorDarkSlateGray).
-		SetButtonTextColor(tcell.ColorWhite).
+		SetButtonBackgroundColor(theme.SelectionBg).
+		SetButtonTextColor(theme.Text).
 		AddButton("OK", close)
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(msg, 0, 1, false).
 		AddItem(form, 3, 0, true)
 	body.SetBorder(true).
 		SetTitle(" error ").
-		SetTitleColor(tcell.ColorRed).
-		SetBorderColor(tcell.ColorRed)
+		SetTitleColor(theme.Danger).
+		SetBorderColor(theme.Danger)
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyEnter {
 			close()

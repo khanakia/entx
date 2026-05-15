@@ -115,19 +115,16 @@ var helpEntries = []helpEntry{
 func (a *App) openHelp() {
 	input := tview.NewInputField().
 		SetLabel("filter › ").
-		SetLabelColor(tcell.ColorYellow).
+		SetLabelColor(theme.Title).
 		SetFieldWidth(50).
-		SetFieldBackgroundColor(tcell.ColorDefault)
+		SetFieldBackgroundColor(theme.Surface).SetFieldTextColor(theme.Text).SetPlaceholderTextColor(theme.Muted)
 
 	tbl := tview.NewTable().
 		SetBorders(false).
 		SetSelectable(true, false). // rows selectable, cells not
 		SetFixed(1, 0).             // header row pinned
 		SetSeparator(' ').
-		SetSelectedStyle(tcell.StyleDefault.
-			Background(tcell.ColorDodgerBlue).
-			Foreground(tcell.ColorBlack).
-			Attributes(tcell.AttrBold))
+		SetSelectedStyle(selStyle())
 
 	// populate is recreated as a closure so the input's SetChangedFunc
 	// can re-run it with whatever filter the user has typed so far.
@@ -136,21 +133,21 @@ func (a *App) openHelp() {
 		tbl.Clear()
 		// Header row.
 		tbl.SetCell(0, 0, tview.NewTableCell("CATEGORY").
-			SetTextColor(tcell.ColorYellow).SetAttributes(tcell.AttrBold).
+			SetTextColor(theme.Title).SetAttributes(tcell.AttrBold).
 			SetSelectable(false).SetExpansion(1))
 		tbl.SetCell(0, 1, tview.NewTableCell("KEY").
-			SetTextColor(tcell.ColorYellow).SetAttributes(tcell.AttrBold).
+			SetTextColor(theme.Title).SetAttributes(tcell.AttrBold).
 			SetSelectable(false).SetExpansion(2))
 		tbl.SetCell(0, 2, tview.NewTableCell("ACTION").
-			SetTextColor(tcell.ColorYellow).SetAttributes(tcell.AttrBold).
+			SetTextColor(theme.Title).SetAttributes(tcell.AttrBold).
 			SetSelectable(false).SetExpansion(5))
 
 		// Data rows.
 		for r, e := range shown {
 			tbl.SetCell(r+1, 0, tview.NewTableCell(e.Category).
-				SetTextColor(tcell.ColorAqua).SetExpansion(1))
+				SetTextColor(theme.Accent2).SetExpansion(1))
 			tbl.SetCell(r+1, 1, tview.NewTableCell(e.Keys).
-				SetTextColor(tcell.ColorOrange).SetAttributes(tcell.AttrBold).SetExpansion(2))
+				SetTextColor(theme.Warning).SetAttributes(tcell.AttrBold).SetExpansion(2))
 			tbl.SetCell(r+1, 2, tview.NewTableCell(e.Action).SetExpansion(5))
 		}
 
@@ -206,7 +203,7 @@ func (a *App) openHelp() {
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText(" type to search · [yellow]@cat[-] scope to category · [yellow]ctrl+e[-] export CSV · ↑/↓ nav · esc close ").
-		SetTextColor(tcell.ColorGray)
+		SetTextColor(theme.Muted)
 
 	exportCSV := func() {
 		cwd, _ := os.Getwd()
@@ -291,8 +288,8 @@ func (a *App) openHelp() {
 		AddItem(footer, 1, 0, false)
 	body.SetBorder(true).
 		SetTitle(" keybindings ").
-		SetTitleColor(tcell.ColorYellow).
-		SetBorderColor(tcell.ColorDodgerBlue)
+		SetTitleColor(theme.Title).
+		SetBorderColor(theme.Border)
 
 	a.pages.AddPage("help", centerModal(body, 90, 32), true, true)
 	a.tv.SetFocus(input)

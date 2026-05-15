@@ -124,6 +124,7 @@ type pageEntry struct {
 
 // New returns an empty App. Register entities, then Run.
 func New() *App {
+	loadPersistedTheme()
 	applyTheme()
 	ctx, cancel := context.WithCancel(context.Background())
 	return &App{
@@ -409,6 +410,54 @@ func (a *App) flash(msg string) {
 	case *tableView:
 		v.updateStatus(msg)
 	}
+}
+
+// SetTheme selects a built-in theme by name ("dark" | "light") before
+// Run(). Unknown names are ignored (keeps the persisted / default theme).
+func (a *App) SetTheme(name string) {
+	switch name {
+	case "dark":
+		theme = themeDark
+	case "light":
+		theme = themeLight
+	default:
+		return
+	}
+	applyTheme()
+}
+
+// toggleTheme flips dark <-> light live: re-applies the palette, restyles
+// the persistent chrome, rebuilds the current page so its primitives pick
+// up the new tview.Styles, and persists the choice.
+func (a *App) toggleTheme() {
+	if theme.Name == "dark" {
+		theme = themeLight
+	} else {
+		theme = themeDark
+	}
+	applyTheme()
+	persistTheme()
+
+	if a.rootFlex != nil {
+		a.rootFlex.SetBackgroundColor(theme.Bg)
+	}
+	if a.pages != nil {
+		a.pages.SetBackgroundColor(theme.Bg)
+	}
+	// Rebuild the front page so it adopts the new Styles (tview reads
+	// colors at construction, not at draw).
+	if k := a.currentKind(); k != "" {
+		a.replaceTopKind(k)
+	}
+	if a.sidebarVisible {
+		a.hideSidebar()
+		a.showSidebar()
+	}
+	// No explicit Draw(): this runs inside the which-key input handler,
+	// where tview already holds its mutex — calling Draw() here would
+	// re-lock on the same goroutine and deadlock. tview auto-redraws
+	// once the handler returns.
+	a.flash("theme: " + theme.Name)
 }
 
 // clearFrontSelection clears the row selection on the front stack
