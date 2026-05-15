@@ -496,6 +496,16 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		rr, c := t.table.GetSelection()
 		t.table.Select(rr, c+1) // tview clamps to the last column
 		return nil
+	case '$': // last column (vim)
+		rr, _ := t.table.GetSelection()
+		if n := len(t.visibleColumns()); n > 0 {
+			t.table.Select(rr, t.colOffset()+n-1)
+		}
+		return nil
+	case '0', '^': // first column (vim)
+		rr, _ := t.table.GetSelection()
+		t.table.Select(rr, t.colOffset())
+		return nil
 	case '/':
 		t.openFilter()
 		return nil

@@ -37,6 +37,7 @@ var helpEntries = []helpEntry{
 	// --- Navigation (vim-faithful, no leader) ---
 	{Category: "Navigate", Keys: "j k ↑ ↓", Action: "Move row"},
 	{Category: "Navigate", Keys: "h l ← →", Action: "Switch pane (browser) / move column (table)"},
+	{Category: "Navigate", Keys: "0 ^ / $", Action: "First / last column (table)"},
 	{Category: "Navigate", Keys: "g g", Action: "First row (current page)"},
 	{Category: "Navigate", Keys: "G", Action: "Last row (current page)"},
 	{Category: "Navigate", Keys: ":", Action: "Go to row — number / $ last / 1 first"},
@@ -73,7 +74,8 @@ var helpEntries = []helpEntry{
 	{Category: "Leader (,)", Keys: ", f", Action: "Filter — condition builder"},
 	{Category: "Leader (,)", Keys: ", o", Action: "Order — sort-stack modal"},
 	{Category: "Leader (,)", Keys: ", s", Action: "Sort focused column (cycle dir)"},
-	{Category: "Leader (,)", Keys: ", c", Action: "Columns show/hide"},
+	{Category: "Leader (,)", Keys: ", l", Action: "Columns show/hide (layout)"},
+	{Category: "Leader (,)", Keys: ", c", Action: "Color theme: dark ⇄ light (persists)"},
 	{Category: "Leader (,)", Keys: ", x", Action: "Export (JSON/CSV → file)"},
 	{Category: "Leader (,)", Keys: ", m", Action: "Master-detail split"},
 	{Category: "Leader (,)", Keys: ", i / , K", Action: "This-view capabilities / all-kinds matrix"},

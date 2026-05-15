@@ -177,39 +177,27 @@ func (s *sidebar) refilter() {
 	}
 	s.populate()
 
-	// While a filter is active the user is searching — put the cursor
-	// on the FIRST match so results are visible from the top. Without
-	// this, populate()'s highlightCurrent() pins the cursor to the
-	// current page's kind, which can be scrolled far down and makes a
-	// broad query like "task" look like it's missing "TaskLists".
-	if q != "" && len(s.shown) > 0 {
-		s.suppressChange = true
-		s.list.SetCurrentItem(0)
-		s.suppressChange = false
-	}
-
-	// If the user just narrowed the filter to a set that no longer
-	// contains the current page's kind, auto-swap to whatever the cursor
-	// is sitting on (shown[0] by default). Without this, filtering down
-	// to a single non-matching entry would leave the body unchanged —
-	// the user had no way to actually "open" the result.
-	if len(s.shown) == 0 {
+	if len(s.shown) == 0 || q == "" {
 		return
 	}
-	cur := s.app.currentKind()
-	for _, sp := range s.shown {
-		if sp.kind == cur {
-			return // current page is still in the filtered list — nothing to do
-		}
+
+	// A filter is active → the user is searching. Always put the cursor
+	// on the FIRST match AND live-preview it, so the top result is both
+	// highlighted and actually open: `enter` commits it, arrows refine
+	// from there. (Previously, if the filter still happened to include
+	// the currently-open kind we bailed early — leaving the top match
+	// highlighted but NOT opened, so the user had to arrow off it and
+	// back to make it stick.)
+	s.suppressChange = true
+	s.list.SetCurrentItem(0)
+	s.suppressChange = false
+
+	if s.shown[0].kind != s.app.currentKind() {
+		s.app.replaceTopKind(s.shown[0].kind)
+		// pushBrowser steals focus; pull it back to the input so the
+		// user can keep refining the filter.
+		s.app.tv.SetFocus(s.input)
 	}
-	i := s.list.GetCurrentItem()
-	if i < 0 || i >= len(s.shown) {
-		i = 0
-	}
-	s.app.replaceTopKind(s.shown[i].kind)
-	// pushBrowser steals focus; pull it back to the input so the user
-	// can keep refining the filter.
-	s.app.tv.SetFocus(s.input)
 }
 
 func (s *sidebar) populate() {
