@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entMountAlias "dbent/gen/ent/mountalias"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -117,14 +116,6 @@ func registerMountAlias(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entMountAlias.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entMountAlias.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -133,8 +124,11 @@ func registerMountAlias(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.MountAlias) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.MountAlias) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.MountAlias
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.MountAlias) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.MountAlias]{
 			{

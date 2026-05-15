@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entLearnRun "dbent/gen/ent/learnrun"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -126,14 +125,6 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entLearnRun.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entLearnRun.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -142,8 +133,11 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.LearnRun) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.LearnRun) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.LearnRun
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.LearnRun) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.LearnRun]{
 			{

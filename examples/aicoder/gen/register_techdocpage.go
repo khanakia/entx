@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entTechDocPage "dbent/gen/ent/techdocpage"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -102,15 +101,6 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entTechDocPage.TitleNotNil())
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTechDocPage.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTechDocPage.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTechDocPage.BodyContainsFold(f.Value))
-					}
 				case "content_sha":
 					switch f.Op {
 					case runtime.OpEq:
@@ -173,12 +163,6 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entTechDocPage.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTechDocPage.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entTechDocPage.FieldBody))
-						}
 					case "content_sha":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTechDocPage.FieldContentSha))
@@ -186,14 +170,6 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entTechDocPage.FieldContentSha))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTechDocPage.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTechDocPage.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -203,17 +179,11 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.TechDocPage) string {
-			if r.Title == nil {
-				return ""
-			}
-			return *r.Title
-		},
-		Body: func(r *ent.TechDocPage) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.TechDocPage) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.TechDocPage) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.TechDocPage
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.TechDocPage) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.TechDocPage]{
 			{
@@ -307,6 +277,18 @@ func registerTechDocPage(app *runtime.App, client *ent.Client) {
 						return ""
 					}
 					return *r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDocPage) string {
+					return r.Body
 				},
 			},
 			{

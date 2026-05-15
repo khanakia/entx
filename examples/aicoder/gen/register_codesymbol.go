@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entCodeSymbol "dbent/gen/ent/codesymbol"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -168,14 +167,6 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entCodeSymbol.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entCodeSymbol.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -184,11 +175,11 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.CodeSymbol) string {
-			return r.Name
-		},
-		CreatedAt: func(r *ent.CodeSymbol) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.CodeSymbol) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.CodeSymbol
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.CodeSymbol) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.CodeSymbol]{
 			{

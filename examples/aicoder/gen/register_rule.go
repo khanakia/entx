@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entRule "dbent/gen/ent/rule"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -110,21 +110,30 @@ func registerRule(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entRule.RepoIDNotNil())
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entRule.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entRule.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entRule.BodyContainsFold(f.Value))
-					}
 				case "activation":
 					switch f.Op {
 					case runtime.OpEq:
 						q = q.Where(entRule.ActivationEQ(entRule.Activation(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entRule.ActivationNEQ(entRule.Activation(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entRule.Activation, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entRule.Activation(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entRule.ActivationIn(vals...))
+							} else {
+								q = q.Where(entRule.ActivationNotIn(vals...))
+							}
+						}
 					}
 				case "globs":
 					switch f.Op {
@@ -158,6 +167,24 @@ func registerRule(app *runtime.App, client *ent.Client) {
 						q = q.Where(entRule.SeverityEQ(entRule.Severity(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entRule.SeverityNEQ(entRule.Severity(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entRule.Severity, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entRule.Severity(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entRule.SeverityIn(vals...))
+							} else {
+								q = q.Where(entRule.SeverityNotIn(vals...))
+							}
+						}
 					}
 				case "superseded_by_id":
 					switch f.Op {
@@ -252,12 +279,6 @@ func registerRule(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entRule.FieldRepoID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entRule.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entRule.FieldBody))
-						}
 					case "activation":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entRule.FieldActivation))
@@ -296,14 +317,6 @@ func registerRule(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entRule.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entRule.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -312,14 +325,11 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.Rule) string {
-			return r.Body
-		},
-		Status: func(r *ent.Rule) string {
-			return string(r.Severity)
-		},
-		CreatedAt: func(r *ent.Rule) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Rule) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Rule
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Rule) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Rule]{
 			{
@@ -494,6 +504,18 @@ func registerRule(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Rule) string {
+					return r.Body
+				},
+			},
+			{
 				Key:        "activation",
 				Label:      "Activation",
 				Sortable:   true,
@@ -501,6 +523,12 @@ func registerRule(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"always",
+					"glob",
+					"semantic",
+					"manual",
+				},
 				Get: func(r *ent.Rule) string {
 					return string(r.Activation)
 				},
@@ -543,6 +571,11 @@ func registerRule(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"must",
+					"should",
+					"may",
+				},
 				Get: func(r *ent.Rule) string {
 					return string(r.Severity)
 				},

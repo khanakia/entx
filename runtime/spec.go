@@ -8,7 +8,6 @@ package runtime
 
 import (
 	"context"
-	"time"
 )
 
 // SortDir is asc/desc — the direction component of a single SortKey.
@@ -126,6 +125,12 @@ type Column[T any] struct {
 	Filterable bool               // appears in filter row + condition builder
 	Width      int                // preferred column width in cells; 0 = auto
 	Align      string             // "left" (default), "right", "center"
+	// EnumValues, when non-empty, makes this column an enum: the condition
+	// builder shows a picker of these exact values (single-select for
+	// `=`/`!=`, multi-select for `in`/`not_in`) instead of a free-text
+	// input. The generated Fetch closure dispatches OpIn / OpNotIn for
+	// enum columns into the typed `pred.<Field>In(...)` predicate.
+	EnumValues []string
 }
 
 // EdgeSpec is one navigable edge from an entity. Generated.
@@ -140,6 +145,25 @@ type EdgeSpec[T any] struct {
 	ResolveUpward func(ctx context.Context, row T) (EntityRef, error)
 	// ResolveDrill is set when Kind == EdgeDrill.
 	ResolveDrill func(ctx context.Context, row T) (EntityRefList, error)
+}
+
+// FormField describes one user-editable input in the edit/create modal.
+// Driven by enttui.Editable() per-field annotations. The runtime renders
+// a widget appropriate to Kind:
+//
+//   - "string" / "stringPtr" → text input
+//   - "enum" / "enumPtr"     → dropdown over EnumValues
+//   - everything else        → text input with type-cast in the generated
+//                              setter (codegen handles strconv / parse)
+//
+// Required marks the field as non-nullable on the schema (used by the
+// form to red-flag empty submissions before hitting the DB).
+type FormField struct {
+	Key        string   // matches a Column.Key — codegen dispatches on this
+	Label      string   // pretty label shown next to the input
+	Kind       string   // mirrors Column kind: string / stringPtr / enum / enumPtr / time / scalar
+	Required   bool     // schema-side NotEmpty / non-nillable
+	EnumValues []string // populated for enum / enumPtr kinds; drives the dropdown
 }
 
 // DefaultView captures the entity's preferred sort/filter + view mode at
@@ -170,17 +194,29 @@ type EntitySpec[T any] struct {
 	// Data
 	Fetch func(ctx context.Context, opts ListOpts) (rows []T, total int, err error)
 
-	// Display accessors — the four "hero" fields used everywhere.
-	Title  func(T) string
-	Body   func(T) string
-	Status func(T) string
+	// JSON serializes the typed row in ent's native format (including
+	// any eager-loaded `edges`). Codegen emits `return json.Marshal(r)`
+	// which goes through *ent.X.MarshalJSON. Used by the `J` clipboard
+	// shortcut. Optional — when nil, J copies the flat columns map.
+	JSON func(T) ([]byte, error)
+
+	// FormFields lists the user-editable fields for this entity. Empty =
+	// the form modal won't show anything to edit (e.g. read-only browser).
+	// Driven by enttui.Editable() per-field annotations in codegen.
+	FormFields []FormField
+
+	// Update saves edits on an existing row. vals is keyed by FormField.Key,
+	// values are strings the runtime form collected from the user; the
+	// generated closure casts/parses each into the right ent setter.
+	// Nil = no edit support.
+	Update func(ctx context.Context, id string, vals map[string]string) error
+
+	// Delete removes the row by ID. Nil = entity not deletable
+	// (no enttui.AllowDelete() annotation).
+	Delete func(ctx context.Context, id string) error
 
 	// Display accessors — all visible columns in declaration order.
 	Columns []Column[T]
-
-	// Created/Updated for the preview header.
-	CreatedAt func(T) time.Time
-	UpdatedAt func(T) time.Time
 
 	// Navigation
 	Edges []EdgeSpec[T]

@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entPattern "dbent/gen/ent/pattern"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -115,15 +114,6 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 						q = q.Where(entPattern.TitleNEQ(f.Value))
 					case runtime.OpContains:
 						q = q.Where(entPattern.TitleContainsFold(f.Value))
-					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entPattern.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entPattern.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entPattern.BodyContainsFold(f.Value))
 					}
 				case "language":
 					switch f.Op {
@@ -237,12 +227,6 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entPattern.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entPattern.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entPattern.FieldBody))
-						}
 					case "language":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPattern.FieldLanguage))
@@ -263,14 +247,6 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entPattern.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entPattern.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -279,14 +255,11 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Pattern) string {
-			return r.Title
-		},
-		Body: func(r *ent.Pattern) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Pattern) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Pattern) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Pattern
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Pattern) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Pattern]{
 			{
@@ -467,6 +440,18 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Pattern) string {
 					return r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Pattern) string {
+					return r.Body
 				},
 			},
 			{

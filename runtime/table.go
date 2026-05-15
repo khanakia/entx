@@ -205,6 +205,14 @@ func (t *tableView) refresh() {
 		return
 	}
 
+	// Snapshot cursor + scroll position so a refresh (sort / filter /
+	// page change) doesn't yank focus back to column 0 / row 1 — the
+	// user's column focus is a meaningful piece of UI state (sort/filter
+	// operate on it). Clamped after repopulating in case the new rowset
+	// is shorter or visible columns changed.
+	selRow, selCol := t.table.GetSelection()
+	rowOff, colOff := t.table.GetOffset()
+
 	t.rows = rows
 	t.total = total
 	t.table.Clear()
@@ -251,8 +259,25 @@ func (t *tableView) refresh() {
 		}
 	}
 
+	// Restore cursor + scroll. Clamp row to the new dataset; clamp col to
+	// the new visible column count (a Phase G column-hide could've
+	// shortened it). Fall back to (1, 0) when there was no prior
+	// selection (initial mount).
 	if len(rows) > 0 {
-		t.table.Select(1, 0) // first data row, not header
+		if selRow < 1 {
+			selRow = 1
+		}
+		if selRow > len(rows) {
+			selRow = len(rows)
+		}
+		if selCol < 0 {
+			selCol = 0
+		}
+		if selCol >= len(cols) {
+			selCol = len(cols) - 1
+		}
+		t.table.Select(selRow, selCol)
+		t.table.SetOffset(rowOff, colOff)
 	}
 	t.updateStatus("")
 }
@@ -284,6 +309,28 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case 'r':
 		t.refresh()
+		return nil
+	case 'y':
+		t.copyFocusedCell()
+		return nil
+	case 'Y':
+		t.copyFocusedRow()
+		return nil
+	case 'J':
+		t.copyFocusedRowJSON()
+		return nil
+	case 'e':
+		row, _ := t.table.GetSelection()
+		if row >= 1 && row-1 < len(t.rows) {
+			openEditForm(t.app, t.spec, t.rows[row-1], t.updateStatus, t.refresh)
+		}
+		return nil
+	case 'D':
+		row, _ := t.table.GetSelection()
+		if row >= 1 && row-1 < len(t.rows) {
+			r := t.rows[row-1]
+			openDeleteConfirm(t.app, t.spec, r, func() { t.refresh() })
+		}
 		return nil
 	case 'n':
 		if (t.page+1)*t.pageSize < t.total {
@@ -348,36 +395,20 @@ func (t *tableView) openPreviewOverlay() {
 	r := t.rows[row-1]
 
 	// Build the same previewData the browser uses.
-	data := previewData{Body: r.Body}
+	data := previewData{}
 	addField := func(k, v string) {
 		if v == "" {
 			return
 		}
 		data.Fields = append(data.Fields, previewField{Key: k, Value: v})
 	}
-	addField("id", r.ID)
-	if r.Title != "" {
-		addField("title", r.Title)
-	}
-	if r.Status != "" {
-		addField("status", colorChipFor(t.spec, r.Status))
-	}
-	if !r.CreatedAt.IsZero() {
-		addField("created", r.CreatedAt.Format("2006-01-02 15:04:05"))
-	}
-	if !r.UpdatedAt.IsZero() {
-		addField("updated", r.UpdatedAt.Format("2006-01-02 15:04:05"))
-	}
 	for _, c := range t.spec.columns {
-		if c.hidden {
-			continue
-		}
-		switch c.key {
-		case "id", "title", "status", "created_at", "updated_at", "body":
-			continue
-		}
 		v := r.Columns[c.key]
 		if v == "" {
+			continue
+		}
+		if isBodyColumnKey(c.key) {
+			data.Body = v
 			continue
 		}
 		if c.chip != nil {
@@ -405,7 +436,7 @@ func (t *tableView) openPreviewOverlay() {
 		SetWordWrap(true)
 	body.SetText(renderPreview(data))
 	body.SetBorder(true).
-		SetTitle(" " + r.Title + " ").
+		SetTitle(" " + rowLabel(r) + " ").
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorOrange)
 
@@ -602,4 +633,20 @@ func truncate(s string, n int) string {
 		return "…"
 	}
 	return string(r[:n-1]) + "…"
+}
+
+// host builds a *modalHost wired to this tableView's live state so the
+// shared filter / sort / columns modals can mutate it directly.
+func (t *tableView) host() *modalHost {
+	return &modalHost{
+		app:               t.app,
+		specColumns:       t.spec.columns,
+		filterableColumns: t.filterableColumns(),
+		filtersPtr:        &t.colFilters,
+		sortStackPtr:      &t.sortStack,
+		overridesPtr:      &t.columnOverrides,
+		refresh:           t.refresh,
+		resetPage:         func() { t.page = 0 },
+		updateStatus:      t.updateStatus,
+	}
 }

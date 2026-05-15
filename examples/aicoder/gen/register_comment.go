@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entComment "dbent/gen/ent/comment"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -74,15 +73,6 @@ func registerComment(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entComment.EntityIDContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entComment.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entComment.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entComment.BodyContainsFold(f.Value))
-					}
 				case "created_by_actor_id":
 					switch f.Op {
 					case runtime.OpEq:
@@ -133,12 +123,6 @@ func registerComment(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entComment.FieldEntityID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entComment.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entComment.FieldBody))
-						}
 					case "created_by_actor_id":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entComment.FieldCreatedByActorID))
@@ -146,14 +130,6 @@ func registerComment(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entComment.FieldCreatedByActorID))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entComment.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entComment.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -163,11 +139,11 @@ func registerComment(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.Comment) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Comment) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Comment) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Comment
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Comment) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Comment]{
 			{
@@ -234,6 +210,18 @@ func registerComment(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Comment) string {
 					return r.EntityID
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Comment) string {
+					return r.Body
 				},
 			},
 			{

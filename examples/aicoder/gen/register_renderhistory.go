@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entRenderHistory "dbent/gen/ent/renderhistory"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -194,14 +193,6 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entRenderHistory.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entRenderHistory.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -210,8 +201,11 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.RenderHistory) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.RenderHistory) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.RenderHistory
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.RenderHistory) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.RenderHistory]{
 			{

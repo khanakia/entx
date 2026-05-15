@@ -49,7 +49,10 @@ tasks:
     desc: "Build the aicoder example binary into ../bin/enttui-example (does NOT regenerate — run `task gen` first if the schema changed)"
     cmds:
       - mkdir -p {{.BIN_DIR}}
-      - go build -o {{.EXAMPLE_BIN}} ./examples/aicoder
+      # sqlite_fts5 build tag — the aicoder demo DB has FTS5 triggers on
+      # several tables (memories, etc.). Updates fire those triggers; a
+      # binary without fts5 fails with "no such module: fts5".
+      - go build -tags sqlite_fts5 -o {{.EXAMPLE_BIN}} ./examples/aicoder
       - echo "built {{.EXAMPLE_BIN}}"
 
   run:

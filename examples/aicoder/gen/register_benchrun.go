@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entBenchRun "dbent/gen/ent/benchrun"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -100,6 +100,24 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchRun.StatusEQ(entBenchRun.Status(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchRun.StatusNEQ(entBenchRun.Status(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchRun.Status, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchRun.Status(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchRun.StatusIn(vals...))
+							} else {
+								q = q.Where(entBenchRun.StatusNotIn(vals...))
+							}
+						}
 					}
 				case "notes":
 					switch f.Op {
@@ -208,14 +226,6 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entBenchRun.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entBenchRun.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -224,11 +234,11 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Status: func(r *ent.BenchRun) string {
-			return string(r.Status)
-		},
-		CreatedAt: func(r *ent.BenchRun) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.BenchRun) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.BenchRun
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.BenchRun) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.BenchRun]{
 			{
@@ -401,6 +411,12 @@ func registerBenchRun(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"running",
+					"complete",
+					"aborted",
+					"failed",
+				},
 				Get: func(r *ent.BenchRun) string {
 					return string(r.Status)
 				},

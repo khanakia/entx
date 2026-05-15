@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entWorkflow "dbent/gen/ent/workflow"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -80,15 +79,6 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entWorkflow.NameContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entWorkflow.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entWorkflow.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entWorkflow.BodyContainsFold(f.Value))
-					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -126,21 +116,7 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entWorkflow.FieldName))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entWorkflow.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entWorkflow.FieldBody))
-						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entWorkflow.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entWorkflow.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -150,14 +126,11 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Workflow) string {
-			return r.Name
-		},
-		Body: func(r *ent.Workflow) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Workflow) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Workflow) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Workflow
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Workflow) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Workflow]{
 			{
@@ -224,6 +197,18 @@ func registerWorkflow(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Workflow) string {
 					return r.Name
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workflow) string {
+					return r.Body
 				},
 			},
 		},

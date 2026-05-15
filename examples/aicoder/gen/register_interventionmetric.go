@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entInterventionMetric "dbent/gen/ent/interventionmetric"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -68,6 +68,24 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 						q = q.Where(entInterventionMetric.KindEQ(entInterventionMetric.Kind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entInterventionMetric.KindNEQ(entInterventionMetric.Kind(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entInterventionMetric.Kind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entInterventionMetric.Kind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entInterventionMetric.KindIn(vals...))
+							} else {
+								q = q.Where(entInterventionMetric.KindNotIn(vals...))
+							}
+						}
 					}
 				case "target_table":
 					switch f.Op {
@@ -184,14 +202,6 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entInterventionMetric.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entInterventionMetric.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -200,11 +210,11 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Status: func(r *ent.InterventionMetric) string {
-			return string(r.Kind)
-		},
-		CreatedAt: func(r *ent.InterventionMetric) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.InterventionMetric) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.InterventionMetric
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.InterventionMetric) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.InterventionMetric]{
 			{
@@ -269,6 +279,13 @@ func registerInterventionMetric(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"correction",
+					"manual_edit",
+					"retry",
+					"rollback",
+					"undo",
+				},
 				Get: func(r *ent.InterventionMetric) string {
 					return string(r.Kind)
 				},

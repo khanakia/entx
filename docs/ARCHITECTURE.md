@@ -85,8 +85,11 @@ We deliberately resisted putting everything into the codegen layer (the alternat
 Generics are used **inside** `EntitySpec[T]` so accessors are typed:
 
 ```go
-runtime.EntitySpec[*ent.Task]{
-    Title: func(r *ent.Task) string { return r.Title },
+runtime.EntitySpec[*ent.Post]{
+    Columns: []runtime.Column[*ent.Post]{
+        {Key: "title", Get: func(r *ent.Post) string { return r.Title }},
+    },
+    JSON: func(r *ent.Post) ([]byte, error) { return json.Marshal(r) },
 }
 ```
 

@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entCompressRun "dbent/gen/ent/compressrun"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -111,14 +110,6 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entCompressRun.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entCompressRun.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -127,8 +118,11 @@ func registerCompressRun(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.CompressRun) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.CompressRun) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.CompressRun
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.CompressRun) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.CompressRun]{
 			{

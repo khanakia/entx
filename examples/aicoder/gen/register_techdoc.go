@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entTechDoc "dbent/gen/ent/techdoc"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -93,19 +92,6 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entTechDoc.BaseURLNotNil())
 					}
-				case "description":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTechDoc.DescriptionEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTechDoc.DescriptionNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTechDoc.DescriptionContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTechDoc.DescriptionIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTechDoc.DescriptionNotNil())
-					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -149,21 +135,7 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entTechDoc.FieldBaseURL))
 						}
-					case "description":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTechDoc.FieldDescription))
-						} else {
-							q = q.Order(ent.Desc(entTechDoc.FieldDescription))
-						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTechDoc.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTechDoc.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -173,17 +145,11 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.TechDoc) string {
-			return r.Name
-		},
-		Body: func(r *ent.TechDoc) string {
-			if r.Description == nil {
-				return ""
-			}
-			return *r.Description
-		},
-		CreatedAt: func(r *ent.TechDoc) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.TechDoc) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.TechDoc
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.TechDoc) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.TechDoc]{
 			{
@@ -265,6 +231,21 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 						return ""
 					}
 					return *r.BaseURL
+				},
+			},
+			{
+				Key:        "description",
+				Label:      "Description",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TechDoc) string {
+					if r.Description == nil {
+						return ""
+					}
+					return *r.Description
 				},
 			},
 		},

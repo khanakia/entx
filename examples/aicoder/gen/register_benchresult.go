@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entBenchResult "dbent/gen/ent/benchresult"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -87,6 +87,24 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchResult.ArmEQ(entBenchResult.Arm(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchResult.ArmNEQ(entBenchResult.Arm(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchResult.Arm, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchResult.Arm(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchResult.ArmIn(vals...))
+							} else {
+								q = q.Where(entBenchResult.ArmNotIn(vals...))
+							}
+						}
 					}
 				case "prompt_sent":
 					switch f.Op {
@@ -112,6 +130,24 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchResult.GradeEQ(entBenchResult.Grade(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchResult.GradeNEQ(entBenchResult.Grade(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchResult.Grade, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchResult.Grade(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchResult.GradeIn(vals...))
+							} else {
+								q = q.Where(entBenchResult.GradeNotIn(vals...))
+							}
+						}
 					}
 				case "judge_model":
 					switch f.Op {
@@ -239,14 +275,6 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entBenchResult.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entBenchResult.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -255,8 +283,11 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.BenchResult) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.BenchResult) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.BenchResult
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.BenchResult) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.BenchResult]{
 			{
@@ -345,6 +376,14 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"baseline",
+					"with_skill",
+					"ablation_a",
+					"ablation_b",
+					"ablation_c",
+					"ablation_d",
+				},
 				Get: func(r *ent.BenchResult) string {
 					return string(r.Arm)
 				},
@@ -447,6 +486,12 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"pass",
+					"fail",
+					"error",
+					"skipped",
+				},
 				Get: func(r *ent.BenchResult) string {
 					return string(r.Grade)
 				},

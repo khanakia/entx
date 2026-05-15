@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entCookbookRecipe "dbent/gen/ent/cookbookrecipe"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -80,15 +79,6 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entCookbookRecipe.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entCookbookRecipe.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entCookbookRecipe.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entCookbookRecipe.BodyContainsFold(f.Value))
-					}
 				case "language":
 					switch f.Op {
 					case runtime.OpEq:
@@ -152,12 +142,6 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entCookbookRecipe.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entCookbookRecipe.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entCookbookRecipe.FieldBody))
-						}
 					case "language":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entCookbookRecipe.FieldLanguage))
@@ -172,14 +156,6 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entCookbookRecipe.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entCookbookRecipe.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -188,14 +164,11 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.CookbookRecipe) string {
-			return r.Title
-		},
-		Body: func(r *ent.CookbookRecipe) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.CookbookRecipe) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.CookbookRecipe) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.CookbookRecipe
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.CookbookRecipe) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.CookbookRecipe]{
 			{
@@ -262,6 +235,18 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.CookbookRecipe) string {
 					return r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.CookbookRecipe) string {
+					return r.Body
 				},
 			},
 			{

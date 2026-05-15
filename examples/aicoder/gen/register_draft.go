@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entDraft "dbent/gen/ent/draft"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -79,15 +78,6 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entDraft.TargetIDNotNil())
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entDraft.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entDraft.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entDraft.BodyContainsFold(f.Value))
-					}
 				case "actor_id":
 					switch f.Op {
 					case runtime.OpEq:
@@ -138,12 +128,6 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entDraft.FieldTargetID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entDraft.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entDraft.FieldBody))
-						}
 					case "actor_id":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entDraft.FieldActorID))
@@ -158,14 +142,6 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entDraft.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entDraft.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -174,11 +150,11 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.Draft) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Draft) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Draft) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Draft
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Draft) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Draft]{
 			{
@@ -248,6 +224,18 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 						return ""
 					}
 					return *r.TargetID
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Draft) string {
+					return r.Body
 				},
 			},
 			{

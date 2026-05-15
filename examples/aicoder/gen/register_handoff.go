@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entHandoff "dbent/gen/ent/handoff"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -96,15 +95,6 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entHandoff.ToActorIDNotNil())
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entHandoff.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entHandoff.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entHandoff.BodyContainsFold(f.Value))
-					}
 				case "status_str":
 					switch f.Op {
 					case runtime.OpEq:
@@ -157,12 +147,6 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entHandoff.FieldToActorID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entHandoff.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entHandoff.FieldBody))
-						}
 					case "status_str":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entHandoff.FieldStatusStr))
@@ -170,14 +154,6 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entHandoff.FieldStatusStr))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entHandoff.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entHandoff.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -187,11 +163,11 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.Handoff) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Handoff) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Handoff) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Handoff
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Handoff) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Handoff]{
 			{
@@ -276,6 +252,18 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 						return ""
 					}
 					return *r.ToActorID
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Handoff) string {
+					return r.Body
 				},
 			},
 			{

@@ -1,10 +1,10 @@
 // Package enttui hosts the schema-annotation API. The codegen extension
-// (see ./gen) reads these annotations off ent schemas and emits runtime
-// registrations.
+// (see ./codegen) reads these annotations off ent schemas and emits the
+// runtime registrations.
 //
-// Status: API surface declared. Codegen reads these starting M0.5; for now
-// the example in ./examples/aicoder wires entities by hand to validate the
-// runtime first.
+// The library is schema-agnostic: nothing in here assumes any particular
+// domain. Examples in doc comments use generic names like Post / Author
+// / Comment — substitute your own schemas freely.
 package enttui
 
 import "entgo.io/ent/schema"
@@ -92,6 +92,12 @@ type CountEdges struct{ schema.Annotation }
 
 func (CountEdges) Name() string { return "EntTUI.CountEdges" }
 
+// AllowDelete enables the `D` (delete with confirm) shortcut. Off by
+// default — destructive actions opt-in only.
+type AllowDelete struct{ schema.Annotation }
+
+func (AllowDelete) Name() string { return "EntTUI.AllowDelete" }
+
 // --- field-level ---
 
 // AsTitle marks a field as the row title.
@@ -124,6 +130,16 @@ type Hidden struct{ schema.Annotation }
 
 func (Hidden) Name() string { return "EntTUI.Hidden" }
 
+// Editable marks a field as user-editable in the edit / create form
+// modal. Opt-in per field — if no fields on an entity carry Editable(),
+// the entity has no edit UI at all (safe default for read-only browsers).
+//
+//	field.String("title").NotEmpty().
+//	    Annotations(enttui.Editable()),
+type Editable struct{ schema.Annotation }
+
+func (Editable) Name() string { return "EntTUI.Editable" }
+
 // Chip attaches a value→tone color map to an enum field.
 // Tones: success, warn, danger, info, muted.
 type Chip struct {
@@ -149,6 +165,40 @@ type Format struct {
 }
 
 func (Format) Name() string { return "EntTUI.Format" }
+
+// RelatedColumns attaches one or more "draw a value from an FK target"
+// columns to an entity. Schema-level annotation; each entry produces
+// one column in the table.
+//
+// Example: on a Post entity, show the parent Author's name + email:
+//
+//	enttui.RelatedColumns(
+//	    enttui.RelatedColumn{Edge: "author", Field: "name",  Label: "Author"},
+//	    enttui.RelatedColumn{Edge: "author", Field: "email"},
+//	)
+//
+// Codegen detects the edge target type, validates the field exists, and
+// emits a column whose Get accessor reads r.Edges.<Edge>.<Field>. The
+// host's Fetch closure eager-loads via With<Edge>() so there's no N+1.
+type RelatedColumn struct {
+	Edge  string // ent edge name on the host (e.g. "author")
+	Field string // ent field name on the target type (e.g. "name", "email")
+	Label string // optional display label; defaults to "<Edge> <Field>"
+}
+
+// RelatedColumnsAnnot is the multi-entry annotation read by the codegen.
+type RelatedColumnsAnnot struct {
+	schema.Annotation
+	Columns []RelatedColumn
+}
+
+func (RelatedColumnsAnnot) Name() string { return "EntTUI.RelatedColumns" }
+
+// RelatedColumns is the schema-side constructor. Pass any number of
+// RelatedColumn entries.
+func RelatedColumns(cols ...RelatedColumn) RelatedColumnsAnnot {
+	return RelatedColumnsAnnot{Columns: cols}
+}
 
 // --- edge-level ---
 

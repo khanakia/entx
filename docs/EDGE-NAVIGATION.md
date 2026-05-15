@@ -13,37 +13,37 @@ In both cases the generator emits a typed resolver closure into the generated `r
 
 ```go
 // Upward
-ResolveUpward: func(ctx context.Context, r *ent.Task) (runtime.EntityRef, error) {
-    tgt, err := client.Task.QueryTasklist(r).Only(ctx)
+ResolveUpward: func(ctx context.Context, r *ent.Post) (runtime.EntityRef, error) {
+    tgt, err := client.Post.QueryAuthor(r).Only(ctx)
     if err != nil { return runtime.EntityRef{}, err }
-    return runtime.EntityRef{Kind: "tasklist", ID: tgt.ID}, nil
+    return runtime.EntityRef{Kind: "author", ID: tgt.ID}, nil
 },
 
 // Drill
-ResolveDrill: func(ctx context.Context, r *ent.Task) (runtime.EntityRefList, error) {
-    ids, err := client.Task.QuerySubtasks(r).IDs(ctx)
+ResolveDrill: func(ctx context.Context, r *ent.Post) (runtime.EntityRefList, error) {
+    ids, err := client.Post.QueryComments(r).IDs(ctx)
     if err != nil { return runtime.EntityRefList{}, err }
-    return runtime.EntityRefList{Kind: "task", IDs: ids}, nil
+    return runtime.EntityRefList{Kind: "comment", IDs: ids}, nil
 },
 ```
 
-No reflection, no any-type erasure inside the closure body — fully typed against `*ent.Task` etc.
+No reflection, no any-type erasure inside the closure body — fully typed against the concrete `*ent.<Type>`.
 
 ## Trigger keys
 
-Each edge has a single key that follows it. Two ways triggers are assigned:
+Each edge has a single letter key that follows it. Two ways triggers are assigned:
 
-1. **By annotation** (M1): `enttui.Upward("p")` / `enttui.Drill("enter")`.
-2. **By convention** (M0.5): the generator walks the edge name letter by letter, skipping reserved keys (`k`, `q`, `s`, `r`, `h`, `j`, `l`), takes the first unused one. First non-unique edge claims `enter`.
+1. **By annotation** (M1): `enttui.Upward("a")` / `enttui.Drill("c")`.
+2. **By convention**: the generator walks the edge name letter by letter, skipping reserved keys (`k`, `q`, `s`, `r`, `h`, `j`, `l`), takes the first unused one. **`enter` is reserved for "open preview" — never auto-assigned to an edge.**
 
 The preview footer always shows the chosen triggers so users discover them:
 
 ```
 ── edges ──
-  enter  Subtasks
-  p      → Projects
+  a      → Authors
+  t      → Tags
   c      Comments
-  l      → TaskLists
+  r      Replies
 ```
 
 ## Following an edge
@@ -97,11 +97,11 @@ If you need to drill into millions of rows, this is the first place to optimize.
 
 ## Cross-type edges & registration order
 
-For an edge from `Task` to `Comment` to resolve, both types must be registered. The generator only emits an edge if its target type is itself browsable (i.e. the target is going to be registered). If the target gets filtered out (e.g. you `--skip Comment`), the edge from Task is silently dropped — your Task UI just won't have that footer entry.
+For an edge from `Post` to `Comment` to resolve, both types must be registered. The generator only emits an edge if its target type is itself browsable (i.e. the target is going to be registered). If the target gets filtered out (e.g. you `--skip Comment`), the edge from Post is silently dropped — your Post UI just won't have that footer entry.
 
 ## Polymorphic edges
 
-ent has no native polymorphism. If your schema uses `entity_table + entity_id` columns (like the aicoder Comment table), there's no `Edge` to emit and the generator can't pick it up. Solutions for v1:
+ent has no native polymorphism. If your schema uses `entity_table + entity_id` columns (a common pattern for `Comment` / `Reaction` / `Audit` tables that can attach to many entity types), there's no `Edge` to emit and the generator can't pick it up. Solutions for v1:
 
 - Add a hand-written `register_*.go` for the parent type's edges (and `--skip` its codegen).
 - Wait for M2 annotation `enttui.PolyEdge(...)` which will read a predicate-builder closure and emit drill behavior.

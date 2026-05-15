@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entPlaybook "dbent/gen/ent/playbook"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -108,24 +107,6 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPlaybook.NameContainsFold(f.Value))
 					}
-				case "description":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entPlaybook.DescriptionEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entPlaybook.DescriptionNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entPlaybook.DescriptionContainsFold(f.Value))
-					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entPlaybook.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entPlaybook.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entPlaybook.BodyContainsFold(f.Value))
-					}
 				case "composes":
 					switch f.Op {
 					case runtime.OpEq:
@@ -219,18 +200,6 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entPlaybook.FieldName))
 						}
-					case "description":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entPlaybook.FieldDescription))
-						} else {
-							q = q.Order(ent.Desc(entPlaybook.FieldDescription))
-						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entPlaybook.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entPlaybook.FieldBody))
-						}
 					case "composes":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPlaybook.FieldComposes))
@@ -245,14 +214,6 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entPlaybook.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entPlaybook.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -261,14 +222,11 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Playbook) string {
-			return r.Name
-		},
-		Body: func(r *ent.Playbook) string {
-			return r.Description
-		},
-		CreatedAt: func(r *ent.Playbook) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Playbook) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Playbook
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Playbook) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Playbook]{
 			{
@@ -437,6 +395,30 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Playbook) string {
 					return r.Name
+				},
+			},
+			{
+				Key:        "description",
+				Label:      "Description",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return r.Description
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Playbook) string {
+					return r.Body
 				},
 			},
 			{

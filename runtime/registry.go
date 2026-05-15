@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 )
 
 // anySpec is the type-erased shape of an EntitySpec[T]. Closures inside
@@ -31,6 +30,12 @@ type anySpec struct {
 
 	columns []anyColumn
 	edges   []anyEdge
+
+	// Form support — driven by enttui.Editable() / AllowDelete().
+	// Nil closures mean the corresponding operation is disabled.
+	formFields []FormField
+	update     func(ctx context.Context, id string, vals map[string]string) error
+	deleteRow  func(ctx context.Context, id string) error
 }
 
 type anyColumn struct {
@@ -42,6 +47,9 @@ type anyColumn struct {
 	filterable bool
 	width      int
 	align      string
+	// enumValues is non-empty when the column is an enum — drives the
+	// condition builder to show a value picker instead of a text input.
+	enumValues []string
 }
 
 type anyEdge struct {
@@ -71,17 +79,16 @@ type viewState struct {
 	ColumnOverrides map[string]bool // table-only; ignored by browser
 }
 
-// Row is the runtime-visible projection of one ent row. Strings only —
-// every typed accessor in the spec has been applied at fetch time.
+// Row is the runtime-visible projection of one ent row. Generic — no
+// hardcoded title/body/status assumption. Every value is the typed
+// accessor's output stored as a string in Columns; ID is broken out
+// because the runtime keys edge resolution + selection on it. JSON
+// holds the ent struct serialized in its native shape (including
+// eager-loaded `edges`) so `J` works against any schema.
 type Row struct {
-	ID        string
-	Title     string
-	Body      string
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	// Columns map: Column.Key → formatted value.
+	ID      string
 	Columns map[string]string
+	JSON    []byte
 }
 
 // Register adds a typed EntitySpec to the app. Generated code calls this
@@ -137,6 +144,7 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 			key: c.Key, label: c.Label, chip: c.Chip, hidden: c.Hidden,
 			sortable: c.Sortable, filterable: c.Filterable,
 			width: c.Width, align: c.Align,
+			enumValues: c.EnumValues,
 		})
 	}
 
@@ -207,38 +215,62 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		getOne:      getOne,
 		columns:     columns,
 		edges:       edges,
+		formFields: spec.FormFields,
+		update:     spec.Update,
+		deleteRow:  spec.Delete,
 	}
 	app.kindOrder = append(app.kindOrder, spec.Kind)
 }
 
 // projectRow applies the spec's typed accessors to one row → Row.
+// Generic: no hardcoded field assumption. Every column is a string;
+// `JSON` carries the row's ent-native serialization (including
+// eager-loaded `edges`) for the `J` clipboard shortcut.
+//
+// Hidden columns are still projected — the UI decides whether to
+// render them, but downstream consumers (clipboard, future filters)
+// can still see the value.
 func projectRow[T any](spec EntitySpec[T], r T) Row {
 	out := Row{
 		ID:      extractID(spec, r),
 		Columns: make(map[string]string, len(spec.Columns)),
 	}
-	if spec.Title != nil {
-		out.Title = spec.Title(r)
-	}
-	if spec.Body != nil {
-		out.Body = spec.Body(r)
-	}
-	if spec.Status != nil {
-		out.Status = spec.Status(r)
-	}
-	if spec.CreatedAt != nil {
-		out.CreatedAt = spec.CreatedAt(r)
-	}
-	if spec.UpdatedAt != nil {
-		out.UpdatedAt = spec.UpdatedAt(r)
-	}
 	for _, c := range spec.Columns {
-		if c.Hidden {
-			continue
-		}
 		out.Columns[c.Key] = c.Get(r)
 	}
+	if spec.JSON != nil {
+		if b, err := spec.JSON(r); err == nil {
+			out.JSON = b
+		}
+	}
 	return out
+}
+
+// rowLabel returns the best single-line label for a row — preferring
+// common name-shaped columns, falling back to the id when none match.
+// Schemas without any of these columns still get a usable display.
+//
+// "Common shapes" are convention, not requirement. The list is small
+// and easy to extend without changing every caller.
+func rowLabel(r Row) string {
+	for _, k := range []string{"title", "name", "display_name", "label", "summary"} {
+		if v := r.Columns[k]; v != "" {
+			return v
+		}
+	}
+	return r.ID
+}
+
+// isBodyColumnKey reports whether a column key looks like a long-prose
+// field that should be rendered as the preview body rather than a
+// one-line field. Convention-based; schemas without any of these still
+// just get an empty body. No special-casing at the codegen layer.
+func isBodyColumnKey(k string) bool {
+	switch k {
+	case "body", "description", "content":
+		return true
+	}
+	return false
 }
 
 // extractID looks for a column keyed "id". Generated code always emits one.

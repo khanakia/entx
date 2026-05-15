@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entSnapshot "dbent/gen/ent/snapshot"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -116,15 +115,6 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entSnapshot.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entSnapshot.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entSnapshot.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entSnapshot.BodyContainsFold(f.Value))
-					}
 				case "created_by_actor_id":
 					switch f.Op {
 					case runtime.OpEq:
@@ -211,12 +201,6 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entSnapshot.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entSnapshot.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entSnapshot.FieldBody))
-						}
 					case "taken_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entSnapshot.FieldTakenAt))
@@ -231,14 +215,6 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entSnapshot.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entSnapshot.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -247,14 +223,11 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Snapshot) string {
-			return r.Title
-		},
-		Body: func(r *ent.Snapshot) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Snapshot) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Snapshot) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Snapshot
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Snapshot) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Snapshot]{
 			{
@@ -435,6 +408,18 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Snapshot) string {
 					return r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Snapshot) string {
+					return r.Body
 				},
 			},
 			{

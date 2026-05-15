@@ -4,10 +4,15 @@ package enttuigen
 
 import (
 	"context"
-	"time"
+	"encoding/json"
+	"strings"
 
 	"dbent/gen/ent"
+	entMission "dbent/gen/ent/mission"
+	entPlan "dbent/gen/ent/plan"
 	entTask "dbent/gen/ent/task"
+	entTaskList "dbent/gen/ent/tasklist"
+	"entgo.io/ent/dialect/sql"
 
 	"enttui/runtime"
 )
@@ -34,6 +39,15 @@ func registerTask(app *runtime.App, client *ent.Client) {
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Task, int, error) {
 			q := client.Task.Query()
+			// Eager-load related row so related-column accessors can read
+			// r.Edges.Tasklist.<Field> without an N+1 round-trip.
+			q = q.WithTasklist()
+			// Eager-load related row so related-column accessors can read
+			// r.Edges.Mission.<Field> without an N+1 round-trip.
+			q = q.WithMission()
+			// Eager-load related row so related-column accessors can read
+			// r.Edges.Plan.<Field> without an N+1 round-trip.
+			q = q.WithPlan()
 			// Scope predicate — keyed generically via ListOpts.Scope so the
 			// runtime stays decoupled from any specific field name.
 			if v := opts.Scope["project_id"]; v != "" {
@@ -93,25 +107,30 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTask.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTask.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTask.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTask.BodyContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTask.BodyIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTask.BodyNotNil())
-					}
 				case "status":
 					switch f.Op {
 					case runtime.OpEq:
 						q = q.Where(entTask.StatusEQ(entTask.Status(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entTask.StatusNEQ(entTask.Status(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entTask.Status, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entTask.Status(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entTask.StatusIn(vals...))
+							} else {
+								q = q.Where(entTask.StatusNotIn(vals...))
+							}
+						}
 					}
 				case "priority":
 					switch f.Op {
@@ -119,6 +138,24 @@ func registerTask(app *runtime.App, client *ent.Client) {
 						q = q.Where(entTask.PriorityEQ(entTask.Priority(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entTask.PriorityNEQ(entTask.Priority(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entTask.Priority, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entTask.Priority(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entTask.PriorityIn(vals...))
+							} else {
+								q = q.Where(entTask.PriorityNotIn(vals...))
+							}
+						}
 					}
 				case "mission_id":
 					switch f.Op {
@@ -185,6 +222,42 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					case runtime.OpNotNull:
 						q = q.Where(entTask.AssignedToActorIDNotNil())
 					}
+				case "tasklist_title":
+					// Cross-table filter via HasEdgeWith — applies the
+					// predicate on the target type. Sub-select semantics,
+					// no SELECT-list mangling.
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.HasTasklistWith(entTaskList.TitleEQ(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entTask.HasTasklistWith(entTaskList.TitleNEQ(f.Value)))
+					case runtime.OpContains:
+						q = q.Where(entTask.HasTasklistWith(entTaskList.TitleContainsFold(f.Value)))
+					}
+				case "mission_title":
+					// Cross-table filter via HasEdgeWith — applies the
+					// predicate on the target type. Sub-select semantics,
+					// no SELECT-list mangling.
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.HasMissionWith(entMission.TitleEQ(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entTask.HasMissionWith(entMission.TitleNEQ(f.Value)))
+					case runtime.OpContains:
+						q = q.Where(entTask.HasMissionWith(entMission.TitleContainsFold(f.Value)))
+					}
+				case "plan_title":
+					// Cross-table filter via HasEdgeWith — applies the
+					// predicate on the target type. Sub-select semantics,
+					// no SELECT-list mangling.
+					switch f.Op {
+					case runtime.OpEq:
+						q = q.Where(entTask.HasPlanWith(entPlan.TitleEQ(f.Value)))
+					case runtime.OpNeq:
+						q = q.Where(entTask.HasPlanWith(entPlan.TitleNEQ(f.Value)))
+					case runtime.OpContains:
+						q = q.Where(entTask.HasPlanWith(entPlan.TitleContainsFold(f.Value)))
+					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -227,12 +300,6 @@ func registerTask(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Asc(entTask.FieldTitle))
 						} else {
 							q = q.Order(ent.Desc(entTask.FieldTitle))
-						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTask.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entTask.FieldBody))
 						}
 					case "status":
 						if k.Dir == runtime.Asc {
@@ -294,15 +361,34 @@ func registerTask(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entTask.FieldAssignedToActorID))
 						}
+					case "tasklist_title":
+						// Cross-table sort via ent's generated By<Edge>Field
+						// helper, which emits a sub-query / left-join under
+						// the hood. Avoids manual sql.Selector wrangling.
+						if k.Dir == runtime.Asc {
+							q = q.Order(entTask.ByTasklistField(entTaskList.FieldTitle, sql.OrderAsc()))
+						} else {
+							q = q.Order(entTask.ByTasklistField(entTaskList.FieldTitle, sql.OrderDesc()))
+						}
+					case "mission_title":
+						// Cross-table sort via ent's generated By<Edge>Field
+						// helper, which emits a sub-query / left-join under
+						// the hood. Avoids manual sql.Selector wrangling.
+						if k.Dir == runtime.Asc {
+							q = q.Order(entTask.ByMissionField(entMission.FieldTitle, sql.OrderAsc()))
+						} else {
+							q = q.Order(entTask.ByMissionField(entMission.FieldTitle, sql.OrderDesc()))
+						}
+					case "plan_title":
+						// Cross-table sort via ent's generated By<Edge>Field
+						// helper, which emits a sub-query / left-join under
+						// the hood. Avoids manual sql.Selector wrangling.
+						if k.Dir == runtime.Asc {
+							q = q.Order(entTask.ByPlanField(entPlan.FieldTitle, sql.OrderAsc()))
+						} else {
+							q = q.Order(entTask.ByPlanField(entPlan.FieldTitle, sql.OrderDesc()))
+						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTask.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTask.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -312,20 +398,11 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Task) string {
-			return r.Title
-		},
-		Body: func(r *ent.Task) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
-		},
-		Status: func(r *ent.Task) string {
-			return string(r.Status)
-		},
-		CreatedAt: func(r *ent.Task) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Task) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Task
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Task) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Task]{
 			{
@@ -410,6 +487,21 @@ func registerTask(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Task) string {
+					if r.Body == nil {
+						return ""
+					}
+					return *r.Body
+				},
+			},
+			{
 				Key:        "status",
 				Label:      "Status",
 				Sortable:   true,
@@ -417,6 +509,13 @@ func registerTask(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"todo",
+					"in_progress",
+					"done",
+					"cancelled",
+					"blocked",
+				},
 				Get: func(r *ent.Task) string {
 					return string(r.Status)
 				},
@@ -429,6 +528,12 @@ func registerTask(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"low",
+					"medium",
+					"high",
+					"urgent",
+				},
 				Get: func(r *ent.Task) string {
 					return string(r.Priority)
 				},
@@ -553,6 +658,108 @@ func registerTask(app *runtime.App, client *ent.Client) {
 					return *r.AssignedToActorID
 				},
 			},
+			{
+				Key:        "tasklist_title",
+				Label:      "Tasklist",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Task) string {
+					if r.Edges.Tasklist == nil {
+						return ""
+					}
+					return r.Edges.Tasklist.Title
+				},
+			},
+			{
+				Key:        "mission_title",
+				Label:      "Mission",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Task) string {
+					if r.Edges.Mission == nil {
+						return ""
+					}
+					return r.Edges.Mission.Title
+				},
+			},
+			{
+				Key:        "plan_title",
+				Label:      "Plan",
+				Sortable:   true,
+				Filterable: true,
+				Hidden:     false,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Task) string {
+					if r.Edges.Plan == nil {
+						return ""
+					}
+					return r.Edges.Plan.Title
+				},
+			},
+		},
+
+		// Form support — see enttui.Editable() / AllowCreate() / AllowDelete().
+		FormFields: []runtime.FormField{
+			{
+				Key: "title", Label: "Title", Kind: "string", Required: true,
+			},
+			{
+				Key: "body", Label: "Body", Kind: "stringPtr", Required: false,
+			},
+			{
+				Key: "status", Label: "Status", Kind: "enum", Required: true,
+				EnumValues: []string{
+					"todo",
+					"in_progress",
+					"done",
+					"cancelled",
+					"blocked",
+				},
+			},
+			{
+				Key: "priority", Label: "Priority", Kind: "enum", Required: true,
+				EnumValues: []string{
+					"low",
+					"medium",
+					"high",
+					"urgent",
+				},
+			},
+		},
+
+		// Update wires the typed setters for each Editable field. The
+		// runtime collects form input as strings; we cast / parse here.
+		Update: func(ctx context.Context, id string, vals map[string]string) error {
+			u := client.Task.UpdateOneID(id)
+			if v, ok := vals["title"]; ok {
+				u.SetTitle(v)
+			}
+			if v, ok := vals["body"]; ok {
+				if v == "" {
+					u.ClearBody()
+				} else {
+					u.SetBody(v)
+				}
+			}
+			if v, ok := vals["status"]; ok {
+				if v != "" {
+					u.SetStatus(entTask.Status(v))
+				}
+			}
+			if v, ok := vals["priority"]; ok {
+				if v != "" {
+					u.SetPriority(entTask.Priority(v))
+				}
+			}
+			_, err := u.Save(ctx)
+			return err
 		},
 
 		Edges: []runtime.EdgeSpec[*ent.Task]{

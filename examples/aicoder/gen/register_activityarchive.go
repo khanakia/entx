@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entActivityArchive "dbent/gen/ent/activityarchive"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -79,19 +78,6 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entActivityArchive.KindContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entActivityArchive.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entActivityArchive.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entActivityArchive.BodyContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entActivityArchive.BodyIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entActivityArchive.BodyNotNil())
-					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -129,12 +115,6 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entActivityArchive.FieldKind))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entActivityArchive.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entActivityArchive.FieldBody))
-						}
 					case "archived_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entActivityArchive.FieldArchivedAt))
@@ -142,14 +122,6 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entActivityArchive.FieldArchivedAt))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entActivityArchive.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entActivityArchive.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -159,14 +131,11 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.ActivityArchive) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
-		},
-		CreatedAt: func(r *ent.ActivityArchive) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.ActivityArchive) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.ActivityArchive
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.ActivityArchive) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.ActivityArchive]{
 			{
@@ -233,6 +202,21 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.ActivityArchive) string {
 					return r.Kind
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.ActivityArchive) string {
+					if r.Body == nil {
+						return ""
+					}
+					return *r.Body
 				},
 			},
 			{

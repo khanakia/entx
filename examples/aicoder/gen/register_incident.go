@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entIncident "dbent/gen/ent/incident"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -80,15 +79,6 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entIncident.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entIncident.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entIncident.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entIncident.BodyContainsFold(f.Value))
-					}
 				case "severity_str":
 					switch f.Op {
 					case runtime.OpEq:
@@ -152,12 +142,6 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entIncident.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entIncident.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entIncident.FieldBody))
-						}
 					case "severity_str":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entIncident.FieldSeverityStr))
@@ -178,14 +162,6 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entIncident.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entIncident.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -194,14 +170,11 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Incident) string {
-			return r.Title
-		},
-		Body: func(r *ent.Incident) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.Incident) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Incident) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Incident
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Incident) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Incident]{
 			{
@@ -268,6 +241,18 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Incident) string {
 					return r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Incident) string {
+					return r.Body
 				},
 			},
 			{

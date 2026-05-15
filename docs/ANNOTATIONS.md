@@ -21,7 +21,7 @@ Each annotation is a small Go struct embedding `schema.Annotation`. ent persists
 Opt this schema into the TUI.
 
 ```go
-func (Task) Annotations() []schema.Annotation {
+func (Post) Annotations() []schema.Annotation {
     return []schema.Annotation{enttui.Browse()}
 }
 ```
@@ -36,7 +36,7 @@ Pretty name shown in the kind picker and pane titles.
 enttui.Display("Tasks")
 ```
 
-Default: convention-pluralized type name (`Task` → "Tasks", `Memory` → "Memories").
+Default: convention-pluralized type name (`Post` → "Posts", `Memory` → "Memories").
 
 ### `Group(string)`
 
@@ -94,6 +94,53 @@ app.SetScope("project_id", projectID)
 ```
 
 `enttui.ProjectScope("workspace_id")` is reserved for a future "this entity uses `workspace_id` as its `project_id`" remap — not wired yet.
+
+### `RelatedColumns(RelatedColumn…)` — entity-level
+
+Emit one or more table columns whose values are drawn from a foreign-key
+target row, not from this entity. Each entry is `{Edge, Field, Label}`:
+
+```go
+import (
+    "entgo.io/ent/schema"
+    "enttui"
+)
+
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.RelatedColumns(
+            enttui.RelatedColumn{Edge: "author",   Field: "name",  Label: "Author"},
+            enttui.RelatedColumn{Edge: "category", Field: "name",  Label: "Category"},
+        ),
+    }
+}
+```
+
+`Edge` must match an ent edge name on the host. `Field` is any field name
+on the target type. `Label` is optional — defaults to `"<Edge> <Field>"`
+in title case.
+
+Codegen behavior:
+
+- Emits a Column with `Key = "<edge>_<field>"` and a typed Get accessor
+  `r.Edges.<Edge>.<Field>` (nil-safe; pointer-typed targets also
+  nil-deref-guarded).
+- Adds `q.With<Edge>()` to the Fetch query so reads are batched — no
+  N+1 round-trips. Multiple projections off the same edge share a single
+  `With<Edge>()` call.
+- **Filterable = true** — the condition builder (`f`) shows the column
+  in its picker. Selecting it emits a `pred.Has<Edge>With(targetPred.<Field><Op>(v))`
+  sub-select. v1 supports `= / != / contains` for string targets; enum
+  / numeric / time follow the same pattern when wired in.
+- **Sortable = true** — pressing `s` on the column header (or adding it
+  via the `S` sort-stack modal) emits `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())`
+  using ent's generated edge-order helper. Works alongside native-column
+  sort keys in the multi-sort stack.
+- Generated file gains an aliased import of the target predicate
+  package (e.g. `entAuthor "myproject/ent/author"`) and pulls in
+  `entgo.io/ent/dialect/sql` for the sort helper. Both are emitted only
+  when at least one related column is present.
+- Unknown edge name or unknown field name → entry is silently dropped.
 
 ## Field-level annotations
 
@@ -178,11 +225,11 @@ If omitted, the generator auto-picks a trigger letter from the edge name.
 
 ### `Drill(trigger)`
 
-Marks this non-unique edge as drillable (opens a new browser scoped to those rows). `trigger` is usually `"enter"` for the primary edge.
+Marks this non-unique edge as drillable (opens a new browser scoped to those rows). `trigger` is usually a single letter (`"c"` for comments, `"r"` for replies, etc.) — `"enter"` no longer has special meaning.
 
 ```go
-edge.To("subtasks", Task.Type).
-    Annotations(enttui.Drill("enter")),
+edge.To("comments", Comment.Type).
+    Annotations(enttui.Drill("c")),
 ```
 
 ## Example: fully-annotated schema
@@ -199,65 +246,43 @@ import (
     "enttui"
 )
 
-type Task struct{ ent.Schema }
+type Post struct{ ent.Schema }
 
-func (Task) Annotations() []schema.Annotation {
+func (Post) Annotations() []schema.Annotation {
     return []schema.Annotation{
-        enttui.Browse(),
-        enttui.Display("Tasks"),
-        enttui.Group("workflow"),
-        enttui.Icon("✓"),
-        enttui.DefaultSort("created_at", enttui.Desc),
-        enttui.PageSize(200),
+        enttui.Display("Posts"),
+        enttui.Group("content"),
+        enttui.Icon("📝"),
+        enttui.PageSize(50),
+        enttui.RelatedColumns(
+            enttui.RelatedColumn{Edge: "author", Field: "name", Label: "Author"},
+        ),
     }
 }
 
-func (Task) Fields() []ent.Field {
+func (Post) Fields() []ent.Field {
     return []ent.Field{
         field.String("id").Unique().Immutable(),
-        field.String("project_id").NotEmpty().Immutable(),
-        field.String("title").NotEmpty().
-            Annotations(enttui.AsTitle(), enttui.Filterable()),
-        field.Text("body").Optional().Nillable().
-            Annotations(enttui.AsBody(), enttui.Filterable()),
-        field.Enum("status").Values("todo", "doing", "done", "blocked").
+        field.String("title").NotEmpty(),
+        field.Text("body").Optional().Nillable(),
+        field.Enum("status").Values("draft", "published", "archived").
             Annotations(
-                enttui.AsStatus(),
-                enttui.Sortable(),
-                enttui.Filterable(),
                 enttui.Chip(map[string]string{
-                    "todo":    "muted",
-                    "doing":   "warn",
-                    "done":    "success",
-                    "blocked": "danger",
-                }),
-            ),
-        field.Enum("priority").Values("p0", "p1", "p2", "p3").
-            Annotations(
-                enttui.Sortable(),
-                enttui.Filterable(),
-                enttui.Chip(map[string]string{
-                    "p0": "danger", "p1": "warn", "p2": "info", "p3": "muted",
+                    "draft":     "muted",
+                    "published": "success",
+                    "archived":  "warn",
                 }),
             ),
         field.String("internal_hash").
             Annotations(enttui.Hidden()),
-        field.JSON("payload", map[string]any{}).
-            Annotations(enttui.Format(enttui.FormatPrettyJSON)),
-        field.Time("created_at").Default(time.Now).
-            Annotations(enttui.Sortable(), enttui.Format(enttui.FormatRelativeTime)),
+        field.Time("created_at").Default(time.Now),
         field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
     }
 }
 
-func (Task) Edges() []ent.Edge {
+func (Post) Edges() []ent.Edge {
     return []ent.Edge{
-        edge.From("project", Project.Type).Ref("tasks").Unique().
-            Annotations(enttui.Upward("p")),
-        edge.From("tasklist", TaskList.Type).Ref("tasks").Unique().
-            Annotations(enttui.Upward("l")),
-        edge.To("subtasks", Task.Type).
-            Annotations(enttui.Drill("enter")),
+        edge.From("author", Author.Type).Ref("posts").Unique(),
         edge.To("comments", Comment.Type).
             Annotations(enttui.Drill("c")),
     }

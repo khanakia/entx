@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entHotfix "dbent/gen/ent/hotfix"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -116,21 +116,30 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entHotfix.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entHotfix.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entHotfix.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entHotfix.BodyContainsFold(f.Value))
-					}
 				case "severity":
 					switch f.Op {
 					case runtime.OpEq:
 						q = q.Where(entHotfix.SeverityEQ(entHotfix.Severity(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entHotfix.SeverityNEQ(entHotfix.Severity(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entHotfix.Severity, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entHotfix.Severity(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entHotfix.SeverityIn(vals...))
+							} else {
+								q = q.Where(entHotfix.SeverityNotIn(vals...))
+							}
+						}
 					}
 				case "superseded_by_id":
 					switch f.Op {
@@ -231,12 +240,6 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entHotfix.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entHotfix.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entHotfix.FieldBody))
-						}
 					case "severity":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entHotfix.FieldSeverity))
@@ -257,14 +260,6 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entHotfix.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entHotfix.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -273,17 +268,11 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Hotfix) string {
-			return r.Title
-		},
-		Body: func(r *ent.Hotfix) string {
-			return r.Body
-		},
-		Status: func(r *ent.Hotfix) string {
-			return string(r.Severity)
-		},
-		CreatedAt: func(r *ent.Hotfix) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Hotfix) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Hotfix
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Hotfix) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Hotfix]{
 			{
@@ -467,6 +456,18 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Hotfix) string {
+					return r.Body
+				},
+			},
+			{
 				Key:        "severity",
 				Label:      "Severity",
 				Sortable:   true,
@@ -474,6 +475,12 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"low",
+					"medium",
+					"high",
+					"critical",
+				},
 				Get: func(r *ent.Hotfix) string {
 					return string(r.Severity)
 				},

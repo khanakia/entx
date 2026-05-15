@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entKnowledgeRef "dbent/gen/ent/knowledgeref"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -99,6 +99,24 @@ func registerKnowledgeRef(app *runtime.App, client *ent.Client) {
 						q = q.Where(entKnowledgeRef.ConfidenceEQ(entKnowledgeRef.Confidence(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entKnowledgeRef.ConfidenceNEQ(entKnowledgeRef.Confidence(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entKnowledgeRef.Confidence, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entKnowledgeRef.Confidence(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entKnowledgeRef.ConfidenceIn(vals...))
+							} else {
+								q = q.Where(entKnowledgeRef.ConfidenceNotIn(vals...))
+							}
+						}
 					}
 				}
 			}
@@ -163,14 +181,6 @@ func registerKnowledgeRef(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entKnowledgeRef.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entKnowledgeRef.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -179,8 +189,11 @@ func registerKnowledgeRef(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.KnowledgeRef) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.KnowledgeRef) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.KnowledgeRef
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.KnowledgeRef) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.KnowledgeRef]{
 			{
@@ -293,6 +306,11 @@ func registerKnowledgeRef(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"extracted",
+					"inferred",
+					"ambiguous",
+				},
 				Get: func(r *ent.KnowledgeRef) string {
 					return string(r.Confidence)
 				},

@@ -95,6 +95,31 @@ func (b *browser) state() viewState {
 	}
 }
 
+// host builds a *modalHost referencing this browser's carried state.
+// "A view is just a layout" — the same condition builder / sort / column
+// modals run here, and any mutations they make to carriedFilters /
+// carriedSortStack / carriedColumnOverrides become visible immediately
+// via b.refresh().
+func (b *browser) host() *modalHost {
+	filterable := make([]anyColumn, 0, len(b.spec.columns))
+	for _, c := range b.spec.columns {
+		if c.filterable {
+			filterable = append(filterable, c)
+		}
+	}
+	return &modalHost{
+		app:               b.app,
+		specColumns:       b.spec.columns,
+		filterableColumns: filterable,
+		filtersPtr:        &b.carriedFilters,
+		sortStackPtr:      &b.carriedSortStack,
+		overridesPtr:      &b.carriedColumnOverrides,
+		refresh:           b.refresh,
+		resetPage:         func() { b.page = 0 },
+		updateStatus:      b.updateStatus,
+	}
+}
+
 // cloneStringBoolMap returns a copy of m, or nil if m is nil. Used to
 // pass column visibility through the browser opaque-cargo path without
 // risk of two views aliasing the same map.
@@ -230,8 +255,15 @@ func (b *browser) refresh() {
 	ctx, cancel := context.WithTimeout(b.app.ctx, 5*time.Second)
 	defer cancel()
 
+	// A view is just a layout — filter / sort / column visibility carry
+	// over from any other view the user passed through. The browser
+	// itself doesn't (yet) expose UI to edit the per-column filter list
+	// or multi-sort stack, but it does APPLY them so toggling to table,
+	// adding filters, toggling back keeps the dataset narrowed.
 	opts := ListOpts{
 		Filter:    b.filter,
+		Filters:   b.carriedFilters,
+		Sort:      b.carriedSortStack,
 		SortField: b.sortField,
 		SortDir:   b.sortDir,
 		Offset:    b.page * b.pageSize,
@@ -262,11 +294,10 @@ func (b *browser) refresh() {
 
 	b.list.Clear()
 	for _, r := range rows {
-		title := r.Title
-		if title == "" {
-			title = r.ID
-		}
-		b.list.AddItem(title, "", 0, nil)
+		// Generic label: use whichever common-name column the spec
+		// happens to have. None of these are required — schemas with
+		// none fall back to the id, which always exists.
+		b.list.AddItem(rowLabel(r), "", 0, nil)
 	}
 	if len(rows) == 0 {
 		b.prev.SetText("[gray](no items)")
@@ -289,7 +320,7 @@ func (b *browser) refreshPreview() {
 	}
 	r := b.rows[idx]
 
-	data := previewData{Body: r.Body}
+	data := previewData{}
 
 	addField := func(k, v string) {
 		if v == "" {
@@ -297,35 +328,19 @@ func (b *browser) refreshPreview() {
 		}
 		data.Fields = append(data.Fields, previewField{Key: k, Value: v})
 	}
-	addField("id", r.ID)
-	if r.Title != "" {
-		addField("title", r.Title)
-	}
-	if r.Status != "" {
-		addField("status", colorChipFor(b.spec, r.Status))
-	}
-	if !r.CreatedAt.IsZero() {
-		addField("created", r.CreatedAt.Format("2006-01-02 15:04:05"))
-	}
-	if !r.UpdatedAt.IsZero() {
-		addField("updated", r.UpdatedAt.Format("2006-01-02 15:04:05"))
-	}
-	// Append every non-hero column as an extra preview field. Hero
-	// fields (id/title/status/created/updated/body) are rendered above
-	// or in the body itself; skipping them here avoids duplicates.
+	// Generic preview: walk every column the spec declares, render each
+	// non-empty value as a field. Body-shaped columns (long-prose by
+	// convention) get rendered as the body block instead of a one-liner
+	// field. No assumption about which fields exist.
 	for _, c := range b.spec.columns {
-		if c.hidden {
-			continue
-		}
-		switch c.key {
-		case "id", "title", "status", "created_at", "updated_at", "body":
-			continue
-		}
 		v := r.Columns[c.key]
 		if v == "" {
 			continue
 		}
-		// Chip = value → tone map. Wraps the value in tview color tags.
+		if isBodyColumnKey(c.key) {
+			data.Body = v
+			continue
+		}
 		if c.chip != nil {
 			v = colorChip(c.chip, v)
 		}
@@ -363,6 +378,42 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case 'r':
 		b.refresh()
+		return nil
+	case 'f':
+		// Same condition builder the table view opens — operates on the
+		// shared carried-filters state, so adding a condition here is
+		// immediately reflected in the table view too.
+		openConditionBuilder(b.host())
+		return nil
+	case 'S':
+		openSortModal(b.host())
+		return nil
+	case 'c':
+		openColumnsModal(b.host())
+		return nil
+	case 'y':
+		b.copyFocusedID()
+		return nil
+	case 'Y':
+		b.copyFocusedRow()
+		return nil
+	case 'J':
+		b.copyFocusedRowJSON()
+		return nil
+	case 'e':
+		// Edit current row. If the spec has no Editable() fields, the
+		// form surfaces a "no editable fields" hint in the status bar.
+		// Refresh is wired as onSaved — runs only after the save
+		// completes, so the row reflects the new values immediately.
+		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
+			openEditForm(b.app, b.spec, b.rows[idx], b.updateStatus, b.refresh)
+		}
+		return nil
+	case 'D':
+		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
+			row := b.rows[idx]
+			openDeleteConfirm(b.app, b.spec, row, func() { b.refresh() })
+		}
 		return nil
 	case 'v':
 		// Phase A: swap this page to a table view of the same spec.
@@ -570,12 +621,28 @@ func (b *browser) updateStatus(msg string) {
 		pages = (b.total + b.pageSize - 1) / b.pageSize
 		page = b.page + 1
 	}
+	// Surface carried filters / sort stack in the status so the user
+	// knows the table-view conditions are still active in this view.
+	filter := b.filter
+	if n := len(b.carriedFilters); n > 0 {
+		extra := fmt.Sprintf("+%d cond", n)
+		if filter == "" {
+			filter = extra
+		} else {
+			filter = filter + " " + extra
+		}
+	}
+	sortField := b.sortField
+	if len(b.carriedSortStack) > 0 {
+		sortField = formatSortStack(b.carriedSortStack)
+		dir = ""
+	}
 	b.stat.SetText(renderStatus(statusData{
 		Display:   b.spec.display,
 		Count:     fmt.Sprintf("%d/%d", b.list.GetItemCount(), b.total),
-		SortField: b.sortField,
+		SortField: sortField,
 		SortDir:   dir,
-		Filter:    b.filter,
+		Filter:    filter,
 		Error:     msg,
 		Page:      page,
 		Pages:     pages,

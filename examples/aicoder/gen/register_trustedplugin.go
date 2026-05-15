@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entTrustedPlugin "dbent/gen/ent/trustedplugin"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -138,14 +137,6 @@ func registerTrustedPlugin(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTrustedPlugin.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTrustedPlugin.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -154,11 +145,11 @@ func registerTrustedPlugin(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.TrustedPlugin) string {
-			return r.Name
-		},
-		CreatedAt: func(r *ent.TrustedPlugin) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.TrustedPlugin) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.TrustedPlugin
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.TrustedPlugin) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.TrustedPlugin]{
 			{

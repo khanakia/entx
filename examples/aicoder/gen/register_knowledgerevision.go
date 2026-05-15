@@ -4,11 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entKnowledgeRevision "dbent/gen/ent/knowledgerevision"
+	"encoding/json"
+	"fmt"
 
 	"enttui/runtime"
 )
@@ -89,15 +88,6 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entKnowledgeRevision.EntityIDContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entKnowledgeRevision.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entKnowledgeRevision.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entKnowledgeRevision.BodyContainsFold(f.Value))
-					}
 				case "actor_id":
 					switch f.Op {
 					case runtime.OpEq:
@@ -154,12 +144,6 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entKnowledgeRevision.FieldEntityID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entKnowledgeRevision.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entKnowledgeRevision.FieldBody))
-						}
 					case "actor_id":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entKnowledgeRevision.FieldActorID))
@@ -167,14 +151,6 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entKnowledgeRevision.FieldActorID))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entKnowledgeRevision.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entKnowledgeRevision.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -184,11 +160,11 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.KnowledgeRevision) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.KnowledgeRevision) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.KnowledgeRevision) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.KnowledgeRevision
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.KnowledgeRevision) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.KnowledgeRevision]{
 			{
@@ -279,6 +255,18 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.KnowledgeRevision) string {
 					return fmt.Sprintf("%v", r.RevisionNum)
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.KnowledgeRevision) string {
+					return r.Body
 				},
 			},
 			{

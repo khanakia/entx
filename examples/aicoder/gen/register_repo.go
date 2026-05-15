@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entRepo "dbent/gen/ent/repo"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -154,14 +153,6 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entRepo.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entRepo.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -170,8 +161,11 @@ func registerRepo(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.Repo) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Repo) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Repo
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Repo) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Repo]{
 			{

@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entMemory "dbent/gen/ent/memory"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -112,15 +112,24 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 						q = q.Where(entMemory.KindEQ(entMemory.Kind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entMemory.KindNEQ(entMemory.Kind(f.Value)))
-					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entMemory.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entMemory.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entMemory.BodyContainsFold(f.Value))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entMemory.Kind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entMemory.Kind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entMemory.KindIn(vals...))
+							} else {
+								q = q.Where(entMemory.KindNotIn(vals...))
+							}
+						}
 					}
 				case "superseded_by_id":
 					switch f.Op {
@@ -247,12 +256,6 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entMemory.FieldKind))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entMemory.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entMemory.FieldBody))
-						}
 					case "valid_at":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entMemory.FieldValidAt))
@@ -297,14 +300,6 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entMemory.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entMemory.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -313,14 +308,11 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.Memory) string {
-			return r.Body
-		},
-		Status: func(r *ent.Memory) string {
-			return string(r.Kind)
-		},
-		CreatedAt: func(r *ent.Memory) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Memory) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Memory
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Memory) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Memory]{
 			{
@@ -499,8 +491,27 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"core",
+					"retrieved",
+					"episodic",
+					"procedural",
+					"archival",
+				},
 				Get: func(r *ent.Memory) string {
 					return string(r.Kind)
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Memory) string {
+					return r.Body
 				},
 			},
 			{

@@ -351,6 +351,12 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`/`**        | Open filter input (substring match on title + body)     |
 | **`ctrl+u`**   | Clear the active filter                                 |
 | **`s`**        | Cycle sort direction (asc / desc on created_at)         |
+| **`f`**        | Open condition builder (per-column filters)             |
+| **`S`**        | Open sort-stack modal (multi-column sort, reorder)      |
+| **`c`**        | Open columns show/hide modal                            |
+| **`y`**        | Copy current row's id (browser) / cell value (table)    |
+| **`Y`**        | Copy whole row as TSV                                   |
+| **`J`**        | Copy whole row as pretty-printed JSON                   |
 | **`esc`**      | Pop the current page (back-stack)                       |
 | **`?`**        | Show keybindings help                                   |
 | **`q`**        | Quit                                                    |
@@ -372,6 +378,23 @@ Hidden by default; `ctrl+b` shows / hides it. Lists every registered kind, filte
 
 The sidebar's highlight always reflects the kind shown in the body — drilling an edge, jumping via the modal `k` picker, or `esc`-popping the back-stack all keep the sidebar in sync.
 
+### Filter, sort, and column visibility — view-agnostic
+
+A view is purely a layout: the same modals work in both list+preview and table mode, and any state they apply persists across `v` toggles.
+
+- **`f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
+- **`S`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
+- **`c`** opens the **columns show/hide modal** — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
+
+All three operate on the SAME state regardless of which view opened them. Toggle `v` and the dataset stays narrowed, sorted, and the column set you picked remains.
+
+### Clipboard
+
+- **`y`** copies the current row's id (browser) or focused cell value (table).
+- **`Y`** copies the whole row as TAB-separated values.
+
+Status bar surfaces `copied <label>: <preview…>` on success, or `clipboard error: …` on headless hosts without `xclip` / `pbcopy`.
+
 ---
 
 ## Customizing per-schema behavior
@@ -390,24 +413,22 @@ You can override any of these (and add per-field hints like color chips, hidden 
 ```go
 import "enttui"
 
-func (Task) Annotations() []schema.Annotation {
+func (Post) Annotations() []schema.Annotation {
     return []schema.Annotation{
-        enttui.Browse(),
-        enttui.Display("Tasks"),
-        enttui.Group("workflow"),
-        enttui.Icon("✓"),
+        enttui.Display("Posts"),
+        enttui.Group("content"),
+        enttui.Icon("📝"),
     }
 }
 
-func (Task) Fields() []ent.Field {
+func (Post) Fields() []ent.Field {
     return []ent.Field{
-        field.Enum("status").Values("todo", "doing", "done").
+        field.Enum("status").Values("draft", "published", "archived").
             Annotations(
-                enttui.AsStatus(),
                 enttui.Chip(map[string]string{
-                    "todo":  "muted",
-                    "doing": "warn",
-                    "done":  "success",
+                    "draft":     "muted",
+                    "published": "success",
+                    "archived":  "warn",
                 }),
             ),
         field.String("internal_hash").
@@ -416,7 +437,48 @@ func (Task) Fields() []ent.Field {
 }
 ```
 
-> The annotation API is fully declared in `enttui/annotation.go`; wiring annotations into the codegen pipeline is **planned for M1** — today the generator runs purely on conventions.
+### Related-column projections
+
+Show a column drawn from a foreign-key target instead of the raw FK id. Attach `enttui.RelatedColumns(...)` to the host entity. Each entry produces one column whose value, filter, and sort are all driven off the target row — no manual join SQL on your end.
+
+```go
+import (
+    "entgo.io/ent/schema"
+    "enttui"
+)
+
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.RelatedColumns(
+            enttui.RelatedColumn{Edge: "author",   Field: "name",   Label: "Author"},
+            enttui.RelatedColumn{Edge: "category", Field: "name",   Label: "Category"},
+            enttui.RelatedColumn{Edge: "author",   Field: "status"}, // label defaults to "Author Status"
+        ),
+    }
+}
+```
+
+Then regenerate (`task gen` or whatever runs your codegen). The Post table now shows `Author`, `Category`, `Author Status` columns next to the native ones.
+
+What you get out of the box for each entry:
+
+| Capability     | How it works |
+|----------------|--------------|
+| **Display**    | Eager-loaded via `q.With<Edge>()`. Accessor reads `r.Edges.<Edge>.<Field>` with nil checks (pointer targets get an extra deref guard). No N+1; multiple fields off the same edge share one `With` call. |
+| **Filter**     | Press `f`, pick the related column, pick `=` / `!=` / `contains`, enter a value. Generated as `pred.Has<Edge>With(targetPred.<Field>EQ(v))` etc. — a sub-select, so SQL pagination stays valid. |
+| **Sort**       | Press `s` on the column header, or add via `S`. Generated as `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())` using ent's edge-order helper. Multi-column sort works seamlessly with native columns. |
+
+Field rules:
+
+- `Edge` must match an ent edge name on the host (e.g. `"author"`).
+- `Field` is any field name on the target type — not just title-like. Use `"status"`, `"created_at"`, custom enums, anything that exists on the related schema.
+- `Label` is optional; defaults to `"<Edge> <Field>"` in title case.
+- Unknown edge or unknown field → entry is silently dropped (forgiving, so you can drop the annotation in before the target schema fully lands).
+
+Limitations (v1):
+
+- Filter ops on related string columns are `= / != / contains`. Enum, numeric, and time predicates would follow the same pattern — open an issue if you need them.
+- The related-column row is sortable as one whole; ent's `By<Edge>Field` does a sub-query, so combining it with very large datasets can be slower than indexed native sorts. Add an index on the target field if it matters.
 
 ---
 

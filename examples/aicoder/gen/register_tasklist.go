@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entTaskList "dbent/gen/ent/tasklist"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -80,19 +79,6 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTaskList.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTaskList.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTaskList.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTaskList.BodyContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entTaskList.BodyIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entTaskList.BodyNotNil())
-					}
 				case "status_str":
 					switch f.Op {
 					case runtime.OpEq:
@@ -139,12 +125,6 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entTaskList.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTaskList.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entTaskList.FieldBody))
-						}
 					case "status_str":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTaskList.FieldStatusStr))
@@ -152,14 +132,6 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 							q = q.Order(ent.Desc(entTaskList.FieldStatusStr))
 						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTaskList.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTaskList.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -169,17 +141,11 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.TaskList) string {
-			return r.Title
-		},
-		Body: func(r *ent.TaskList) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
-		},
-		CreatedAt: func(r *ent.TaskList) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.TaskList) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.TaskList
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.TaskList) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.TaskList]{
 			{
@@ -246,6 +212,21 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.TaskList) string {
 					return r.Title
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TaskList) string {
+					if r.Body == nil {
+						return ""
+					}
+					return *r.Body
 				},
 			},
 			{

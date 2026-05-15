@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entMemoryCodeRef "dbent/gen/ent/memorycoderef"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -72,6 +72,24 @@ func registerMemoryCodeRef(app *runtime.App, client *ent.Client) {
 						q = q.Where(entMemoryCodeRef.RelationEQ(entMemoryCodeRef.Relation(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entMemoryCodeRef.RelationNEQ(entMemoryCodeRef.Relation(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entMemoryCodeRef.Relation, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entMemoryCodeRef.Relation(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entMemoryCodeRef.RelationIn(vals...))
+							} else {
+								q = q.Where(entMemoryCodeRef.RelationNotIn(vals...))
+							}
+						}
 					}
 				}
 			}
@@ -118,14 +136,6 @@ func registerMemoryCodeRef(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entMemoryCodeRef.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entMemoryCodeRef.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -134,8 +144,11 @@ func registerMemoryCodeRef(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.MemoryCodeRef) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.MemoryCodeRef) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.MemoryCodeRef
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.MemoryCodeRef) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.MemoryCodeRef]{
 			{
@@ -212,6 +225,12 @@ func registerMemoryCodeRef(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"references",
+					"applies_to",
+					"derived_from",
+					"caused_by",
+				},
 				Get: func(r *ent.MemoryCodeRef) string {
 					return string(r.Relation)
 				},

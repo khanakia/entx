@@ -27,8 +27,8 @@ Override the blocklist behavior with `--skip Type1,Type2` for additional exclusi
 
 | Generated field | Rule |
 |-----------------|------|
-| `Kind`          | `strings.ToLower(Type.Name)` — e.g. `Task` → `"task"` |
-| `Display`       | Naïve pluralizer of `Type.Name` — `Task` → `"Tasks"`, `Mission` → `"Missions"`, `Memory` → `"Memories"` (y → ies). |
+| `Kind`          | `strings.ToLower(Type.Name)` — e.g. `Post` → `"post"` |
+| `Display`       | Naïve pluralizer of `Type.Name` — `Post` → `"Posts"`, `Author` → `"Authors"`, `Memory` → `"Memories"` (y → ies). |
 | `Group`         | `"data"` (single group for everything until annotation support lands) |
 | `Icon`          | `"•"` (placeholder) |
 
@@ -117,15 +117,15 @@ Trigger key picking: walk the edge name letter by letter, take the first one tha
 
 If the edge name has no usable letter (e.g. all letters are reserved), the picker falls back to scanning a..z. Worst case → `?` placeholder.
 
-Examples on the aicoder schema:
+Generic examples:
 
-| Type     | Edge          | Unique | Generated trigger | Display      |
-|----------|---------------|--------|-------------------|--------------|
-| Task     | tasklist      | true   | `t`               | → TaskLists  |
-| Task     | mission       | true   | `m`               | → Missions   |
-| Task     | plan          | true   | `p`               | → Plans      |
-| TaskList | tasks         | false  | `enter`           | Tasks        |
-| Plan     | tasks         | false  | `enter`           | Tasks        |
+| Type    | Edge       | Unique | Generated trigger | Display    |
+|---------|------------|--------|-------------------|------------|
+| Post    | author     | true   | `a`               | → Authors  |
+| Post    | category   | true   | `c`               | → Categorys|
+| Post    | comments   | false  | `o`               | Comments   |
+| Author  | posts      | false  | `o`               | Posts      |
+| Order   | customer   | true   | `u`               | → Customers|
 
 ## Page size
 
@@ -139,8 +139,8 @@ The generator's `fieldKind()` reduces every `codegen.Field` to one of:
 |-------------|------------------|----------------|
 | `string`    | `string`         | `return r.Foo` |
 | `stringPtr` | `*string`        | `if r.Foo == nil { return "" }; return *r.Foo` |
-| `enum`      | `task.Status` etc. | `return string(r.Foo)` |
-| `enumPtr`   | `*task.Status`   | nil-guard + `string(*r.Foo)` |
+| `enum`      | `post.Status` etc. | `return string(r.Foo)` |
+| `enumPtr`   | `*post.Status`   | nil-guard + `string(*r.Foo)` |
 | `time`      | `time.Time`      | `if r.Foo.IsZero() { return "" }; return r.Foo.Format(...)` |
 | `timePtr`   | `*time.Time`     | nil-guard + `IsZero` + format |
 | `scalar`    | `int`/`float`/`bool` | `return fmt.Sprintf("%v", r.Foo)` |

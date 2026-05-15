@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entReminder "dbent/gen/ent/reminder"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -103,6 +103,24 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 						q = q.Where(entReminder.RecurrenceEQ(entReminder.Recurrence(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entReminder.RecurrenceNEQ(entReminder.Recurrence(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entReminder.Recurrence, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entReminder.Recurrence(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entReminder.RecurrenceIn(vals...))
+							} else {
+								q = q.Where(entReminder.RecurrenceNotIn(vals...))
+							}
+						}
 					case runtime.OpIsNull:
 						q = q.Where(entReminder.RecurrenceIsNil())
 					case runtime.OpNotNull:
@@ -196,14 +214,6 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entReminder.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entReminder.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -212,8 +222,11 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.Reminder) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Reminder) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Reminder
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Reminder) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Reminder]{
 			{
@@ -335,6 +348,14 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"7d",
+					"30d",
+					"1m",
+					"3m",
+					"6m",
+					"1y",
+				},
 				Get: func(r *ent.Reminder) string {
 					if r.Recurrence == nil {
 						return ""

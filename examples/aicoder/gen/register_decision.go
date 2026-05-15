@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entDecision "dbent/gen/ent/decision"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -116,21 +116,30 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entDecision.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entDecision.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entDecision.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entDecision.BodyContainsFold(f.Value))
-					}
 				case "status":
 					switch f.Op {
 					case runtime.OpEq:
 						q = q.Where(entDecision.StatusEQ(entDecision.Status(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entDecision.StatusNEQ(entDecision.Status(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entDecision.Status, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entDecision.Status(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entDecision.StatusIn(vals...))
+							} else {
+								q = q.Where(entDecision.StatusNotIn(vals...))
+							}
+						}
 					}
 				case "superseded_by_id":
 					switch f.Op {
@@ -231,12 +240,6 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entDecision.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entDecision.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entDecision.FieldBody))
-						}
 					case "status":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entDecision.FieldStatus))
@@ -257,14 +260,6 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entDecision.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entDecision.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -273,17 +268,11 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Decision) string {
-			return r.Title
-		},
-		Body: func(r *ent.Decision) string {
-			return r.Body
-		},
-		Status: func(r *ent.Decision) string {
-			return string(r.Status)
-		},
-		CreatedAt: func(r *ent.Decision) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Decision) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Decision
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Decision) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Decision]{
 			{
@@ -467,6 +456,18 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Decision) string {
+					return r.Body
+				},
+			},
+			{
 				Key:        "status",
 				Label:      "Status",
 				Sortable:   true,
@@ -474,6 +475,12 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"proposed",
+					"accepted",
+					"superseded",
+					"deprecated",
+				},
 				Get: func(r *ent.Decision) string {
 					return string(r.Status)
 				},

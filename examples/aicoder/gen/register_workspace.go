@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entWorkspace "dbent/gen/ent/workspace"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -80,19 +79,6 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entWorkspace.NameContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entWorkspace.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entWorkspace.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entWorkspace.BodyContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entWorkspace.BodyIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entWorkspace.BodyNotNil())
-					}
 				}
 			}
 			// Phase D — multi-column sort stack. Each Sort entry walks the
@@ -130,21 +116,7 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entWorkspace.FieldName))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entWorkspace.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entWorkspace.FieldBody))
-						}
 					}
-				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entWorkspace.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entWorkspace.FieldCreatedAt))
 				}
 			}
 			total, err := q.Clone().Count(ctx)
@@ -154,17 +126,11 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Workspace) string {
-			return r.Name
-		},
-		Body: func(r *ent.Workspace) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
-		},
-		CreatedAt: func(r *ent.Workspace) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Workspace) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Workspace
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Workspace) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Workspace]{
 			{
@@ -231,6 +197,21 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.Workspace) string {
 					return r.Name
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Workspace) string {
+					if r.Body == nil {
+						return ""
+					}
+					return *r.Body
 				},
 			},
 		},

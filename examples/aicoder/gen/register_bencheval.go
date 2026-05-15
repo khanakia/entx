@@ -4,11 +4,11 @@ package enttuigen
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	"dbent/gen/ent"
 	entBenchEval "dbent/gen/ent/bencheval"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -78,6 +78,24 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchEval.CategoryEQ(entBenchEval.Category(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchEval.CategoryNEQ(entBenchEval.Category(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchEval.Category, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchEval.Category(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchEval.CategoryIn(vals...))
+							} else {
+								q = q.Where(entBenchEval.CategoryNotIn(vals...))
+							}
+						}
 					}
 				case "prompt":
 					switch f.Op {
@@ -94,6 +112,24 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchEval.LinkedKindEQ(entBenchEval.LinkedKind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchEval.LinkedKindNEQ(entBenchEval.LinkedKind(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchEval.LinkedKind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchEval.LinkedKind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchEval.LinkedKindIn(vals...))
+							} else {
+								q = q.Where(entBenchEval.LinkedKindNotIn(vals...))
+							}
+						}
 					}
 				case "linked_id":
 					switch f.Op {
@@ -127,6 +163,24 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 						q = q.Where(entBenchEval.GraderKindEQ(entBenchEval.GraderKind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entBenchEval.GraderKindNEQ(entBenchEval.GraderKind(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entBenchEval.GraderKind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entBenchEval.GraderKind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entBenchEval.GraderKindIn(vals...))
+							} else {
+								q = q.Where(entBenchEval.GraderKindNotIn(vals...))
+							}
+						}
 					}
 				case "notes":
 					switch f.Op {
@@ -247,14 +301,6 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entBenchEval.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entBenchEval.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -263,8 +309,11 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.BenchEval) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.BenchEval) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.BenchEval
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.BenchEval) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.BenchEval]{
 			{
@@ -341,6 +390,14 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"rule-trigger",
+					"hotfix-avoid",
+					"decision-respect",
+					"convention",
+					"capture-back",
+					"custom",
+				},
 				Get: func(r *ent.BenchEval) string {
 					return string(r.Category)
 				},
@@ -365,6 +422,14 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"rule",
+					"hotfix",
+					"decision",
+					"memory",
+					"pattern",
+					"none",
+				},
 				Get: func(r *ent.BenchEval) string {
 					return string(r.LinkedKind)
 				},
@@ -407,6 +472,12 @@ func registerBenchEval(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"programmatic",
+					"llm-judge",
+					"golden-diff",
+					"composite",
+				},
 				Get: func(r *ent.BenchEval) string {
 					return string(r.GraderKind)
 				},

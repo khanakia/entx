@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entTastePref "dbent/gen/ent/tastepref"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -70,15 +69,6 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entTastePref.ProjectIDContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entTastePref.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entTastePref.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entTastePref.BodyContainsFold(f.Value))
-					}
 				case "scope":
 					switch f.Op {
 					case runtime.OpEq:
@@ -136,12 +126,6 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entTastePref.FieldProjectID))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entTastePref.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entTastePref.FieldBody))
-						}
 					case "scope":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entTastePref.FieldScope))
@@ -156,14 +140,6 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entTastePref.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entTastePref.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -172,11 +148,11 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Body: func(r *ent.TastePref) string {
-			return r.Body
-		},
-		CreatedAt: func(r *ent.TastePref) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.TastePref) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.TastePref
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.TastePref) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.TastePref]{
 			{
@@ -231,6 +207,18 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 				Align:      "",
 				Get: func(r *ent.TastePref) string {
 					return r.ProjectID
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.TastePref) string {
+					return r.Body
 				},
 			},
 			{

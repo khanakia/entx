@@ -66,31 +66,44 @@ type Options struct {
 type EntityMeta struct {
 	Package          string
 	EntPkgPath       string
-	Name             string // Task
-	Kind             string // task (snake_case kind id)
-	Display          string // Tasks
+	Name             string // ent type name, e.g. "Post"
+	Kind             string // url-safe lower-case kind id, e.g. "post"
+	Display          string // pretty plural for the picker, e.g. "Posts"
 	Group            string
 	Icon             string
-	PredPkg          string // task (lowercase, package-name for predicates)
-	PredAlias        string // entTask (import alias)
+	PredPkg          string // predicate package name on disk, e.g. "post"
+	PredAlias        string // import alias used in generated file, e.g. "entPost"
 	// ScopeFields are the subset of Options.ScopeFields this entity
 	// actually has on its schema. Template emits one predicate per entry.
 	ScopeFields      []ScopeFieldMeta
-	HasCreated       bool
-	HasUpdated       bool
 	FilterPredicates []string // legacy substring predicates for ListOpts.Filter
-	TitleField       *FieldMeta
-	BodyField        *FieldMeta
-	StatusField      *FieldMeta
 	Columns          []FieldMeta
 	Edges            []EdgeMeta
 	NeedsFmt         bool
+	NeedsStrings     bool // true when any enum FilterableField → strings.Split for In/NotIn
+	NeedsSQL         bool // true when any sortable related column → ent dialect/sql import
+
+	// WithLoaders is the list of edge Go names this entity eager-loads
+	// during Fetch so related-table columns can render without N+1
+	// queries. Populated for every unique edge whose target type has a
+	// detectable title field (name / title / display_name / …).
+	WithLoaders []string
+
+	// RelatedImports holds the additional ent predicate-package imports
+	// needed by related-column filter dispatch. One entry per unique
+	// target type referenced by any RelatedColumn. Deduped + sorted.
+	RelatedImports []ImportSpec
 
 	// Phase C — schema annotation results.
 	MultiSort      bool   // enttui.MultiSort() — default true
 	DefaultView    string // enttui.DefaultView("list" | "table"); default ""
 	PageSize       int    // enttui.PageSize(N); 0 → spec default (200)
 	ShowEdgeCounts bool   // enttui.CountEdges() — enables count fetch in preview
+
+	// Form support — driven by enttui.Editable() per-field +
+	// AllowDelete() at the entity level.
+	EditableFields []FieldMeta
+	AllowDelete    bool
 
 	// Phase C/D — fields the user marked Sortable() (in declaration order).
 	SortableFields []FieldMeta
@@ -115,14 +128,44 @@ type FieldMeta struct {
 	Sortable    bool
 	Filterable  bool
 	Hidden      bool
+	Editable    bool // user-editable in the form modal (enttui.Editable())
+	Required    bool // schema-side NotEmpty / non-nillable — surfaced to form
 	Width       int
 	Align       string
 	ChipEntries []ChipEntry // sorted by key for deterministic output
 
 	// EnumGoType is non-empty for enum fields and holds the generated Go
-	// type name (e.g. "task.Status"). Used by the filter dispatch to cast
+	// type name (e.g. "post.Status"). Used by the filter dispatch to cast
 	// the FilterCondition.Value string into the typed enum.
 	EnumGoType string
+
+	// EnumGoTypeCast is the aliased reference used by the generated
+	// form setters — e.g. `entPost.Status`. Pre-computed at extract
+	// time so the setterExpr sub-template doesn't need EntityMeta in
+	// scope.
+	EnumGoTypeCast string
+
+	// EnumValues holds the declared values for enum fields. Emitted into
+	// the runtime Column literal so the condition builder can show a
+	// value picker.
+	EnumValues []string
+
+	// Related fields render a column drawn from an eager-loaded edge
+	// target instead of the row itself. EdgeGoName + TargetTitleField
+	// drive the template's `r.Edges.<EdgeGoName>.<TargetTitleField>`
+	// access. Kind stays "related" so valueExpr knows to nil-check the
+	// edge pointer.
+	EdgeGoName       string // e.g. "Author"
+	TargetTitleField string // Go struct field on the target type, e.g. "Name"
+	TargetTitleKind  string // kind of the target field — drives ptr-safety
+
+	// Related-column filter-dispatch metadata. When set, the filter
+	// template emits a case that wraps the target predicate in
+	// pred.Has<Edge>With(...) so SQL stays valid:
+	//
+	//   q.Where(entPost.HasAuthorWith(entAuthor.NameContainsFold(v)))
+	HasEdgeMethod   string // "HasAuthorWith"
+	TargetPredAlias string // "entAuthor" — the import alias on the host file
 }
 
 // ChipEntry is one (value, tone) pair from an enttui.Chip annotation.
@@ -130,6 +173,14 @@ type FieldMeta struct {
 type ChipEntry struct {
 	Value string
 	Tone  string
+}
+
+// ImportSpec is one aliased Go import emitted into the generated file —
+// used for related-column filter dispatch which needs the target type's
+// predicate package (e.g. `entAuthor "myproject/ent/author"`).
+type ImportSpec struct {
+	Alias string
+	Path  string
 }
 
 // ScopeFieldMeta describes one (snake_case, GoName) pair for a scope
@@ -143,12 +194,12 @@ type ScopeFieldMeta struct {
 
 // EdgeMeta describes one ent edge for template emission.
 type EdgeMeta struct {
-	Name       string // tasklist (snake_case)
-	GoName     string // Tasklist (used by client.X.QueryTasklist)
-	Display    string // → TaskList  or  Tasks
+	Name       string // edge name on the host, snake_case (e.g. "author")
+	GoName     string // CamelCase Go method name (e.g. "Author" → client.Post.QueryAuthor)
+	Display    string // "→ Authors" (upward) or "Comments" (drill)
 	Kind       string // "EdgeUpward" or "EdgeDrill"
-	Trigger    string // single-char key (or "enter")
-	TargetKind string // tasklist
+	Trigger    string // single-char key
+	TargetKind string // target entity kind, lower-case (e.g. "author")
 }
 
 // RegisterAllData is passed to the register_all template.
@@ -261,6 +312,9 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	if hasAnnot(n.Annotations, "EntTUI.CountEdges") {
 		em.ShowEdgeCounts = true
 	}
+	if hasAnnot(n.Annotations, "EntTUI.AllowDelete") {
+		em.AllowDelete = true
+	}
 
 	// Iterate ID field separately — gen.Type stores it on .ID, not in .Fields.
 	allFields := []*gen.Field{}
@@ -275,6 +329,15 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		fm.Sortable = hasAnnot(f.Annotations, "EntTUI.Sortable")
 		fm.Filterable = hasAnnot(f.Annotations, "EntTUI.Filterable")
 		fm.Hidden = hasAnnot(f.Annotations, "EntTUI.Hidden")
+		fm.Editable = hasAnnot(f.Annotations, "EntTUI.Editable")
+		// "Required" mirrors the schema's notion of must-be-set. ent
+		// exposes this via field.Optional + field.Nillable; a field is
+		// required when it's neither.
+		fm.Required = !f.Optional && !f.Nillable && f.Name != "id"
+		// Enum cast used by the generated form setter. e.g. "entPost.Status".
+		if f.IsEnum() {
+			fm.EnumGoTypeCast = em.PredAlias + "." + fm.GoName
+		}
 		if w, ok := annotInt(f.Annotations, "EntTUI.Width", "Value"); ok {
 			fm.Width = w
 		}
@@ -285,21 +348,6 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			for _, kv := range entries {
 				fm.ChipEntries = append(fm.ChipEntries, ChipEntry{Value: kv.K, Tone: kv.V})
 			}
-		}
-
-		// AsTitle / AsBody / AsStatus annotations override the
-		// convention-based hero-field detection below.
-		if hasAnnot(f.Annotations, "EntTUI.AsTitle") {
-			m := fm
-			em.TitleField = &m
-		}
-		if hasAnnot(f.Annotations, "EntTUI.AsBody") {
-			m := fm
-			em.BodyField = &m
-		}
-		if hasAnnot(f.Annotations, "EntTUI.AsStatus") {
-			m := fm
-			em.StatusField = &m
 		}
 
 		// Generic scope match: if this field name is in opts.ScopeFields,
@@ -316,32 +364,17 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			}
 		}
 
-		switch f.Name {
-		case "id":
-			// id is always rendered via the columns block too.
-		case "created_at":
-			em.HasCreated = true
-			if !fm.Sortable {
-				// created_at is sortable by convention even without annotation.
-				fm.Sortable = true
-			}
-		case "updated_at":
-			em.HasUpdated = true
-		case "title", "name":
-			if em.TitleField == nil {
-				m := fm
-				em.TitleField = &m
-			}
-		case "body", "description", "content":
-			if em.BodyField == nil {
-				m := fm
-				em.BodyField = &m
-			}
-		case "status", "severity", "kind", "state":
-			if em.StatusField == nil && f.IsEnum() {
-				m := fm
-				em.StatusField = &m
-			}
+		// Time-typed fields are sortable by convention.
+		if f.IsTime() && !fm.Sortable && !fm.Hidden {
+			fm.Sortable = true
+		}
+		// Body-shaped fields (long prose) get hidden from the table by
+		// default — they still live in r.Columns so the preview pane
+		// (and the J clipboard shortcut) can render them as prose. No
+		// hardcoded hero-field concept; just a hint that wide text
+		// makes for bad table cells.
+		if !fm.Hidden && isBodyFieldName(f.Name) {
+			fm.Hidden = true
 		}
 
 		// Convention: every string + enum field is filterable by default
@@ -380,6 +413,9 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		if fm.Filterable {
 			em.FilterableFields = append(em.FilterableFields, fm)
 		}
+		if fm.Editable {
+			em.EditableFields = append(em.EditableFields, fm)
+		}
 	}
 	if n.ID == nil {
 		return em, false
@@ -396,20 +432,132 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 
 	// Edges.
 	used := map[string]bool{}
+	edgeByName := map[string]*gen.Edge{}
 	for _, e := range n.Edges {
 		targetKind, ok := kindByType[e.Type.Name]
 		if !ok {
 			continue
 		}
 		em.Edges = append(em.Edges, edgeMetaOf(e, targetKind, used))
+		edgeByName[e.Name] = e
+	}
+
+	// Related columns — annotation-driven. The user lists which
+	// (edge, field) projections they want; we look up the edge's target
+	// type, validate the field exists, and emit a column. Eager-load
+	// each referenced edge via With<Edge>() so reads are N-batched.
+	importsSeen := map[string]bool{} // dedupe by alias
+	for _, rc := range annotRelatedColumns(n.Annotations) {
+		e, ok := edgeByName[rc.Edge]
+		if !ok {
+			continue // unknown edge — silently skip
+		}
+		var tf *gen.Field
+		if e.Type.ID != nil && e.Type.ID.Name == rc.Field {
+			tf = e.Type.ID
+		} else {
+			for _, f := range e.Type.Fields {
+				if f.Name == rc.Field {
+					tf = f
+					break
+				}
+			}
+		}
+		if tf == nil {
+			continue // unknown field on target — skip
+		}
+		tfm := fieldMetaOf(tf)
+		label := rc.Label
+		if label == "" {
+			label = toLabel(rc.Edge) + " " + tfm.Label
+		}
+
+		// Predicate-package import for the target type (used by the
+		// related-filter dispatch case). One alias per target type.
+		targetAlias := "ent" + e.Type.Name
+		targetPkg := strings.ToLower(e.Type.Name)
+		if !importsSeen[targetAlias] && targetAlias != em.PredAlias {
+			importsSeen[targetAlias] = true
+			em.RelatedImports = append(em.RelatedImports, ImportSpec{
+				Alias: targetAlias,
+				Path:  opts.EntPkgPath + "/" + targetPkg,
+			})
+		}
+
+		em.Columns = append(em.Columns, FieldMeta{
+			Key:              rc.Edge + "_" + tfm.Key,
+			Label:            label,
+			Kind:             "related",
+			Filterable:       true, // related columns ARE filterable via HasEdgeWith
+			Sortable:         true, // related columns ARE sortable via ByEdgeField
+			EdgeGoName:       e.StructField(),
+			TargetTitleField: tfm.GoName,
+			TargetTitleKind:  tfm.Kind,
+			HasEdgeMethod:    "Has" + e.StructField() + "With",
+			TargetPredAlias:  targetAlias,
+			// Reuse GoName for the predicate method on the target type
+			// (e.g. "Title" → entTasklist.TitleEQ / TitleContainsFold).
+			GoName: tfm.GoName,
+		})
+		em.NeedsSQL = true
+		// Avoid duplicate WithX() calls if the user picks multiple
+		// fields off the same edge.
+		alreadyLoaded := false
+		for _, w := range em.WithLoaders {
+			if w == e.StructField() {
+				alreadyLoaded = true
+				break
+			}
+		}
+		if !alreadyLoaded {
+			em.WithLoaders = append(em.WithLoaders, e.StructField())
+		}
+	}
+
+	// Sort imports for deterministic output.
+	sort.SliceStable(em.RelatedImports, func(i, j int) bool {
+		return em.RelatedImports[i].Alias < em.RelatedImports[j].Alias
+	})
+
+	// Re-derive Sortable/Filterable lists now that related columns have
+	// been appended (the earlier per-field loop missed them since they
+	// weren't in em.Columns yet at that point).
+	for _, c := range em.Columns {
+		if c.Kind != "related" {
+			continue
+		}
+		if c.Filterable {
+			em.FilterableFields = append(em.FilterableFields, c)
+		}
+		if c.Sortable {
+			em.SortableFields = append(em.SortableFields, c)
+		}
 	}
 
 	// Decide whether the generated file needs to import "fmt".
-	em.NeedsFmt = fieldNeedsFmt(em.TitleField) ||
-		fieldNeedsFmt(em.BodyField) ||
-		columnsNeedFmt(em.Columns)
+	em.NeedsFmt = columnsNeedFmt(em.Columns)
+
+	// "strings" is needed when any filterable field is an enum — the
+	// OpIn / OpNotIn dispatch splits a "|"-joined value.
+	for _, f := range em.FilterableFields {
+		if f.Kind == "enum" || f.Kind == "enumPtr" {
+			em.NeedsStrings = true
+			break
+		}
+	}
 
 	return em, true
+}
+
+// isBodyFieldName recognizes the conventional "long prose" field names
+// — these still become columns, but are Hidden in the table by default
+// so they don't blow out row heights. Mirrors runtime's isBodyColumnKey.
+func isBodyFieldName(n string) bool {
+	switch n {
+	case "body", "description", "content":
+		return true
+	}
+	return false
 }
 
 func fieldNeedsFmt(f *FieldMeta) bool {
@@ -429,12 +577,19 @@ func columnsNeedFmt(cols []FieldMeta) bool {
 }
 
 func fieldMetaOf(f *gen.Field) FieldMeta {
-	return FieldMeta{
+	fm := FieldMeta{
 		GoName: f.StructField(),
 		Key:    f.Name,
 		Label:  toLabel(f.Name),
 		Kind:   fieldKind(f),
 	}
+	if f.IsEnum() {
+		// gen.Field.EnumValues() returns the declared values in
+		// schema order — fed verbatim into the runtime so the
+		// condition builder's value picker mirrors the schema.
+		fm.EnumValues = append([]string(nil), f.EnumValues()...)
+	}
+	return fm
 }
 
 // fieldKind reduces a gen.Field to a string bucket the template switches
@@ -468,12 +623,10 @@ func fieldKind(f *gen.Field) string {
 }
 
 func shouldRenderAsColumn(f *gen.Field) bool {
-	// Render basically every scalar in declaration order, except the body
-	// (handled separately) and any JSON/byte slabs.
-	switch f.Name {
-	case "body", "description", "content":
-		return false
-	}
+	// Every scalar field becomes a column. Body-shaped fields stay
+	// columns too — they're just marked Hidden so the table view skips
+	// them by default while the preview pane still has access to the
+	// value via r.Columns. Byte slabs + JSON fields drop out.
 	if f.IsBytes() || f.IsJSON() {
 		return false
 	}

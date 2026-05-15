@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entActor "dbent/gen/ent/actor"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -54,6 +54,24 @@ func registerActor(app *runtime.App, client *ent.Client) {
 						q = q.Where(entActor.KindEQ(entActor.Kind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entActor.KindNEQ(entActor.Kind(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entActor.Kind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entActor.Kind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entActor.KindIn(vals...))
+							} else {
+								q = q.Where(entActor.KindNotIn(vals...))
+							}
+						}
 					}
 				case "display_name":
 					switch f.Op {
@@ -124,14 +142,6 @@ func registerActor(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entActor.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entActor.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -140,11 +150,11 @@ func registerActor(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Status: func(r *ent.Actor) string {
-			return string(r.Kind)
-		},
-		CreatedAt: func(r *ent.Actor) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Actor) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Actor
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Actor) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Actor]{
 			{
@@ -197,6 +207,14 @@ func registerActor(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"human",
+					"agent",
+					"hook",
+					"plugin",
+					"cron",
+					"system",
+				},
 				Get: func(r *ent.Actor) string {
 					return string(r.Kind)
 				},

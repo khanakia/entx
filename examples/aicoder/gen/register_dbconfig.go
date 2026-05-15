@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entDBConfig "dbent/gen/ent/dbconfig"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -115,14 +114,6 @@ func registerDBConfig(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entDBConfig.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entDBConfig.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -131,8 +122,11 @@ func registerDBConfig(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.DBConfig) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.DBConfig) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.DBConfig
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.DBConfig) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.DBConfig]{
 			{

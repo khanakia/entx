@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entMission "dbent/gen/ent/mission"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -80,25 +80,30 @@ func registerMission(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entMission.TitleContainsFold(f.Value))
 					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entMission.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entMission.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entMission.BodyContainsFold(f.Value))
-					case runtime.OpIsNull:
-						q = q.Where(entMission.BodyIsNil())
-					case runtime.OpNotNull:
-						q = q.Where(entMission.BodyNotNil())
-					}
 				case "status":
 					switch f.Op {
 					case runtime.OpEq:
 						q = q.Where(entMission.StatusEQ(entMission.Status(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entMission.StatusNEQ(entMission.Status(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entMission.Status, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entMission.Status(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entMission.StatusIn(vals...))
+							} else {
+								q = q.Where(entMission.StatusNotIn(vals...))
+							}
+						}
 					}
 				case "created_by_actor_id":
 					switch f.Op {
@@ -150,12 +155,6 @@ func registerMission(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entMission.FieldTitle))
 						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entMission.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entMission.FieldBody))
-						}
 					case "status":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entMission.FieldStatus))
@@ -182,14 +181,6 @@ func registerMission(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entMission.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entMission.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -198,20 +189,11 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Mission) string {
-			return r.Title
-		},
-		Body: func(r *ent.Mission) string {
-			if r.Body == nil {
-				return ""
-			}
-			return *r.Body
-		},
-		Status: func(r *ent.Mission) string {
-			return string(r.Status)
-		},
-		CreatedAt: func(r *ent.Mission) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Mission) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Mission
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Mission) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Mission]{
 			{
@@ -281,6 +263,21 @@ func registerMission(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Mission) string {
+					if r.Body == nil {
+						return ""
+					}
+					return *r.Body
+				},
+			},
+			{
 				Key:        "status",
 				Label:      "Status",
 				Sortable:   true,
@@ -288,6 +285,12 @@ func registerMission(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"active",
+					"paused",
+					"done",
+					"cancelled",
+				},
 				Get: func(r *ent.Mission) string {
 					return string(r.Status)
 				},

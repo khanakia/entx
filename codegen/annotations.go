@@ -68,6 +68,36 @@ func annotInt(annots map[string]any, name, key string) (int, bool) {
 	return 0, false
 }
 
+// annotRelatedColumns reads enttui.RelatedColumns — a slice of
+// {Edge, Field, Label} entries. The annotation arrives JSON-decoded:
+//
+//	{"Columns": [{"Edge": "author", "Field": "name", "Label": "Author"}]}
+func annotRelatedColumns(annots map[string]any) []struct{ Edge, Field, Label string } {
+	m, ok := annotMap(annots, "EntTUI.RelatedColumns")
+	if !ok {
+		return nil
+	}
+	raw, ok := m["Columns"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]struct{ Edge, Field, Label string }, 0, len(raw))
+	for _, item := range raw {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		edge, _ := row["Edge"].(string)
+		field, _ := row["Field"].(string)
+		label, _ := row["Label"].(string)
+		if edge == "" || field == "" {
+			continue
+		}
+		out = append(out, struct{ Edge, Field, Label string }{edge, field, label})
+	}
+	return out
+}
+
 // annotStringMap reads a map[string]string field — used by enttui.Chip
 // where the value is a value→tone mapping.
 //

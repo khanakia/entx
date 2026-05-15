@@ -4,10 +4,9 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entPrompt "dbent/gen/ent/prompt"
+	"encoding/json"
 
 	"enttui/runtime"
 )
@@ -81,15 +80,6 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 					case runtime.OpContains:
 						q = q.Where(entPrompt.NameContainsFold(f.Value))
 					}
-				case "description":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entPrompt.DescriptionEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entPrompt.DescriptionNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entPrompt.DescriptionContainsFold(f.Value))
-					}
 				case "args_schema":
 					switch f.Op {
 					case runtime.OpEq:
@@ -102,15 +92,6 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 						q = q.Where(entPrompt.ArgsSchemaIsNil())
 					case runtime.OpNotNull:
 						q = q.Where(entPrompt.ArgsSchemaNotNil())
-					}
-				case "body":
-					switch f.Op {
-					case runtime.OpEq:
-						q = q.Where(entPrompt.BodyEQ(f.Value))
-					case runtime.OpNeq:
-						q = q.Where(entPrompt.BodyNEQ(f.Value))
-					case runtime.OpContains:
-						q = q.Where(entPrompt.BodyContainsFold(f.Value))
 					}
 				case "created_by_actor_id":
 					switch f.Op {
@@ -162,23 +143,11 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 						} else {
 							q = q.Order(ent.Desc(entPrompt.FieldName))
 						}
-					case "description":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entPrompt.FieldDescription))
-						} else {
-							q = q.Order(ent.Desc(entPrompt.FieldDescription))
-						}
 					case "args_schema":
 						if k.Dir == runtime.Asc {
 							q = q.Order(ent.Asc(entPrompt.FieldArgsSchema))
 						} else {
 							q = q.Order(ent.Desc(entPrompt.FieldArgsSchema))
-						}
-					case "body":
-						if k.Dir == runtime.Asc {
-							q = q.Order(ent.Asc(entPrompt.FieldBody))
-						} else {
-							q = q.Order(ent.Desc(entPrompt.FieldBody))
 						}
 					case "archived_at":
 						if k.Dir == runtime.Asc {
@@ -194,14 +163,6 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entPrompt.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entPrompt.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -210,14 +171,11 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		Title: func(r *ent.Prompt) string {
-			return r.Name
-		},
-		Body: func(r *ent.Prompt) string {
-			return r.Description
-		},
-		CreatedAt: func(r *ent.Prompt) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.Prompt) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.Prompt
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.Prompt) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.Prompt]{
 			{
@@ -287,6 +245,18 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
+				Key:        "description",
+				Label:      "Description",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Prompt) string {
+					return r.Description
+				},
+			},
+			{
 				Key:        "args_schema",
 				Label:      "Args Schema",
 				Sortable:   true,
@@ -299,6 +269,18 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 						return ""
 					}
 					return *r.ArgsSchema
+				},
+			},
+			{
+				Key:        "body",
+				Label:      "Body",
+				Sortable:   false,
+				Filterable: false,
+				Hidden:     true,
+				Width:      0,
+				Align:      "",
+				Get: func(r *ent.Prompt) string {
+					return r.Body
 				},
 			},
 			{

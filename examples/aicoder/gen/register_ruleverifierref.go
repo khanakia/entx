@@ -4,10 +4,10 @@ package enttuigen
 
 import (
 	"context"
-	"time"
-
 	"dbent/gen/ent"
 	entRuleVerifierRef "dbent/gen/ent/ruleverifierref"
+	"encoding/json"
+	"strings"
 
 	"enttui/runtime"
 )
@@ -63,6 +63,24 @@ func registerRuleVerifierRef(app *runtime.App, client *ent.Client) {
 						q = q.Where(entRuleVerifierRef.VerifierKindEQ(entRuleVerifierRef.VerifierKind(f.Value)))
 					case runtime.OpNeq:
 						q = q.Where(entRuleVerifierRef.VerifierKindNEQ(entRuleVerifierRef.VerifierKind(f.Value)))
+					case runtime.OpIn, runtime.OpNotIn:
+						// Multi-select: condition value is a "|"-joined
+						// list of enum strings. Empty entries are dropped.
+						parts := strings.Split(f.Value, "|")
+						vals := make([]entRuleVerifierRef.VerifierKind, 0, len(parts))
+						for _, p := range parts {
+							if p == "" {
+								continue
+							}
+							vals = append(vals, entRuleVerifierRef.VerifierKind(p))
+						}
+						if len(vals) > 0 {
+							if f.Op == runtime.OpIn {
+								q = q.Where(entRuleVerifierRef.VerifierKindIn(vals...))
+							} else {
+								q = q.Where(entRuleVerifierRef.VerifierKindNotIn(vals...))
+							}
+						}
 					}
 				case "verifier_ref":
 					switch f.Op {
@@ -137,14 +155,6 @@ func registerRuleVerifierRef(app *runtime.App, client *ent.Client) {
 						}
 					}
 				}
-			} else
-			// Legacy single-column sort (browser view default).
-			{
-				if opts.SortDir == runtime.Asc {
-					q = q.Order(ent.Asc(entRuleVerifierRef.FieldCreatedAt))
-				} else {
-					q = q.Order(ent.Desc(entRuleVerifierRef.FieldCreatedAt))
-				}
 			}
 			total, err := q.Clone().Count(ctx)
 			if err != nil {
@@ -153,8 +163,11 @@ func registerRuleVerifierRef(app *runtime.App, client *ent.Client) {
 			rows, err := q.Offset(opts.Offset).Limit(opts.Limit).All(ctx)
 			return rows, total, err
 		},
-		CreatedAt: func(r *ent.RuleVerifierRef) time.Time { return r.CreatedAt },
-		UpdatedAt: func(r *ent.RuleVerifierRef) time.Time { return r.UpdatedAt },
+
+		// Ent-native JSON for the `J` clipboard shortcut. *ent.RuleVerifierRef
+		// implements MarshalJSON so eager-loaded edges (from With*())
+		// land in the output under `edges` automatically.
+		JSON: func(r *ent.RuleVerifierRef) ([]byte, error) { return json.Marshal(r) },
 
 		Columns: []runtime.Column[*ent.RuleVerifierRef]{
 			{
@@ -219,6 +232,12 @@ func registerRuleVerifierRef(app *runtime.App, client *ent.Client) {
 				Hidden:     false,
 				Width:      0,
 				Align:      "",
+				EnumValues: []string{
+					"regex",
+					"shell",
+					"go-fn",
+					"custom",
+				},
 				Get: func(r *ent.RuleVerifierRef) string {
 					return string(r.VerifierKind)
 				},

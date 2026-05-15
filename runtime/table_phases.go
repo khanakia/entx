@@ -13,6 +13,10 @@ package runtime
 // rows, AND-compose, apply.
 //
 // Phase G: column show/hide modal — checkbox list, toggle, apply.
+//
+// All modals operate against a `modalHost` (see definition below) so they
+// can be invoked from either the table view OR the browser view — "a view
+// is just a different layout, the filter/sort UI should work everywhere".
 
 import (
 	"fmt"
@@ -22,6 +26,23 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+// modalHost is the small surface every modal needs from the view that
+// hosts it. Both *tableView and *browser construct one (see their host()
+// methods) and pass it into the free functions below. Pointer fields
+// give the modals mutable access to the host's filter / sort / overrides
+// state; the function fields are callbacks back into the view.
+type modalHost struct {
+	app                *App
+	specColumns        []anyColumn          // every column on the spec (for the show/hide modal)
+	filterableColumns  []anyColumn          // subset Filterable()
+	filtersPtr         *[]FilterCondition   // condition builder state
+	sortStackPtr       *[]SortKey           // multi-sort stack
+	overridesPtr       *map[string]bool     // column visibility overrides
+	refresh            func()               // re-fetch and re-render
+	resetPage          func()               // jump back to page 0 (called on filter apply)
+	updateStatus       func(msg string)     // surface inline status messages
+}
 
 // --- Phase D: multi-column sort ---
 
@@ -70,9 +91,11 @@ func (t *tableView) cycleSortOnFocused() {
 //
 // Rebuild is local — never re-opens the modal recursively (the previous
 // version stacked nested copies of itself on every keystroke).
-func (t *tableView) openSortModal() {
-	if len(t.sortStack) == 0 {
-		t.updateStatus("sort stack empty — press s on a column first")
+func (t *tableView) openSortModal() { openSortModal(t.host()) }
+
+func openSortModal(h *modalHost) {
+	if len(*h.sortStackPtr) == 0 {
+		h.updateStatus("sort stack empty — press s on a column first")
 		return
 	}
 
@@ -86,7 +109,7 @@ func (t *tableView) openSortModal() {
 		// Preserve selection across rebuilds so move-up/down feels stable.
 		cur := list.GetCurrentItem()
 		list.Clear()
-		for i, k := range t.sortStack {
+		for i, k := range *h.sortStackPtr {
 			dir := "↑"
 			if k.Dir == Desc {
 				dir = "↓"
@@ -104,49 +127,46 @@ func (t *tableView) openSortModal() {
 	}
 	rebuild()
 
-	// Enter on a row flips direction in place.
 	list.SetSelectedFunc(func(idx int, _, _ string, _ rune) {
-		if idx < 0 || idx >= len(t.sortStack) {
+		stack := *h.sortStackPtr
+		if idx < 0 || idx >= len(stack) {
 			return
 		}
-		if t.sortStack[idx].Dir == Asc {
-			t.sortStack[idx].Dir = Desc
+		if stack[idx].Dir == Asc {
+			stack[idx].Dir = Desc
 		} else {
-			t.sortStack[idx].Dir = Asc
+			stack[idx].Dir = Asc
 		}
 		rebuild()
-		t.refresh()
+		h.refresh()
 	})
 
-	// moveUp / moveDown encapsulate the reorder logic — bound to several
-	// keys below so users with terminals that mishandle capital letters
-	// or shift+arrow still have a working binding.
 	moveUp := func() {
+		stack := *h.sortStackPtr
 		idx := list.GetCurrentItem()
-		if idx > 0 && idx < len(t.sortStack) {
-			t.sortStack[idx], t.sortStack[idx-1] = t.sortStack[idx-1], t.sortStack[idx]
+		if idx > 0 && idx < len(stack) {
+			stack[idx], stack[idx-1] = stack[idx-1], stack[idx]
 			list.SetCurrentItem(idx - 1)
 			rebuild()
-			t.refresh()
+			h.refresh()
 		}
 	}
 	moveDown := func() {
+		stack := *h.sortStackPtr
 		idx := list.GetCurrentItem()
-		if idx >= 0 && idx < len(t.sortStack)-1 {
-			t.sortStack[idx], t.sortStack[idx+1] = t.sortStack[idx+1], t.sortStack[idx]
+		if idx >= 0 && idx < len(stack)-1 {
+			stack[idx], stack[idx+1] = stack[idx+1], stack[idx]
 			list.SetCurrentItem(idx + 1)
 			rebuild()
-			t.refresh()
+			h.refresh()
 		}
 	}
 
 	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		idx := list.GetCurrentItem()
-		// Reorder bindings: ctrl+↑/↓ (primary, universal), shift+↑/↓
-		// (some terminals), and K/J as vim-style fallback.
 		switch ev.Key() {
 		case tcell.KeyEscape:
-			t.app.pages.RemovePage("sort-modal")
+			h.app.pages.RemovePage("sort-modal")
 			return nil
 		case tcell.KeyCtrlK:
 			moveUp()
@@ -155,7 +175,6 @@ func (t *tableView) openSortModal() {
 			moveDown()
 			return nil
 		}
-		// Shift / Ctrl + arrow detection.
 		if ev.Key() == tcell.KeyUp && (ev.Modifiers()&(tcell.ModCtrl|tcell.ModShift)) != 0 {
 			moveUp()
 			return nil
@@ -172,21 +191,22 @@ func (t *tableView) openSortModal() {
 			moveDown()
 			return nil
 		case 'd':
-			if idx >= 0 && idx < len(t.sortStack) {
-				t.sortStack = append(t.sortStack[:idx], t.sortStack[idx+1:]...)
-				if len(t.sortStack) == 0 {
-					t.app.pages.RemovePage("sort-modal")
-					t.refresh()
+			stack := *h.sortStackPtr
+			if idx >= 0 && idx < len(stack) {
+				*h.sortStackPtr = append(stack[:idx], stack[idx+1:]...)
+				if len(*h.sortStackPtr) == 0 {
+					h.app.pages.RemovePage("sort-modal")
+					h.refresh()
 					return nil
 				}
 				rebuild()
-				t.refresh()
+				h.refresh()
 			}
 			return nil
 		case 'c':
-			t.sortStack = nil
-			t.app.pages.RemovePage("sort-modal")
-			t.refresh()
+			*h.sortStackPtr = nil
+			h.app.pages.RemovePage("sort-modal")
+			h.refresh()
 			return nil
 		}
 		return ev
@@ -202,8 +222,8 @@ func (t *tableView) openSortModal() {
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
 
-	t.app.pages.AddPage("sort-modal", centerModal(body, 60, 20), true, true)
-	t.app.tv.SetFocus(list)
+	h.app.pages.AddPage("sort-modal", centerModal(body, 60, 20), true, true)
+	h.app.tv.SetFocus(list)
 }
 
 // --- Phase F: condition builder ---
@@ -212,15 +232,17 @@ func (t *tableView) openSortModal() {
 // Layout: scrollable list of conditions on top + explicit Add / Apply /
 // Cancel buttons below in a Form. Tab cycles between the list and the
 // buttons; ctrl+s = Apply from anywhere (escape hatch).
-func (t *tableView) openConditionBuilder() {
-	cols := t.filterableColumns()
+func (t *tableView) openConditionBuilder() { openConditionBuilder(t.host()) }
+
+func openConditionBuilder(h *modalHost) {
+	cols := h.filterableColumns
 	if len(cols) == 0 {
-		t.updateStatus("no filterable columns")
+		h.updateStatus("no filterable columns")
 		return
 	}
 
 	// Working copy so cancel reverts.
-	work := append([]FilterCondition(nil), t.colFilters...)
+	work := append([]FilterCondition(nil), (*h.filtersPtr)...)
 
 	// Conditions list (display + delete).
 	list := tview.NewList().
@@ -230,13 +252,13 @@ func (t *tableView) openConditionBuilder() {
 		SetSelectedTextColor(tcell.ColorBlack)
 
 	apply := func() {
-		t.colFilters = work
-		t.page = 0
-		t.app.pages.RemovePage("condition-builder")
-		t.refresh()
+		*h.filtersPtr = work
+		h.resetPage()
+		h.app.pages.RemovePage("condition-builder")
+		h.refresh()
 	}
 	cancel := func() {
-		t.app.pages.RemovePage("condition-builder")
+		h.app.pages.RemovePage("condition-builder")
 	}
 
 	var rebuild func()
@@ -257,7 +279,7 @@ func (t *tableView) openConditionBuilder() {
 		if idx < 0 || idx >= len(work) {
 			return
 		}
-		t.openEditConditionRow(cols, &work, list, rebuild, idx)
+		openColumnPicker(h, cols, &work, list, rebuild, idx)
 	})
 
 	// d = delete current condition, e = explicit edit (same as enter).
@@ -272,7 +294,7 @@ func (t *tableView) openConditionBuilder() {
 			return nil
 		case 'e':
 			if idx < len(work) {
-				t.openEditConditionRow(cols, &work, list, rebuild, idx)
+				openColumnPicker(h, cols, &work, list, rebuild, idx)
 			}
 			return nil
 		}
@@ -284,7 +306,7 @@ func (t *tableView) openConditionBuilder() {
 	// faked badly (apply/cancel were just text rows).
 	form := tview.NewForm().
 		AddButton("+ Add condition", func() {
-			t.openAddConditionRow(cols, &work, list, rebuild)
+			openColumnPicker(h, cols, &work, list, rebuild, -1)
 		}).
 		AddButton("Apply", apply).
 		AddButton("Cancel", cancel)
@@ -306,23 +328,22 @@ func (t *tableView) openConditionBuilder() {
 
 	// Page-wide hotkeys: ctrl+s = apply; esc = cancel; tab between regions.
 	page := centerModal(body, 80, 24)
-	t.app.pages.AddPage("condition-builder", page, true, true)
-	t.app.tv.SetFocus(list)
+	h.app.pages.AddPage("condition-builder", page, true, true)
+	h.app.tv.SetFocus(list)
 
 	// Bind page-level hotkeys via the body flex's InputCapture so they
 	// fire regardless of whether focus is on the list or the form buttons.
-	addFn := func() { t.openAddConditionRow(cols, &work, list, rebuild) }
+	addFn := func() { openColumnPicker(h, cols, &work, list, rebuild, -1) }
 	body.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
 		case tcell.KeyEscape:
 			cancel()
 			return nil
 		case tcell.KeyTab:
-			// Tab cycles list ↔ form buttons.
-			if t.app.tv.GetFocus() == list {
-				t.app.tv.SetFocus(form)
+			if h.app.tv.GetFocus() == list {
+				h.app.tv.SetFocus(form)
 			} else {
-				t.app.tv.SetFocus(list)
+				h.app.tv.SetFocus(list)
 			}
 			return nil
 		}
@@ -352,20 +373,9 @@ func (t *tableView) openConditionBuilder() {
 //
 // editIdx >= 0 puts the picker in EDIT mode: instead of appending the
 // new condition to `work`, the result REPLACES `(*work)[editIdx]`.
-func (t *tableView) openAddConditionRow(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func()) {
-	t.openColumnPicker(cols, work, parent, rebuild, -1)
-}
-
-// openEditConditionRow opens the picker chain pre-filled with the
-// current condition at `idx` so the user can change column / operator /
-// value. Submitting REPLACES instead of appending.
-func (t *tableView) openEditConditionRow(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), idx int) {
-	t.openColumnPicker(cols, work, parent, rebuild, idx)
-}
-
 // openColumnPicker is the shared implementation used by both add + edit
 // flows. editIdx >= 0 means edit mode.
-func (t *tableView) openColumnPicker(cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
+func openColumnPicker(h *modalHost, cols []anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
 	// fzf-style: input at top, filtered list below.
 	input := tview.NewInputField().
 		SetLabel("filter › ").
@@ -457,10 +467,10 @@ func (t *tableView) openColumnPicker(cols []anyColumn, work *[]FilterCondition, 
 			return
 		}
 		col := shown[idx]
-		t.app.pages.RemovePage("cb-col")
-		t.openPickOperator(col, work, parent, rebuild, editIdx)
+		h.app.pages.RemovePage("cb-col")
+		openPickOperator(h, col, work, parent, rebuild, editIdx)
 	}
-	cancel := func() { t.app.pages.RemovePage("cb-col") }
+	cancel := func() { h.app.pages.RemovePage("cb-col") }
 
 	input.SetDoneFunc(func(key tcell.Key) {
 		switch key {
@@ -495,17 +505,26 @@ func (t *tableView) openColumnPicker(cols []anyColumn, work *[]FilterCondition, 
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
 
-	t.app.pages.AddPage("cb-col", centerModal(body, 50, 22), true, true)
-	t.app.tv.SetFocus(input)
+	h.app.pages.AddPage("cb-col", centerModal(body, 50, 22), true, true)
+	h.app.tv.SetFocus(input)
 }
 
 // openPickOperator is step 2 — operator menu typed to the column kind.
 // editIdx >= 0 means we're replacing (*work)[editIdx] on submit instead
 // of appending. v1: a fixed operator list.
-func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
-	t.app.pages.RemovePage("cb-col")
+func openPickOperator(h *modalHost, col anyColumn, work *[]FilterCondition, parent *tview.List, rebuild func(), editIdx int) {
+	h.app.pages.RemovePage("cb-col")
 
-	ops := []FilterOp{OpEq, OpNeq, OpContains, OpLt, OpLte, OpGt, OpGte, OpIn, OpNotIn, OpIsNull, OpNotNull}
+	// Operator menu is typed to the column: enum columns drop the
+	// substring `contains` (meaningless for enums) and surface `in /
+	// not_in` as the primary multi-select ops; string columns keep the
+	// full list.
+	var ops []FilterOp
+	if len(col.enumValues) > 0 {
+		ops = []FilterOp{OpEq, OpNeq, OpIn, OpNotIn, OpIsNull, OpNotNull}
+	} else {
+		ops = []FilterOp{OpEq, OpNeq, OpContains, OpLt, OpLte, OpGt, OpGte, OpIn, OpNotIn, OpIsNull, OpNotNull}
+	}
 	opSel := tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
@@ -541,11 +560,11 @@ func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, par
 			} else {
 				*work = append(*work, newCond)
 			}
-			t.app.pages.RemovePage("cb-op")
+			h.app.pages.RemovePage("cb-op")
 			rebuild()
 			return
 		}
-		t.openEnterValue(col, op, work, rebuild, editIdx)
+		openEnterValue(h, col, op, work, rebuild, editIdx)
 	})
 
 	body := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -561,11 +580,11 @@ func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, par
 		SetTitle(title).
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
-	t.app.pages.AddPage("cb-op", centerModal(body, 30, 18), true, true)
-	t.app.tv.SetFocus(opSel)
+	h.app.pages.AddPage("cb-op", centerModal(body, 30, 18), true, true)
+	h.app.tv.SetFocus(opSel)
 	opSel.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyEscape {
-			t.app.pages.RemovePage("cb-op")
+			h.app.pages.RemovePage("cb-op")
 			return nil
 		}
 		return ev
@@ -575,8 +594,21 @@ func (t *tableView) openPickOperator(col anyColumn, work *[]FilterCondition, par
 
 // openEnterValue is step 3 — text input for the value. On enter, append
 // (or replace if editIdx >= 0) and dismiss the chain of modals.
-func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func(), editIdx int) {
-	t.app.pages.RemovePage("cb-op")
+//
+// Enum branch: when the column has declared EnumValues the runtime
+// shows a value picker instead of a free-text input. For `=` / `!=`,
+// it's a single-select list (enter commits). For `in` / `not_in`, it's
+// a multi-select list (space toggles, `s` applies). The selected values
+// are encoded into FilterCondition.Value as a `|`-joined string — the
+// generated dispatch splits on `|` and feeds the typed `<Field>In(...)`
+// predicate.
+func openEnterValue(h *modalHost, col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func(), editIdx int) {
+	h.app.pages.RemovePage("cb-op")
+
+	if len(col.enumValues) > 0 {
+		openEnumValuePicker(h, col, op, work, rebuild, editIdx)
+		return
+	}
 
 	input := tview.NewInputField().
 		SetLabel(col.label + " " + string(op) + " ").
@@ -598,10 +630,10 @@ func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCon
 			} else {
 				*work = append(*work, newCond)
 			}
-			t.app.pages.RemovePage("cb-val")
+			h.app.pages.RemovePage("cb-val")
 			rebuild()
 		case tcell.KeyEscape:
-			t.app.pages.RemovePage("cb-val")
+			h.app.pages.RemovePage("cb-val")
 		}
 	})
 
@@ -618,21 +650,159 @@ func (t *tableView) openEnterValue(col anyColumn, op FilterOp, work *[]FilterCon
 		SetTitle(title).
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
-	t.app.pages.AddPage("cb-val", centerModal(body, 50, 6), true, true)
-	t.app.tv.SetFocus(input)
+	h.app.pages.AddPage("cb-val", centerModal(body, 50, 6), true, true)
+	h.app.tv.SetFocus(input)
+}
+
+// openEnumValuePicker is step 3 for enum columns — a picker of the
+// declared values. Single-select for OpEq/OpNeq, multi-select for
+// OpIn/OpNotIn. Encodes selection back into FilterCondition.Value as a
+// "|"-joined string the generated dispatch knows how to split.
+func openEnumValuePicker(h *modalHost, col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func(), editIdx int) {
+	multi := op == OpIn || op == OpNotIn
+
+	// Pre-select from the existing value when editing.
+	selected := make(map[string]bool, len(col.enumValues))
+	if editIdx >= 0 && editIdx < len(*work) {
+		for _, v := range strings.Split((*work)[editIdx].Value, "|") {
+			if v != "" {
+				selected[v] = true
+			}
+		}
+	}
+
+	list := tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDodgerBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
+
+	var rebuildList func()
+	rebuildList = func() {
+		cur := list.GetCurrentItem()
+		list.Clear()
+		for _, v := range col.enumValues {
+			label := v
+			if multi {
+				mark := "[red]✗[-]"
+				if selected[v] {
+					mark = "[green]✓[-]"
+				}
+				label = mark + " " + v
+			}
+			vv := v
+			list.AddItem(label, "", 0, func() {
+				if multi {
+					selected[vv] = !selected[vv]
+					i := list.GetCurrentItem()
+					rebuildList()
+					list.SetCurrentItem(i)
+				} else {
+					// Single-select: commit immediately.
+					commitEnumPicker(h, col, op, work, rebuild, editIdx, []string{vv})
+				}
+			})
+		}
+		if cur < 0 {
+			cur = 0
+		}
+		if cur >= list.GetItemCount() {
+			cur = list.GetItemCount() - 1
+		}
+		list.SetCurrentItem(cur)
+	}
+	rebuildList()
+
+	apply := func() {
+		vals := make([]string, 0, len(col.enumValues))
+		for _, v := range col.enumValues {
+			if selected[v] {
+				vals = append(vals, v)
+			}
+		}
+		commitEnumPicker(h, col, op, work, rebuild, editIdx, vals)
+	}
+
+	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		switch ev.Key() {
+		case tcell.KeyEscape:
+			h.app.pages.RemovePage("cb-val")
+			return nil
+		case tcell.KeyCtrlS:
+			if multi {
+				apply()
+			}
+			return nil
+		}
+		if multi {
+			switch ev.Rune() {
+			case 's':
+				apply()
+				return nil
+			case ' ':
+				i := list.GetCurrentItem()
+				if i >= 0 && i < len(col.enumValues) {
+					v := col.enumValues[i]
+					selected[v] = !selected[v]
+					rebuildList()
+					list.SetCurrentItem(i)
+				}
+				return nil
+			}
+		}
+		return ev
+	})
+
+	hint := " enter pick · esc cancel "
+	if multi {
+		hint = " space toggle · s apply · esc cancel "
+	}
+	body := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(list, 0, 1, true).
+		AddItem(tview.NewTextView().
+			SetText(hint).
+			SetTextColor(tcell.ColorGray), 1, 0, false)
+	title := " 3/3 value (" + col.label + " " + string(op) + ") "
+	if editIdx >= 0 {
+		title = " edit — value (" + col.label + " " + string(op) + ") "
+	}
+	body.SetBorder(true).
+		SetTitle(title).
+		SetTitleColor(tcell.ColorYellow).
+		SetBorderColor(tcell.ColorDodgerBlue)
+	h.app.pages.AddPage("cb-val", centerModal(body, 40, min(len(col.enumValues)+4, 20)), true, true)
+	h.app.tv.SetFocus(list)
+}
+
+// commitEnumPicker stores the resolved values back into work[editIdx]
+// or appends a new condition, then dismisses the picker.
+func commitEnumPicker(h *modalHost, col anyColumn, op FilterOp, work *[]FilterCondition, rebuild func(), editIdx int, vals []string) {
+	value := strings.Join(vals, "|")
+	newCond := FilterCondition{Field: col.key, Op: op, Value: value}
+	if editIdx >= 0 && editIdx < len(*work) {
+		(*work)[editIdx] = newCond
+	} else {
+		*work = append(*work, newCond)
+	}
+	h.app.pages.RemovePage("cb-val")
+	rebuild()
 }
 
 // --- Phase G: column show/hide ---
 
 // openColumnsModal lists every column with a checkbox indicating its
 // visibility. Toggling is session-only (in-memory per kind).
-func (t *tableView) openColumnsModal() {
-	if t.columnOverrides == nil {
-		t.columnOverrides = make(map[string]bool, len(t.spec.columns))
-		for _, c := range t.spec.columns {
-			t.columnOverrides[c.key] = !c.hidden
+func (t *tableView) openColumnsModal() { openColumnsModal(t.host()) }
+
+func openColumnsModal(h *modalHost) {
+	if *h.overridesPtr == nil {
+		*h.overridesPtr = make(map[string]bool, len(h.specColumns))
+		for _, c := range h.specColumns {
+			(*h.overridesPtr)[c.key] = !c.hidden
 		}
 	}
+	// Local alias for the override map (re-fetched after lazy init above).
+	overrides := *h.overridesPtr
 
 	// Selected bg/fg must be set explicitly — without them tview.List's
 	// "selected" style is the same as the surrounding rows, so the user
@@ -646,7 +816,7 @@ func (t *tableView) openColumnsModal() {
 	var rebuild func()
 	rebuild = func() {
 		list.Clear()
-		for _, c := range t.spec.columns {
+		for _, c := range h.specColumns {
 			if c.key == "body" {
 				continue
 			}
@@ -654,32 +824,32 @@ func (t *tableView) openColumnsModal() {
 			// than `[x]` / `[ ]` at a glance — the red ✗ pops on the
 			// row that's been turned off.
 			mark := "[green]✓[-]"
-			if !t.columnOverrides[c.key] {
+			if !overrides[c.key] {
 				mark = "[red]✗[-]"
 			}
 			cKey := c.key
 			// Empty secondaryText — ShowSecondaryText(false) is set, so
 			// passing c.key was unused and just noise.
 			list.AddItem(mark+" "+c.label, "", 0, func() {
-				t.columnOverrides[cKey] = !t.columnOverrides[cKey]
+				overrides[cKey] = !overrides[cKey]
 				cur := list.GetCurrentItem()
 				rebuild()
 				list.SetCurrentItem(cur)
 			})
 		}
 		list.AddItem("[yellow]apply", "", 0, func() {
-			t.app.pages.RemovePage("cols-modal")
-			t.refresh()
+			h.app.pages.RemovePage("cols-modal")
+			h.refresh()
 		})
 		list.AddItem("[gray]close", "", 0, func() {
-			t.app.pages.RemovePage("cols-modal")
+			h.app.pages.RemovePage("cols-modal")
 		})
 	}
 	rebuild()
 
 	apply := func() {
-		t.app.pages.RemovePage("cols-modal")
-		t.refresh()
+		h.app.pages.RemovePage("cols-modal")
+		h.refresh()
 	}
 
 	reset := func() {
@@ -687,8 +857,8 @@ func (t *tableView) openColumnsModal() {
 		// codegen-defined defaults. Keeps the modal open so the user
 		// can see the result before committing with `s`.
 		cur := list.GetCurrentItem()
-		for _, c := range t.spec.columns {
-			t.columnOverrides[c.key] = !c.hidden
+		for _, c := range h.specColumns {
+			overrides[c.key] = !c.hidden
 		}
 		rebuild()
 		list.SetCurrentItem(cur)
@@ -697,7 +867,7 @@ func (t *tableView) openColumnsModal() {
 	list.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
 		case tcell.KeyEscape:
-			t.app.pages.RemovePage("cols-modal")
+			h.app.pages.RemovePage("cols-modal")
 			return nil
 		case tcell.KeyCtrlS:
 			apply()
@@ -725,12 +895,12 @@ func (t *tableView) openColumnsModal() {
 			// Compute the column matching this row index (rebuild
 			// iterates spec.columns and skips "body").
 			j := 0
-			for _, c := range t.spec.columns {
+			for _, c := range h.specColumns {
 				if c.key == "body" {
 					continue
 				}
 				if j == i {
-					t.columnOverrides[c.key] = !t.columnOverrides[c.key]
+					overrides[c.key] = !overrides[c.key]
 					rebuild()
 					list.SetCurrentItem(i)
 					break
@@ -752,8 +922,8 @@ func (t *tableView) openColumnsModal() {
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorDodgerBlue)
 
-	t.app.pages.AddPage("cols-modal", centerModal(body, 40, 20), true, true)
-	t.app.tv.SetFocus(list)
+	h.app.pages.AddPage("cols-modal", centerModal(body, 40, 20), true, true)
+	h.app.tv.SetFocus(list)
 }
 
 // --- helpers ---
