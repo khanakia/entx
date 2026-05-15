@@ -1,0 +1,13 @@
+{{- range .Fields -}}
+[aqua::b]{{ .Key }}:[-:-:-] {{ .Value }}
+{{ end -}}
+[dodgerblue]────────────────────────────────────────[-]
+
+{{ .Body }}
+{{- if .Edges }}
+
+[yellow::b]── edges ──[-:-:-]
+{{- range .Edges }}
+  [orange::b]{{ .Trigger }}[-:-:-]  {{ .Display }}{{ if .Count }}  [aqua]({{ .Count }})[-]{{ end }}
+{{- end -}}
+{{- end -}}

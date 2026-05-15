@@ -1,0 +1,707 @@
+# enttui
+
+**Generate a terminal UI for any ent project — from your schema.**
+
+`enttui` reads your existing [ent](https://entgo.io) schema, applies conventions (and, optionally, schema annotations) and emits a thin per-entity glue layer that wires every type into a generic [tview](https://github.com/rivo/tview) browser. You get a `k9s`-style data explorer for free, no UI code to write.
+
+```
+┌─ Tasks ──────────────────────────────────────┐┌─ preview ─────────────────────────────────────────┐
+│ ▸ Migrate 5 lists to ServerDataTable         ││ id: tsk_019e25a435f47…                            │
+│   Apply useDelayedFlag to /areas             ││ title: Migrate 5 lists to ServerDataTable         │
+│   Implement TaskAssignees GraphQL resolver   ││ status: doing  priority: p1                       │
+│   Add row-selection model to ServerDataTable ││ created: 2026-05-14 14:09:39                      │
+│   …                                          ││ ────────────────────────────────────────          │
+│                                              ││ Wire the new gateway, migrate existing rows...    │
+└──────────────────────────────────────────────┘└───────────────────────────────────────────────────┘
+ Tasks  52/52  sort:created_at↓   k kind · tab pane · / filter · ctrl+u clear · s sort · enter open · esc back · q quit
+```
+
+---
+
+## Table of contents
+
+- [What you get](#what-you-get)
+- [Requirements](#requirements)
+- [Step 1 — generate glue for your schema](#step-1--generate-glue-for-your-schema)
+- [Step 2 — embed in your CLI](#step-2--embed-in-your-cli)
+- [Step 3 — run the TUI](#step-3--run-the-tui)
+- [Keybindings](#keybindings)
+- [Customizing per-schema behavior](#customizing-per-schema-behavior)
+- [Skipping entities](#skipping-entities)
+- [Removing enttui from your project](#removing-enttui-from-your-project)
+- [Where to go next](#where-to-go-next)
+
+---
+
+## What you get
+
+- One paginated **list pane** + **preview pane** per entity.
+- A **kind picker** modal (`k`) — fuzzy-search any entity by name.
+- **Edge navigation** — drill into 1→N edges (`enter`), jump up N→1 edges (`l` / `p` / …), with a back-stack (`esc`).
+- **Sort** (`s`), **substring filter** (`/`), pagination, status chips with semantic colors.
+- All accessors are **typed Go closures**, generated from your schema — no runtime reflection, no `fmt.Sprintf("%v", any)` blow-ups.
+- **Zero hand-written adapter code** per entity. Add a schema → regenerate → it shows up.
+
+---
+
+## Requirements
+
+- Go 1.22 or newer.
+- An ent schema directory that compiles (the same one you pass to `entc.Generate`).
+- A generated ent client package — e.g. `mymodule/ent` or `mymodule/gen/ent`.
+- A modern terminal (any tcell-supported terminal: iTerm2, Terminal.app, kitty, alacritty, etc.).
+
+`enttui` does **not** require you to change your existing `entc` codegen — it runs as a separate pass.
+
+---
+
+## Step 1 — generate glue for your schema
+
+`enttui.Generate` is shaped exactly like `entc.Generate`. Drop it into the codegen `main.go` that already runs your ent generation:
+
+```go
+// dbent/cmd/codegen/main.go
+package main
+
+import (
+    "log"
+
+    "entgo.io/ent/entc"
+    entcgen "entgo.io/ent/entc/gen"
+
+    "enttui"
+)
+
+//go:generate go run -mod=mod .
+
+func main() {
+    // Existing ent generation — unchanged.
+    if err := entc.Generate("./schema", &entcgen.Config{
+        Target:  "./gen/ent",
+        Package: "myproject/ent",
+    }); err != nil {
+        log.Fatal(err)
+    }
+
+    // NEW — enttui pass. Same shape as entc.Generate.
+    //
+    // ScopeFields: optional list of snake_case field names that the
+    // generator wires as scope predicates. For every scope key an entity
+    // actually has on its schema, the generated Fetch closure reads
+    // opts.Scope[key] and applies a predicate. Drop it for a fully
+    // un-scoped (single-tenant) install.
+    if err := enttui.Generate("./schema", &enttui.Config{
+        Target:      "../tui/gen",
+        Package:     "tuigen",
+        EntPkg:      "myproject/ent",
+        ScopeFields: []string{"project_id"}, // or "tenant_id", "org_id", etc.
+    }, enttui.Skip("AuditLog", "QueryLog")); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+One `go generate ./...` then runs both passes.
+
+Output:
+
+```
+tui/gen/
+├── register_all.go        # top-level RegisterAll(app, client, projectID)
+├── register_task.go       # one file per browsable entity
+├── register_memory.go
+└── …                      # ≈ one per non-internal ent.Type
+```
+
+Every file starts with `// Code generated by enttui. DO NOT EDIT.` and is deterministic — commit alongside your generated ent code.
+
+### Alternative: CLI
+
+If you prefer invoking from a Makefile / Bazel rule / shell script, the bundled CLI is a thin wrapper around `enttui.Generate(...)`:
+
+```bash
+go run enttui/cmd/enttui \
+    --schema  ./dbent/schema \
+    --out     ./tui/gen \
+    --package tuigen \
+    --ent-pkg myproject/ent
+```
+
+Either path produces identical output.
+
+---
+
+## Step 2 — register the generated code with your ent client
+
+After Step 1 you have a Go package at `myproject/tui/gen/` containing one `RegisterAll(app, client)` function. To wire it into your app:
+
+### 2a. Open your ent client like you normally do
+
+Nothing enttui-specific yet — this is whatever boilerplate you already use to connect to your database. Example for SQLite:
+
+```go
+import (
+    "database/sql"
+
+    _ "github.com/mattn/go-sqlite3"
+
+    "entgo.io/ent/dialect"
+    entsql "entgo.io/ent/dialect/sql"
+
+    "myproject/ent"  // your generated ent client (from `entc.Generate`)
+)
+
+rawDB, err := sql.Open("sqlite3", "myapp.db?_fk=1")
+if err != nil { log.Fatal(err) }
+defer rawDB.Close()
+
+drv := entsql.OpenDB(dialect.SQLite, rawDB)
+client := ent.NewClient(ent.Driver(drv))
+defer client.Close()
+```
+
+Postgres, MySQL, or a project-specific helper like `dbent.New(rawDB).Client()` work the same way — enttui only cares that you end up with an `*ent.Client`.
+
+### 2b. Construct the enttui App and pass it the client
+
+```go
+import (
+    "enttui/runtime"
+    tuigen "myproject/tui/gen"  // <-- generated package from Step 1
+)
+
+// Build the tview application + page stack
+app := runtime.New()
+
+// (optional) generic scope filter — generated Fetch closures look up
+// whichever keys they understand: a schema with project_id reads
+// "project_id", a schema with tenant_id reads "tenant_id", etc.
+app.SetScope("project_id", "prj_xxx")
+
+// Hand the *ent.Client to the generated registry. This auto-registers
+// every entity (one runtime.Register call per ent type) using typed
+// closures over your client.
+tuigen.RegisterAll(app, client)
+
+// Blocks until the user presses q / ctrl+c.
+if err := app.Run(); err != nil {
+    log.Fatal(err)
+}
+```
+
+That's the entire integration: **open client → `runtime.New` → `SetScope` (optional) → `RegisterAll(app, client)` → `Run`**.
+
+`enttui` itself knows nothing about "project_id" — it forwards whatever scope keys you set to every Fetch closure and lets the generated code decide what to do with them.
+
+### 2c. Wrap it as a cobra command (or use it however)
+
+```go
+func newTUICmd(client *ent.Client) *cobra.Command {
+    var projectID string
+    cmd := &cobra.Command{
+        Use:   "tui",
+        Short: "Launch the entity browser TUI",
+        RunE: func(*cobra.Command, []string) error {
+            app := runtime.New()
+            if projectID != "" {
+                app.SetScope("project_id", projectID)
+            }
+            tuigen.RegisterAll(app, client)
+            return app.Run()
+        },
+    }
+    cmd.Flags().StringVar(&projectID, "project", "", "scope queries to a project")
+    return cmd
+}
+```
+
+See the [Complete working example](#complete-working-example) below for a single-file, copy-paste runnable variant.
+
+---
+
+## Step 3 — run the TUI
+
+```bash
+./mycli tui
+```
+
+You'll see the first registered kind in a two-pane layout. Press `k` to open the kind picker and switch between entities.
+
+> **Important:** running is decoupled from code generation. Once you've generated and committed `tui/gen/`, the app launches purely by compiling against those files. Re-run codegen only when the schema changes.
+
+---
+
+## Complete working example
+
+Here is a full, copy-paste-runnable `main.go` for a tiny project. It opens SQLite, builds the ent client, sets a project scope, and launches the TUI:
+
+```go
+// cmd/mycli/main.go
+package main
+
+import (
+    "database/sql"
+    "flag"
+    "fmt"
+    "log"
+    "os"
+
+    _ "github.com/mattn/go-sqlite3"        // sqlite driver registration
+
+    "myproject/ent"                         // your generated ent client
+    tuigen "myproject/tui/gen"              // enttui-generated glue (from Step 1)
+
+    "enttui/runtime"
+)
+
+func main() {
+    dbPath := flag.String("db", "", "path to sqlite file (required)")
+    projectID := flag.String("project", "", "project id to scope queries (optional)")
+    flag.Parse()
+
+    if *dbPath == "" {
+        fmt.Fprintln(os.Stderr, "usage: mycli --db <path> [--project <id>]")
+        os.Exit(2)
+    }
+
+    // 1) open the database + build the ent client
+    rawDB, err := sql.Open("sqlite3", *dbPath+"?_fk=1")
+    if err != nil {
+        log.Fatalf("open db: %v", err)
+    }
+    defer rawDB.Close()
+
+    drv := entsql.OpenDB(dialect.SQLite, rawDB)
+    client := ent.NewClient(ent.Driver(drv))
+    defer client.Close()
+
+    // 2) build the enttui app + register everything
+    app := runtime.New()
+
+    // 3) set whichever scope keys your codegen recognizes
+    if *projectID != "" {
+        app.SetScope("project_id", *projectID)
+    }
+
+    // 4) wire the generated registry — auto-registers every entity
+    tuigen.RegisterAll(app, client)
+
+    // 5) blocks until the user quits (q / ctrl+c)
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+You'll also need the ent dialect imports if your client is built directly:
+
+```go
+import (
+    "entgo.io/ent/dialect"
+    entsql "entgo.io/ent/dialect/sql"
+)
+```
+
+If you already have a helper that returns an `*ent.Client` (e.g. `dbent.New(rawDB).Client()`), drop the `entsql.OpenDB` / `ent.NewClient` block and use your helper instead — `runtime.Register` and `tuigen.RegisterAll` only need a `*ent.Client`.
+
+### What goes in each layer
+
+| Step | Code lives in | Purpose |
+|------|---------------|---------|
+| 1 — open DB + build client | Your project (`cmd/mycli/main.go` or a helper) | enttui never opens DBs; you control connection lifecycle |
+| 2 — `runtime.New()` | `enttui/runtime/app.go` | Constructs the tview Application + page stack |
+| 3 — `app.SetScope(k, v)` | `enttui/runtime/app.go` | Generic scope bag; forwarded to every Fetch closure |
+| 4 — `tuigen.RegisterAll(...)` | **Generated** `tui/gen/register_all.go` | Calls one `registerX(app, client)` per entity |
+| inside each `registerX` | **Generated** `tui/gen/register_<name>.go` | Builds the typed `EntitySpec[*ent.X]` + closures; calls `runtime.Register` |
+| `runtime.Register[T]` | `enttui/runtime/registry.go` | Type-erases the typed spec into `*anySpec` stored on `App` |
+| 5 — `app.Run()` | `enttui/runtime/app.go` | tview event loop; mounts the first kind, handles all keys until quit |
+
+### Where the generated code came from
+
+If you're wondering how `myproject/tui/gen/register_task.go` was produced, the chain is:
+
+```
+go generate ./...                          ← invokes the codegen
+  └─ runs:  enttui.Generate(...)           in your codegen main.go
+            (or: go run enttui/cmd/enttui …)
+                  ↓
+       implementation: enttui/codegen/generate.go
+       templates:      enttui/codegen/templates/
+                       ├── entity.tmpl       ← shape of register_<name>.go
+                       └── register_all.tmpl ← shape of register_all.go
+                  ↓
+       writes to:      ./tui/gen/*.go
+```
+
+Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from your `./schema/`) through `entity.tmpl`. Open one and read top to bottom — the entire UI-to-DB binding for that entity is in that single file.
+
+---
+
+## Keybindings
+
+Vim-faithful. Frequent keys are zero-surprise vim; every rare verb hides behind the `,` leader and shows itself in an on-screen which-key popup — nothing to memorize.
+
+### Navigate
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`j k h l`** / arrows | Move selection / pane (vim)                     |
+| **`gg`**       | Jump to first row                                       |
+| **`G`**        | Jump to last row                                        |
+| **`:`**        | Go to row — `42`, `$`/`last`, `1`/`first`               |
+| **`n` / `p`**  | Next / previous page                                    |
+| **`+` / `-`**  | Grow / shrink page size                                 |
+| **`tab`**      | Switch focus list pane ↔ preview pane                   |
+| **`enter`**    | Open highlighted edge (or focus preview if none)        |
+| edge letters   | Single-letter triggers per edge (see preview footer)    |
+| **`r`**        | Refresh current view                                    |
+| **`esc`**      | Pop current page (back-stack); clears selection first   |
+| **`?`**        | Searchable keybindings palette (`@cat` scope, `ctrl+e` CSV) |
+| **`q`**        | Quit                                                    |
+
+### Filter
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`/`**        | Quick filter — substring (ContainsFold) across every Filterable string column |
+| **`ctrl+u`**   | Clear all active filters                                |
+
+### Select (vim visual)
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`space`**    | Toggle row selection (requires `enttui.AllowBulkCopy{}`) |
+| **`v`**        | Visual range — extend selection from anchor             |
+| **`ctrl+a`**   | Select all visible                                      |
+| **`esc`**      | Clear selection                                         |
+
+### Yank (two-key operator, `y` + target)
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`yy`**       | Yank whole row as TSV                                    |
+| **`yc`**       | Yank cell value (table) / id (browser)                  |
+| **`yj`**       | Yank row as pretty-printed JSON                         |
+| **`yv`**       | Yank current selection → format chooser (bulk)          |
+
+### Leader — `,` opens which-key popup
+
+Press `,` then the shown key. The popup lists everything live, so the table below is reference only:
+
+| `,` + | Action                                                  |
+|-------|---------------------------------------------------------|
+| **`v`** | Toggle list ↔ table view                              |
+| **`e`** | Edit current row (requires `enttui.Editable{}`)       |
+| **`a`** | Add / new row (requires `enttui.AllowCreate{}`)       |
+| **`d`** | Delete current row, with confirm (`enttui.AllowDelete{}`) |
+| **`f`** | Condition builder (per-column filters)                |
+| **`o`** | Sort-stack modal (multi-column, reorderable)          |
+| **`s`** | Cycle sort direction on the focused column            |
+| **`l`** | Columns show/hide modal (layout)                      |
+| **`c`** | Color theme: dark ⇄ light (persists)                  |
+| **`x`** | Export full filtered+sorted dataset (`enttui.AllowExport{}`) |
+| **`m`** | Master-detail split (`enttui.DetailEdge{}`); tabbed when >1 edge |
+| **`i`** | Capabilities card for the current view                |
+| **`K`** | Capabilities matrix — every kind × feature flags      |
+| **`k`** | Kind picker (fuzzy-searchable)                         |
+| **`t`** | Toggles submenu → `#` row numbers · `b` status bar · `m` mouse capture |
+
+### Sidebar / preview / global
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`ctrl+b`**   | Toggle the left-rail kind sidebar (live preview)        |
+| **`\`** (backslash) | Focus sidebar (opens if hidden); from sidebar, focus back to body |
+| **`ctrl+f / pgdn`** | Scroll preview down half page                      |
+| **`ctrl+b / pgup`** | Scroll preview up half page                        |
+
+**Row numbers + jump:** every row carries a gray 1-based index — in the list a label prefix; in the table a dedicated non-selectable `#` column (not jammed into the id cell). `,t#` toggles it off/on (default on). `:` opens a goto prompt — number, or `$`/`last`, or `1`/`first`; out-of-range clamps. `gg`/`G` jump to first/last row; `n`/`p` page.
+
+**Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live via `,tm`.
+
+**Theme:** two built-in palettes — **Catppuccin Mocha** (dark, default) and **Latte** (light). Toggle live with `,c`; the choice persists to `~/.config/enttui/theme` and reloads next run. Set explicitly from code with `app.SetTheme("dark"|"light")` before `Run()`. Colors are semantic roles (bg / surface / border / accent / selection / success-warn-danger), so selection and inputs always keep contrast in both themes. JSON-configurable custom themes are planned; the `Theme` struct is already hex-string based for that.
+
+When an input field has focus (filter, picker, sidebar), single-letter shortcuts go to the input — `,` types a `,`, not "open leader." `esc` always closes the input. `ctrl+b` is the one exception: caught BEFORE the typing-guard so it toggles the sidebar even mid-filter.
+
+### Keybindings palette (`?`)
+
+Searchable table of every shortcut (Category · Key · Action). It self-documents — there's a `Help` category describing its own controls.
+
+- **Type** anything → full-text filter across category / key / action.
+- **`@<cat>`** → scope to one category. `@table`, `@modals`, `@sidebar`, etc. Add a space + term to AND-compose within it: `@table sort` → Table rows mentioning "sort".
+- **`ctrl+e`** → export the *currently-shown* rows (filter respected) to `<cwd>/enttui-keybindings-<timestamp>.csv` (`category,keys,action` header). Footer turns green with the path on success.
+- **`↑ ↓ pgup pgdn`** navigate; **`enter` / `esc`** close.
+
+### Discovering capabilities
+
+Three levels, increasing scope:
+
+1. **Status-bar chips** — passive glance on every view: `✎ ,e edit`, `+ ,a new`, `✗ ,d delete`, `☐ space sel · y… yank`, `⇩ ,x export`. Only shown when the schema opted in.
+2. **`,i` — this-view card.** Lists every feature flag for the current kind, **on _and_ off**, each off-flag annotated with the exact `enttui.*{}` to add. Plus column / filterable / sortable / edge counts. `,K` from here jumps to the full matrix.
+3. **`,K` — capabilities matrix.** Searchable table of *every* registered kind × `EDIT NEW DEL BULK EXPORT COLS FILT SORT EDGES`. Filter with free text or `cap:edit` / `cap:export` / … to isolate one capability. `ctrl+e` dumps the shown rows to `<cwd>/enttui-capabilities-<ts>.csv`. `enter` on a row opens that kind.
+
+### Sidebar (left rail)
+
+Hidden by default; `ctrl+b` shows / hides it. Lists every registered kind, filtered by typing into the input at the top:
+
+- **Type** any text → filter by display name or kind id.
+- **`↑ / ↓ / pgup / pgdn`** in the input → move the list cursor while the filter stays focused.
+- **`tab`** → cycle focus input ↔ list.
+- **Selection change** swaps the body to that kind immediately (live preview). Filtering down to a single result auto-opens it.
+- **`\`** → send focus to the body without closing the sidebar.
+- **`enter` / `esc` / `ctrl+b`** → close the sidebar.
+
+The sidebar's highlight always reflects the kind shown in the body — drilling an edge, jumping via the modal `k` picker, or `esc`-popping the back-stack all keep the sidebar in sync.
+
+### Filter, sort, and column visibility — view-agnostic
+
+A view is purely a layout: the same modals work in both list+preview and table mode, and any state they apply persists across `v` toggles **and across kind switches** — switch Tasks → TaskLists → Tasks (via the sidebar) and the Tasks filter / sort stack / column visibility / page / selected row are restored. State is cached per kind; selection marks are intentionally not carried across kinds.
+
+- **`,f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
+- **`,o`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
+- **`,l`** opens the **columns show/hide modal** (layout) — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
+
+All three operate on the SAME state regardless of which view opened them. Toggle `v` and the dataset stays narrowed, sorted, and the column set you picked remains.
+
+### Master-detail split
+
+Opt-in per entity with `enttui.DetailEdge{}`, naming the drill (1→N) edge(s) whose children form the detail pane:
+
+```go
+func (TaskList) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.DetailEdge{Edge: "tasks"},                       // single
+    }
+}
+func (Project) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.DetailEdge{Edges: []string{"repos", "memories"}}, // tabbed
+    }
+}
+```
+
+Press **`,m`** (from list or table view) → a two-pane page: the master kind's table on top, a **live child table** below. Both panes are full tables — scroll, `,s` sort, `,f` filter, `,e` edit, `y…` yank, `:` goto, everything. `]`/`[` cycle detail tabs when >1 edge; `,m` again exits.
+
+- Move the **master** cursor → the detail table re-resolves the edge and re-filters to that row's children (in-memory `idFilter`, 5s ctx).
+- **`tab`** → switch focus master ⇄ detail; the active pane gets an orange border.
+- **Multiple edges** → the detail pane is tabbed (`[ repos | memories ]`); **`]`** / **`[`** cycle tabs. Each tab is its own lazily-built child table (edges can target different child kinds — discovered from the edge's first resolve). Switching to a tab refreshes it for the current master row.
+- **`m`** exits the split; **`esc`** pops the page.
+
+`Edge` (single) and `Edges` (list) both work and are concatenated, `Edge` first. Pressing `m` on a kind with no `DetailEdge` surfaces a status hint — never a silent no-op.
+
+### Clipboard
+
+`y` is a two-key yank operator (vim `y` + target):
+
+- **`yc`** — copies the current row's id (browser) or focused cell value (table).
+- **`yy`** — copies the whole row as TAB-separated values.
+- **`yj`** — copies the row as pretty-printed JSON (uses ent's native struct serialization, includes `edges:` for eager-loaded relations).
+- **`yv`** — with a selection, opens the bulk format chooser (see below).
+
+Status bar surfaces `copied <label>: <preview…>` on success, or `clipboard error: …` on headless hosts without `xclip` / `pbcopy`.
+
+### Bulk copy + export
+
+Opt-in via `enttui.AllowBulkCopy{}` (selection + multi-row copy) and `enttui.AllowExport{}` (full filtered/sorted dataset export):
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.AllowBulkCopy{},
+        enttui.AllowExport{},
+    }
+}
+```
+
+**Selection** — visible only when `AllowBulkCopy{}` is on:
+
+- **`space`** toggles the focused row's selection. Selected rows get a `[yellow]✓[-]` marker.
+- **`v`** range toggle (vim-visual style): first `v` drops an anchor at the cursor, move to the far end, second `v` selects the whole span — or *deselects* it if every row in the span was already selected. Order-independent; adds to any existing selection.
+- **`ctrl+a`** selects every row on the visible page.
+- **`esc`** clears the selection first — it only pops the page once nothing is selected (so "esc to deselect" never navigates you away by surprise).
+- Status bar shows `[yellow]N selected[-]` while non-empty, and the chip `☐ space sel · v range · ⌃a all · yv yank`.
+
+**Bulk copy** — `yv` with one or more rows selected:
+
+- Opens a format chooser modal: **JSON array** · **CSV** · in the table view, also **focused-column JSON** + **focused-column CSV** (copies just that one cell value across every selected row).
+- ← / → / tab switch options, enter picks.
+
+**Export** — **`,x`**. Scope precedence:
+
+- **With a selection** → exports *exactly the selected rows* (your explicit pick wins; no re-fetch). Status: `selected N rows`.
+- **No selection** → re-fetches every row matching the current filter + sort + scope (capped at 10 000).
+
+Then the JSON / CSV chooser, then a **destination modal**:
+
+- An editable **path** field pre-filled with `<cwd>/<kind>-<YYYYMMDD-HHMMSS>.<ext>`. Edit it to anywhere you want.
+- **Save to file** → writes there; status shows `wrote N rows as CSV → /full/path`.
+- **Copy to clipboard** → for the small case.
+- If the dataset overflowed the cap, the status message includes `(truncated from M — cap 10000)` so you know to narrow your filter.
+
+Bulk copy (`yv` with a selection) is always clipboard — it's a yank, small by nature.
+
+Pressing `space` / `,x` on an entity that hasn't opted in surfaces a status hint pointing at the missing annotation — never a silent no-op.
+
+### Editing
+
+Opt-in per field + per entity. By default a schema gets a fully read-only browser — annotate to enable.
+
+**Per-field:** `enttui.Editable{}` on each field you want the form to expose.
+
+```go
+field.String("title").NotEmpty().
+    Annotations(enttui.Editable{}),
+field.Enum("status").Values("draft", "published", "archived").
+    Annotations(enttui.Editable{}),
+```
+
+**Per-entity:** `enttui.AllowCreate{}` enables the new-row shortcut; `enttui.AllowDelete{}` enables the destructive one.
+
+```go
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.AllowCreate{},
+        enttui.AllowDelete{},
+    }
+}
+```
+
+**At runtime:**
+
+- **`e`** → edit form pre-filled with the row's current values. Tab navigates fields, ctrl+s saves, esc cancels. Required fields (schema-side `.NotEmpty()` / non-nillable) get a red flag if left empty.
+  - String / `*string` → text input
+  - Enum / `*enum` → dropdown (declared values; `*enum` gets a blank "clear" entry)
+  - Refresh fires only after a successful save, so the row updates in place — not before the modal closes.
+- **`N`** → new-row form. Same widgets as edit; empty by default. Any keys passed to `app.SetScope(...)` (e.g. `project_id`, `tenant_id`) are auto-injected into the insert so the row lands in the right scope without the user retyping them.
+- **`D`** → delete with a yes/no confirm modal. ← / → / tab switch between Cancel and Delete; enter confirms; esc cancels.
+
+**Discoverability:** the status bar shows `[green]✎ e edit[-]`, `[green]+ N new[-]`, and `[red]✗ D delete[-]` chips only when the schema opted in. Pressing the shortcut on an entity that didn't opt in surfaces a one-line hint pointing at the missing annotation — never a silent no-op.
+
+---
+
+## Customizing per-schema behavior
+
+By default `enttui` runs in **convention mode** — see [docs/CONVENTIONS.md](docs/CONVENTIONS.md) for the full list of rules. The short version:
+
+- Every non-internal ent type with an ID is browsable. Pass `Config.ScopeFields` to wire generic scope predicates (e.g. `project_id`, `tenant_id`); entities that don't have that field stay browsable, just unscoped.
+- `title` / `name` / `display_name` → row title.
+- `body` / `description` / `content` → preview body.
+- `status` / `severity` / `kind` (when enum) → status chip.
+- `created_at`, `updated_at` → time columns.
+- Unique edges → upward links; non-unique → drillable.
+
+You can override any of these (and add per-field hints like color chips, hidden fields, custom triggers) by attaching annotations to your schema. See [docs/ANNOTATIONS.md](docs/ANNOTATIONS.md):
+
+```go
+import "enttui"
+
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.Display("Posts"),
+        enttui.Group("content"),
+        enttui.Icon("📝"),
+    }
+}
+
+func (Post) Fields() []ent.Field {
+    return []ent.Field{
+        field.Enum("status").Values("draft", "published", "archived").
+            Annotations(
+                enttui.Chip(map[string]string{
+                    "draft":     "muted",
+                    "published": "success",
+                    "archived":  "warn",
+                }),
+            ),
+        field.String("internal_hash").
+            Annotations(enttui.Hidden()),
+    }
+}
+```
+
+### Related-column projections
+
+Show a column drawn from a foreign-key target instead of the raw FK id. Attach `enttui.RelatedColumns(...)` to the host entity. Each entry produces one column whose value, filter, and sort are all driven off the target row — no manual join SQL on your end.
+
+```go
+import (
+    "entgo.io/ent/schema"
+    "enttui"
+)
+
+func (Post) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.RelatedColumns(
+            enttui.RelatedColumn{Edge: "author",   Field: "name",   Label: "Author"},
+            enttui.RelatedColumn{Edge: "category", Field: "name",   Label: "Category"},
+            enttui.RelatedColumn{Edge: "author",   Field: "status"}, // label defaults to "Author Status"
+        ),
+    }
+}
+```
+
+Then regenerate (`task gen` or whatever runs your codegen). The Post table now shows `Author`, `Category`, `Author Status` columns next to the native ones.
+
+What you get out of the box for each entry:
+
+| Capability     | How it works |
+|----------------|--------------|
+| **Display**    | Eager-loaded via `q.With<Edge>()`. Accessor reads `r.Edges.<Edge>.<Field>` with nil checks (pointer targets get an extra deref guard). No N+1; multiple fields off the same edge share one `With` call. |
+| **Filter**     | Press `f`, pick the related column, pick `=` / `!=` / `contains`, enter a value. Generated as `pred.Has<Edge>With(targetPred.<Field>EQ(v))` etc. — a sub-select, so SQL pagination stays valid. |
+| **Sort**       | `,s` on the focused column, or add via the `,o` sort-stack. Generated as `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())` using ent's edge-order helper. Multi-column sort works seamlessly with native columns. |
+
+Field rules:
+
+- `Edge` must match an ent edge name on the host (e.g. `"author"`).
+- `Field` is any field name on the target type — not just title-like. Use `"status"`, `"created_at"`, custom enums, anything that exists on the related schema.
+- `Label` is optional; defaults to `"<Edge> <Field>"` in title case.
+- Unknown edge or unknown field → entry is silently dropped (forgiving, so you can drop the annotation in before the target schema fully lands).
+
+Limitations (v1):
+
+- Filter ops on related string columns are `= / != / contains`. Enum, numeric, and time predicates would follow the same pattern — open an issue if you need them.
+- The related-column row is sortable as one whole; ent's `By<Edge>Field` does a sub-query, so combining it with very large datasets can be slower than indexed native sorts. Add an index on the target field if it matters.
+
+---
+
+## Skipping entities
+
+Exclude entities you don't want browsable:
+
+```go
+enttui.Generate("./schema", &enttui.Config{...}, enttui.Skip("AuditLog", "QueryLog", "SchemaMigration"))
+```
+
+Or with the CLI:
+
+```bash
+go run enttui/cmd/enttui --schema ./schema --out ./tui/gen --skip AuditLog,QueryLog,SchemaMigration
+```
+
+Built-in internal types (`*_fts`, `audit_log`, `query_log`, `pii_pattern`, etc.) are auto-skipped — see [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
+
+---
+
+## Removing enttui from your project
+
+`enttui` is intentionally easy to rip out:
+
+1. `rm -rf ./tui/gen`
+2. Remove the `tuigen.RegisterAll(...)` call and the `tui` cobra command.
+3. Remove the `enttui.Generate(...)` step from your codegen `main.go`.
+4. `go mod tidy` to drop the dependency.
+
+No third-party server, no DB schema migrations, no runtime hooks to peel back.
+
+---
+
+## Where to go next
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how the two-layer split (runtime vs codegen) works.
+- **[docs/CODEGEN.md](docs/CODEGEN.md)** — pipeline + generated output shape.
+- **[docs/RUNTIME.md](docs/RUNTIME.md)** — runtime package internals (browser, picker, focus model).
+- **[docs/ANNOTATIONS.md](docs/ANNOTATIONS.md)** — full annotation reference.
+- **[docs/CONVENTIONS.md](docs/CONVENTIONS.md)** — fallback rules when no annotations are present.
+- **[docs/EDGE-NAVIGATION.md](docs/EDGE-NAVIGATION.md)** — how drill / upward edges work.
+- **[docs/DEVELOPING.md](docs/DEVELOPING.md)** — contributing to enttui itself.
+- **[docs/INTERNAL.md](docs/INTERNAL.md)** — Taskfile + demo DB locations (this repo's POC only — not relevant to library users).
