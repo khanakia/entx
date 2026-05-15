@@ -41,6 +41,17 @@ func registerLearnRun(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entLearnRun.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entLearnRun.Or(
+					entLearnRun.IDContainsFold(opts.Filter),
+					entLearnRun.ProjectIDContainsFold(opts.Filter),
+					entLearnRun.SourceKindContainsFold(opts.Filter),
+					entLearnRun.StatusStrContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

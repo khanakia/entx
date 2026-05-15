@@ -40,6 +40,19 @@ func registerRun(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRun.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entRun.Or(
+					entRun.IDContainsFold(opts.Filter),
+					entRun.ProjectIDContainsFold(opts.Filter),
+					entRun.KindContainsFold(opts.Filter),
+					entRun.StatusStrContainsFold(opts.Filter),
+					entRun.ActorIDContainsFold(opts.Filter),
+					entRun.NotesContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

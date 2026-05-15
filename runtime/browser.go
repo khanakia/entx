@@ -79,6 +79,18 @@ type browser struct {
 	// showRowNum prefixes each row with its 1-based index. Default on;
 	// toggle with `#`.
 	showRowNum bool
+	// statusVisible — `B` collapses the status bar to reclaim rows.
+	statusVisible bool
+}
+
+// toggleStatus shows/hides the status bar by resizing its flex slot.
+func (b *browser) toggleStatus() {
+	b.statusVisible = !b.statusVisible
+	h := statusBarHeight
+	if !b.statusVisible {
+		h = 0
+	}
+	b.root.ResizeItem(b.stat, h, 0)
 }
 
 // rowNumPrefix returns a right-aligned "<n> " prefix (width sized to
@@ -262,7 +274,8 @@ func newBrowser(app *App, spec *anySpec) *browser {
 
 	b.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(bodyRow, 0, 1, true).
-		AddItem(b.stat, 1, 0, false)
+		AddItem(b.stat, statusBarHeight, 0, false)
+	b.statusVisible = true
 
 	b.list.SetChangedFunc(func(int, string, string, rune) { b.refreshPreview() })
 	b.list.SetInputCapture(b.listKeyCapture)
@@ -411,6 +424,15 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'i':
 		// Capabilities card for THIS view.
 		b.app.openKindInfo(b.spec)
+		return nil
+	case 'm':
+		// Open the two-pane master-detail split (master table on top,
+		// live child table below).
+		if len(b.spec.detailEdges) == 0 {
+			b.updateStatus("no detail edge — add enttui.DetailEdge{Edge:\"<edge>\"} to the schema")
+			return nil
+		}
+		b.app.pushMasterDetail(b.spec)
 		return nil
 	case '#':
 		b.showRowNum = !b.showRowNum
@@ -573,10 +595,15 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	}
 	switch ev.Key() {
 	case tcell.KeyCtrlU:
-		// Clear active filter (ctrl+u — matches readline "kill to start").
-		if b.filter != "" {
+		// Clear ALL filtering — the legacy `/` substring AND the
+		// condition-builder conditions. Previously only cleared the
+		// substring one, so it looked dead after using `f`.
+		if b.filter != "" || len(b.carriedFilters) > 0 {
 			b.filter = ""
+			b.carriedFilters = nil
+			b.page = 0
 			b.refresh()
+			b.updateStatus("filters cleared")
 		}
 		return nil
 	case tcell.KeyTab, tcell.KeyRight:

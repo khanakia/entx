@@ -47,7 +47,15 @@ func registerRule(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entRule.Or(
-					entRule.BodyContainsFold(opts.Filter),
+					entRule.IDContainsFold(opts.Filter),
+					entRule.SourceKindContainsFold(opts.Filter),
+					entRule.SourceRefContainsFold(opts.Filter),
+					entRule.ProjectIDContainsFold(opts.Filter),
+					entRule.RepoIDContainsFold(opts.Filter),
+					entRule.GlobsContainsFold(opts.Filter),
+					entRule.AppliesToDescriptionContainsFold(opts.Filter),
+					entRule.SupersededByIDContainsFold(opts.Filter),
+					entRule.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -27,6 +27,7 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 		ShowEdgeCounts: true,
 		AllowBulkCopy:  false,
 		AllowExport:    false,
+		DetailEdges:    []string{"tasks"},
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -45,8 +46,10 @@ func registerTaskList(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTaskList.Or(
+					entTaskList.IDContainsFold(opts.Filter),
+					entTaskList.ProjectIDContainsFold(opts.Filter),
 					entTaskList.TitleContainsFold(opts.Filter),
-					entTaskList.BodyContainsFold(opts.Filter),
+					entTaskList.StatusStrContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

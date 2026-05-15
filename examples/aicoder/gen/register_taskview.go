@@ -45,7 +45,10 @@ func registerTaskView(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTaskView.Or(
+					entTaskView.IDContainsFold(opts.Filter),
+					entTaskView.ProjectIDContainsFold(opts.Filter),
 					entTaskView.NameContainsFold(opts.Filter),
+					entTaskView.FilterJSONContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

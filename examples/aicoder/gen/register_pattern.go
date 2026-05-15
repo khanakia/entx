@@ -46,8 +46,15 @@ func registerPattern(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entPattern.Or(
+					entPattern.IDContainsFold(opts.Filter),
+					entPattern.SourceKindContainsFold(opts.Filter),
+					entPattern.SourceRefContainsFold(opts.Filter),
+					entPattern.ProjectIDContainsFold(opts.Filter),
+					entPattern.RepoIDContainsFold(opts.Filter),
 					entPattern.TitleContainsFold(opts.Filter),
-					entPattern.BodyContainsFold(opts.Filter),
+					entPattern.LanguageContainsFold(opts.Filter),
+					entPattern.SupersededByIDContainsFold(opts.Filter),
+					entPattern.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

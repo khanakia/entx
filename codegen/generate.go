@@ -107,6 +107,7 @@ type EntityMeta struct {
 	AllowDelete    bool
 	AllowBulkCopy  bool
 	AllowExport    bool
+	DetailEdges    []string // enttui.DetailEdge — master-detail child relation(s)
 
 	// Phase C/D — fields the user marked Sortable() (in declaration order).
 	SortableFields []FieldMeta
@@ -324,6 +325,7 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	if hasAnnot(n.Annotations, "EntTUI.AllowExport") {
 		em.AllowExport = true
 	}
+	em.DetailEdges = annotDetailEdges(n.Annotations)
 	if hasAnnot(n.Annotations, "EntTUI.AllowDelete") {
 		em.AllowDelete = true
 	}
@@ -404,9 +406,14 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 			fm.Sortable = true
 		}
 
-		// Legacy substring predicates list (still used for the global `/`
-		// filter in the browser view; Phase E uses structured filters).
-		if (f.Name == "title" || f.Name == "name" || f.Name == "body" || f.Name == "description") && f.IsString() {
+		// Global `/` substring filter: OR a case-insensitive
+		// ContainsFold across every string field the schema marked
+		// Filterable — zero field-name hardcoding. Authors control
+		// participation with enttui.Filterable() / enttui.Hidden()
+		// (the same flags the condition builder honors). ContainsFold
+		// only exists for string-typed predicates, so non-strings are
+		// skipped here regardless of the flag.
+		if fm.Filterable && f.IsString() {
 			em.FilterPredicates = append(em.FilterPredicates, fm.GoName+"ContainsFold")
 		}
 

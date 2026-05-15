@@ -23,6 +23,7 @@ type anySpec struct {
 	showEdgeCounts bool
 	allowBulkCopy  bool
 	allowExport    bool
+	detailEdges    []string
 	defaultView    DefaultView
 
 	// fetch returns the row IDs + their typed display data.
@@ -215,6 +216,7 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		showEdgeCounts: spec.ShowEdgeCounts,
 		allowBulkCopy:  spec.AllowBulkCopy,
 		allowExport:    spec.AllowExport,
+		detailEdges:    spec.DetailEdges,
 		defaultView:    spec.Default,
 		fetch:       fetch,
 		getOne:      getOne,

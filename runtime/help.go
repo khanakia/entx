@@ -47,6 +47,7 @@ var helpEntries = []helpEntry{
 	{Category: "Global", Keys: "F", Action: "Capabilities matrix — every kind × edit/new/del/bulk/export"},
 	{Category: "Global", Keys: "i", Action: "Capabilities card for the CURRENT view (what's on/off + how to enable)"},
 	{Category: "Global", Keys: "M", Action: "Toggle mouse capture (default off → terminal text selection / copy works)"},
+	{Category: "Global", Keys: "B", Action: "Show / hide the status bar"},
 	{Category: "Global", Keys: "#", Action: "Toggle row-number prefix (default on)"},
 	{Category: "Global", Keys: ":", Action: "Go to row — number / $ last / 1 first (vim-style)"},
 	{Category: "Global", Keys: "q", Action: "Quit"},
@@ -54,6 +55,10 @@ var helpEntries = []helpEntry{
 
 	// --- Browser (list+preview view) ---
 	{Category: "Browser", Keys: "v", Action: "Toggle list+preview ↔ table view"},
+	{Category: "Global", Keys: "m", Action: "Master-detail split (master + live child table; tabbed if >1 edge; needs enttui.DetailEdge{})"},
+	{Category: "Master-detail", Keys: "tab", Action: "Switch focus master ⇄ detail pane"},
+	{Category: "Master-detail", Keys: "] [", Action: "Cycle detail tabs (multi-edge)"},
+	{Category: "Master-detail", Keys: "m / esc", Action: "Exit the split"},
 	{Category: "Browser", Keys: "tab", Action: "Switch focus list ↔ preview"},
 	{Category: "Browser", Keys: "↑ ↓ j k", Action: "Move selection"},
 	{Category: "Browser", Keys: "← → h l", Action: "Switch pane"},

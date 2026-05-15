@@ -46,8 +46,10 @@ func registerMission(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entMission.Or(
+					entMission.IDContainsFold(opts.Filter),
+					entMission.ProjectIDContainsFold(opts.Filter),
 					entMission.TitleContainsFold(opts.Filter),
-					entMission.BodyContainsFold(opts.Filter),
+					entMission.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -348,7 +348,7 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`↑ / ↓`**    | Move selection in the focused pane                      |
 | **`enter`**    | Open the highlighted edge (or focus preview if none)    |
 | **`l p c …`**  | Single-letter triggers for each edge (see preview footer) |
-| **`/`**        | Open filter input (substring match on title + body)     |
+| **`/`**        | Quick filter — substring (ContainsFold) across every Filterable string column |
 | **`ctrl+u`**   | Clear the active filter                                 |
 | **`s`**        | Cycle sort direction (asc / desc on created_at)         |
 | **`f`**        | Open condition builder (per-column filters)             |
@@ -370,6 +370,7 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`M`**        | Toggle mouse capture (off by default → terminal text selection / copy works) |
 | **`#`**        | Toggle the 1-based row-number prefix (default on)        |
 | **`:`**        | Go to row — `42`, `$`/`last`, `1`/`first` (vim-style)    |
+| **`m`**        | Master-detail split (needs `enttui.DetailEdge{}`); tabbed when >1 edge |
 | **`q`**        | Quit                                                    |
 | **`ctrl+f / pgdn / space`** | Scroll preview down half page              |
 | **`ctrl+b / pgup`** | Scroll preview up half page                        |
@@ -419,6 +420,32 @@ A view is purely a layout: the same modals work in both list+preview and table m
 - **`c`** opens the **columns show/hide modal** — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
 
 All three operate on the SAME state regardless of which view opened them. Toggle `v` and the dataset stays narrowed, sorted, and the column set you picked remains.
+
+### Master-detail split
+
+Opt-in per entity with `enttui.DetailEdge{}`, naming the drill (1→N) edge(s) whose children form the detail pane:
+
+```go
+func (TaskList) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.DetailEdge{Edge: "tasks"},                       // single
+    }
+}
+func (Project) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        enttui.DetailEdge{Edges: []string{"repos", "memories"}}, // tabbed
+    }
+}
+```
+
+Press **`m`** (from list or table view) → a two-pane page: the master kind's table on top, a **live child table** below. Both panes are full tables — scroll, `s` sort, `f` filter, `e` edit, `y` copy, `:` goto, everything.
+
+- Move the **master** cursor → the detail table re-resolves the edge and re-filters to that row's children (in-memory `idFilter`, 5s ctx).
+- **`tab`** → switch focus master ⇄ detail; the active pane gets an orange border.
+- **Multiple edges** → the detail pane is tabbed (`[ repos | memories ]`); **`]`** / **`[`** cycle tabs. Each tab is its own lazily-built child table (edges can target different child kinds — discovered from the edge's first resolve). Switching to a tab refreshes it for the current master row.
+- **`m`** exits the split; **`esc`** pops the page.
+
+`Edge` (single) and `Edges` (list) both work and are concatenated, `Edge` first. Pressing `m` on a kind with no `DetailEdge` surfaces a status hint — never a silent no-op.
 
 ### Clipboard
 

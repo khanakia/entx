@@ -47,7 +47,15 @@ func registerMemory(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entMemory.Or(
-					entMemory.BodyContainsFold(opts.Filter),
+					entMemory.IDContainsFold(opts.Filter),
+					entMemory.SourceKindContainsFold(opts.Filter),
+					entMemory.SourceRefContainsFold(opts.Filter),
+					entMemory.ProjectIDContainsFold(opts.Filter),
+					entMemory.RepoIDContainsFold(opts.Filter),
+					entMemory.SupersededByIDContainsFold(opts.Filter),
+					entMemory.CreatedByActorIDContainsFold(opts.Filter),
+					entMemory.ValidatedByActorIDContainsFold(opts.Filter),
+					entMemory.EmbeddingModelIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

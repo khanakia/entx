@@ -42,6 +42,22 @@ func registerBenchResult(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entBenchResult.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entBenchResult.Or(
+					entBenchResult.IDContainsFold(opts.Filter),
+					entBenchResult.ProjectIDContainsFold(opts.Filter),
+					entBenchResult.BenchRunIDContainsFold(opts.Filter),
+					entBenchResult.BenchEvalIDContainsFold(opts.Filter),
+					entBenchResult.PromptSentContainsFold(opts.Filter),
+					entBenchResult.OutputReceivedContainsFold(opts.Filter),
+					entBenchResult.JudgeModelContainsFold(opts.Filter),
+					entBenchResult.JudgeRubricContainsFold(opts.Filter),
+					entBenchResult.JudgeResponseContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

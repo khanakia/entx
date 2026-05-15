@@ -45,8 +45,11 @@ func registerPlan(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entPlan.Or(
+					entPlan.IDContainsFold(opts.Filter),
+					entPlan.ProjectIDContainsFold(opts.Filter),
 					entPlan.TitleContainsFold(opts.Filter),
-					entPlan.BodyContainsFold(opts.Filter),
+					entPlan.StatusStrContainsFold(opts.Filter),
+					entPlan.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -217,6 +217,15 @@ func (a *App) Run() error {
 		case 'F':
 			a.openCapabilities()
 			return nil
+		case 'B':
+			// Show/hide the (two-line) status bar on the front view.
+			switch v := a.pageInstance(a.stack[len(a.stack)-1].name).(type) {
+			case *browser:
+				v.toggleStatus()
+			case *tableView:
+				v.toggleStatus()
+			}
+			return nil
 		case 'M':
 			// Live mouse toggle. Off → terminal text selection / copy
 			// works; on → click + scroll-wheel inside the TUI.

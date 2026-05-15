@@ -45,8 +45,11 @@ func registerIncident(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entIncident.Or(
+					entIncident.IDContainsFold(opts.Filter),
+					entIncident.ProjectIDContainsFold(opts.Filter),
 					entIncident.TitleContainsFold(opts.Filter),
-					entIncident.BodyContainsFold(opts.Filter),
+					entIncident.SeverityStrContainsFold(opts.Filter),
+					entIncident.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -40,7 +40,10 @@ func registerTrustedPlugin(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTrustedPlugin.Or(
+					entTrustedPlugin.IDContainsFold(opts.Filter),
 					entTrustedPlugin.NameContainsFold(opts.Filter),
+					entTrustedPlugin.Sha256ContainsFold(opts.Filter),
+					entTrustedPlugin.TrustedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

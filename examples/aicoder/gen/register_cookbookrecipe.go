@@ -45,8 +45,11 @@ func registerCookbookRecipe(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entCookbookRecipe.Or(
+					entCookbookRecipe.IDContainsFold(opts.Filter),
+					entCookbookRecipe.ProjectIDContainsFold(opts.Filter),
 					entCookbookRecipe.TitleContainsFold(opts.Filter),
-					entCookbookRecipe.BodyContainsFold(opts.Filter),
+					entCookbookRecipe.LanguageContainsFold(opts.Filter),
+					entCookbookRecipe.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

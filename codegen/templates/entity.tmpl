@@ -35,6 +35,9 @@ func register{{ .Name }}(app *runtime.App, client *ent.Client) {
 		ShowEdgeCounts: {{ .ShowEdgeCounts }},
 		AllowBulkCopy:  {{ .AllowBulkCopy }},
 		AllowExport:    {{ .AllowExport }},
+		{{- if .DetailEdges }}
+		DetailEdges:    []string{ {{ range $i, $e := .DetailEdges }}{{ if $i }}, {{ end }}"{{ $e }}"{{ end }} },
+		{{- end }}
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,

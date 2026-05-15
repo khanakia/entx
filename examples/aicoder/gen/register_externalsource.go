@@ -46,7 +46,11 @@ func registerExternalSource(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entExternalSource.Or(
+					entExternalSource.IDContainsFold(opts.Filter),
+					entExternalSource.ProjectIDContainsFold(opts.Filter),
+					entExternalSource.KindContainsFold(opts.Filter),
 					entExternalSource.NameContainsFold(opts.Filter),
+					entExternalSource.ConfigJSONContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

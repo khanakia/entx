@@ -46,7 +46,11 @@ func registerKnowledgeRevision(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entKnowledgeRevision.Or(
-					entKnowledgeRevision.BodyContainsFold(opts.Filter),
+					entKnowledgeRevision.IDContainsFold(opts.Filter),
+					entKnowledgeRevision.ProjectIDContainsFold(opts.Filter),
+					entKnowledgeRevision.EntityTableContainsFold(opts.Filter),
+					entKnowledgeRevision.EntityIDContainsFold(opts.Filter),
+					entKnowledgeRevision.ActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

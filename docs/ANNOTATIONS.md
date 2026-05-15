@@ -142,6 +142,24 @@ Codegen behavior:
   when at least one related column is present.
 - Unknown edge name or unknown field name → entry is silently dropped.
 
+### `DetailEdge{}` — entity-level
+
+Designates drill (1→N) edge(s) for the master-detail split (`m`). Two
+forms, concatenated when both set (`Edge` first):
+
+```go
+enttui.DetailEdge{Edge:  "tasks"}                        // single
+enttui.DetailEdge{Edges: []string{"repos", "memories"}}  // tabbed
+```
+
+Codegen emits `DetailEdges []string` on the spec. Runtime: `m` opens a
+two-pane page (master table + live child table). Multiple edges → the
+detail pane is tabbed (`]`/`[` cycle); each tab is a full child
+`tableView`, built lazily — the child kind is learned from the edge's
+first `resolveDrill`, so different edges may target different kinds.
+Moving the master cursor re-filters the active tab via an in-memory
+`idFilter`. Edges that don't exist or aren't drill edges are skipped.
+
 ### `AllowBulkCopy{}` — entity-level
 
 Enables row-selection (`space` toggles, `*` selects all visible, `0`

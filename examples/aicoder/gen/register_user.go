@@ -36,6 +36,18 @@ func registerUser(app *runtime.App, client *ent.Client) {
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.User, int, error) {
 			q := client.User.Query()
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entUser.Or(
+					entUser.IDContainsFold(opts.Filter),
+					entUser.FirstNameContainsFold(opts.Filter),
+					entUser.LastNameContainsFold(opts.Filter),
+					entUser.EmailContainsFold(opts.Filter),
+					entUser.PasswordContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

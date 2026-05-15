@@ -189,8 +189,9 @@ type EntitySpec[T any] struct {
 	PageSize       int  // initial page size; runtime caps at 1000
 	MultiSort      bool // allow sort stack (true by default; false = single column only)
 	ShowEdgeCounts bool // when true, the preview pane calls each edge's Count closure and renders the result next to the trigger label
-	AllowBulkCopy  bool // enables space/a/c row selection + multi-row `y` copy
-	AllowExport    bool // enables `X` — re-fetch all (filter/sort honored) → JSON/CSV
+	AllowBulkCopy  bool   // enables space/a/c row selection + multi-row `y` copy
+	AllowExport    bool   // enables `X` — re-fetch all (filter/sort honored) → JSON/CSV
+	DetailEdges    []string // drill edge(s) shown in the master-detail split (`m`); >1 → tabbed
 	Default        DefaultView
 
 	// Data

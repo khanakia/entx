@@ -85,14 +85,17 @@ Both are rendered as `2006-01-02 15:04:05`. Optional time fields use `if r.X == 
 
 ## Filter
 
-`opts.Filter` (substring from the `/` prompt) is wired to `Or(...ContainsFold(...))` predicates for whichever of these string fields exist on the type:
+No field-name hardcoding. A field is **Filterable** when:
 
-- `title`
-- `name`
-- `body`
-- `description`
+- it carries `enttui.Filterable()`, **or**
+- the convention auto-marks it: every `string` / `enum` field is Filterable by default (**opt-out** with `enttui.Hidden()`).
 
-Other string fields are not filterable today (planned: `enttui.Filterable()`).
+Two consumers of that flag:
+
+- **Condition builder (`f`)** — lists every Filterable column (string + enum), typed operators per kind.
+- **`/` quick filter** — `opts.Filter` is wired to `Or(<F>ContainsFold(opts.Filter), …)` across every Filterable **string** field (enum predicates have no `ContainsFold`, so enums are excluded from `/` — use `f` for those). This means `/manual` finds rows by a `source_kind`-style column, not just `title`/`body`.
+
+Because the default is opt-out, `id` / FK columns are searchable too unless you `enttui.Hidden()` them. To make the surface precise, hide noisy columns or (future) switch the generator to opt-in.
 
 ## Sort
 

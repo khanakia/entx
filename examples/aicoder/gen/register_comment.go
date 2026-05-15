@@ -40,7 +40,10 @@ func registerComment(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entComment.Or(
-					entComment.BodyContainsFold(opts.Filter),
+					entComment.IDContainsFold(opts.Filter),
+					entComment.EntityTableContainsFold(opts.Filter),
+					entComment.EntityIDContainsFold(opts.Filter),
+					entComment.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -92,6 +92,24 @@ type CountEdges struct{ schema.Annotation }
 
 func (CountEdges) Name() string { return "EntTUI.CountEdges" }
 
+// DetailEdge designates one or more drill (1→N) edges as the "detail"
+// relations for master-detail mode (`m`). The split view shows the
+// master kind on top and a live child table below; with multiple edges
+// the detail pane becomes tabbed, one tab per edge.
+//
+//	enttui.DetailEdge{Edge:  "comments"}                 // single
+//	enttui.DetailEdge{Edges: []string{"tasks","comments"}} // tabbed
+//
+// Edge is the single-edge convenience; Edges is the multi form. When
+// both are set they're concatenated (Edge first).
+type DetailEdge struct {
+	schema.Annotation
+	Edge  string
+	Edges []string
+}
+
+func (DetailEdge) Name() string { return "EntTUI.DetailEdge" }
+
 // AllowBulkCopy enables row-selection (`space` / `a` / `c`) and the
 // multi-row `y` flow — pressing `y` with one or more rows selected
 // opens a format chooser (JSON array / CSV / focused-column JSON / CSV)

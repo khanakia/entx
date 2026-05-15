@@ -177,6 +177,17 @@ func (s *sidebar) refilter() {
 	}
 	s.populate()
 
+	// While a filter is active the user is searching — put the cursor
+	// on the FIRST match so results are visible from the top. Without
+	// this, populate()'s highlightCurrent() pins the cursor to the
+	// current page's kind, which can be scrolled far down and makes a
+	// broad query like "task" look like it's missing "TaskLists".
+	if q != "" && len(s.shown) > 0 {
+		s.suppressChange = true
+		s.list.SetCurrentItem(0)
+		s.suppressChange = false
+	}
+
 	// If the user just narrowed the filter to a set that no longer
 	// contains the current page's kind, auto-swap to whatever the cursor
 	// is sitting on (shown[0] by default). Without this, filtering down

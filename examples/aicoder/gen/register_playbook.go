@@ -46,9 +46,13 @@ func registerPlaybook(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entPlaybook.Or(
+					entPlaybook.IDContainsFold(opts.Filter),
+					entPlaybook.SourceKindContainsFold(opts.Filter),
+					entPlaybook.SourceRefContainsFold(opts.Filter),
+					entPlaybook.ProjectIDContainsFold(opts.Filter),
 					entPlaybook.NameContainsFold(opts.Filter),
-					entPlaybook.DescriptionContainsFold(opts.Filter),
-					entPlaybook.BodyContainsFold(opts.Filter),
+					entPlaybook.ComposesContainsFold(opts.Filter),
+					entPlaybook.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

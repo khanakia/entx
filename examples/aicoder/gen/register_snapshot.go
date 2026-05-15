@@ -46,8 +46,13 @@ func registerSnapshot(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entSnapshot.Or(
+					entSnapshot.IDContainsFold(opts.Filter),
+					entSnapshot.SourceKindContainsFold(opts.Filter),
+					entSnapshot.SourceRefContainsFold(opts.Filter),
+					entSnapshot.ProjectIDContainsFold(opts.Filter),
+					entSnapshot.RepoIDContainsFold(opts.Filter),
 					entSnapshot.TitleContainsFold(opts.Filter),
-					entSnapshot.BodyContainsFold(opts.Filter),
+					entSnapshot.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -41,6 +41,21 @@ func registerRenderHistory(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entRenderHistory.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entRenderHistory.Or(
+					entRenderHistory.IDContainsFold(opts.Filter),
+					entRenderHistory.ProjectIDContainsFold(opts.Filter),
+					entRenderHistory.RepoIDContainsFold(opts.Filter),
+					entRenderHistory.TargetPathContainsFold(opts.Filter),
+					entRenderHistory.RenderedTextContainsFold(opts.Filter),
+					entRenderHistory.RenderedSha256ContainsFold(opts.Filter),
+					entRenderHistory.ScopeSummaryContainsFold(opts.Filter),
+					entRenderHistory.RenderedByActorIDContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

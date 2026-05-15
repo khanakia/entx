@@ -45,8 +45,10 @@ func registerArchitectureNote(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entArchitectureNote.Or(
+					entArchitectureNote.IDContainsFold(opts.Filter),
+					entArchitectureNote.ProjectIDContainsFold(opts.Filter),
 					entArchitectureNote.TitleContainsFold(opts.Filter),
-					entArchitectureNote.BodyContainsFold(opts.Filter),
+					entArchitectureNote.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

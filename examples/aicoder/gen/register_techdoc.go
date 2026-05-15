@@ -45,8 +45,10 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTechDoc.Or(
+					entTechDoc.IDContainsFold(opts.Filter),
+					entTechDoc.ProjectIDContainsFold(opts.Filter),
 					entTechDoc.NameContainsFold(opts.Filter),
-					entTechDoc.DescriptionContainsFold(opts.Filter),
+					entTechDoc.BaseURLContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

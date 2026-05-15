@@ -35,6 +35,10 @@ import (
 // enttui.AllowBulkCopy / AllowExport the keys surface a hint via the
 // view's status bar.
 
+// statusBarHeight is the row count of the (two-line) status bar.
+// Toggled to 0 by `B` to reclaim the space.
+const statusBarHeight = 2
+
 // exportRowCap caps export size to keep the clipboard sane. The cap
 // applies both to bulk-copy (selection × all rows) and full export.
 const exportRowCap = 10_000

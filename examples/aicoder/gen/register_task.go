@@ -60,8 +60,15 @@ func registerTask(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTask.Or(
+					entTask.IDContainsFold(opts.Filter),
+					entTask.ProjectIDContainsFold(opts.Filter),
+					entTask.RepoIDContainsFold(opts.Filter),
 					entTask.TitleContainsFold(opts.Filter),
-					entTask.BodyContainsFold(opts.Filter),
+					entTask.MissionIDContainsFold(opts.Filter),
+					entTask.TasklistIDContainsFold(opts.Filter),
+					entTask.PlanIDContainsFold(opts.Filter),
+					entTask.CreatedByActorIDContainsFold(opts.Filter),
+					entTask.AssignedToActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

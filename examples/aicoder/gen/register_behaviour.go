@@ -45,8 +45,10 @@ func registerBehaviour(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entBehaviour.Or(
+					entBehaviour.IDContainsFold(opts.Filter),
+					entBehaviour.ProjectIDContainsFold(opts.Filter),
 					entBehaviour.NameContainsFold(opts.Filter),
-					entBehaviour.BodyContainsFold(opts.Filter),
+					entBehaviour.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

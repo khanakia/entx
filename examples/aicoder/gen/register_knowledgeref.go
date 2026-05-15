@@ -36,6 +36,19 @@ func registerKnowledgeRef(app *runtime.App, client *ent.Client) {
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.KnowledgeRef, int, error) {
 			q := client.KnowledgeRef.Query()
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entKnowledgeRef.Or(
+					entKnowledgeRef.IDContainsFold(opts.Filter),
+					entKnowledgeRef.SrcTableContainsFold(opts.Filter),
+					entKnowledgeRef.SrcIDContainsFold(opts.Filter),
+					entKnowledgeRef.DstTableContainsFold(opts.Filter),
+					entKnowledgeRef.DstIDContainsFold(opts.Filter),
+					entKnowledgeRef.RelationContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

@@ -45,7 +45,10 @@ func registerTastePref(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTastePref.Or(
-					entTastePref.BodyContainsFold(opts.Filter),
+					entTastePref.IDContainsFold(opts.Filter),
+					entTastePref.ProjectIDContainsFold(opts.Filter),
+					entTastePref.ScopeContainsFold(opts.Filter),
+					entTastePref.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -63,7 +63,12 @@ type tableView struct {
 	// Row-selection set (driven by space / V / * / 0; consumed by `y`).
 	selection  *selectionSet
 	selAnchor  int  // V-range anchor data-row index; -1 = unset
-	showRowNum bool // `#` toggles a 1-based index prefix in column 0
+	showRowNum    bool // `#` toggles a 1-based index prefix in column 0
+	statusVisible bool // `B` collapses the status bar
+	// idFilter, when non-nil, restricts rows to this set — used by the
+	// master-detail split so the detail table shows only the selected
+	// master row's children.
+	idFilter map[string]bool
 }
 
 // state captures the current view state for handoff to the browser view
@@ -144,6 +149,15 @@ func (t *tableView) focusID(id string) {
 // colOffset is 1 when the dedicated row-number column is shown (it
 // occupies table column 0), else 0. Every data-column index in the
 // table is `colsIndex + colOffset()`.
+func (t *tableView) toggleStatus() {
+	t.statusVisible = !t.statusVisible
+	h := statusBarHeight
+	if !t.statusVisible {
+		h = 0
+	}
+	t.root.ResizeItem(t.stat, h, 0)
+}
+
 func (t *tableView) colOffset() int {
 	if t.showRowNum {
 		return 1
@@ -206,7 +220,8 @@ func newTableView(app *App, spec *anySpec) *tableView {
 
 	t.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(t.table, 0, 1, true).
-		AddItem(t.stat, 1, 0, false)
+		AddItem(t.stat, statusBarHeight, 0, false)
+	t.statusVisible = true
 
 	t.table.SetSelectedFunc(func(int, int) { t.openPreviewOverlay() })
 	t.table.SetInputCapture(t.keyCapture)
@@ -236,6 +251,18 @@ func (t *tableView) refresh() {
 		t.table.SetCell(0, 0, tview.NewTableCell("[red]error: "+err.Error()).SetTextColor(tcell.ColorRed))
 		t.updateStatus(err.Error())
 		return
+	}
+	// Master-detail: when this table is the detail pane, restrict to
+	// the parent's child IDs (in-memory, like browser.idFilter).
+	if t.idFilter != nil {
+		filtered := rows[:0:0]
+		for _, r := range rows {
+			if t.idFilter[r.ID] {
+				filtered = append(filtered, r)
+			}
+		}
+		rows = filtered
+		total = len(rows)
 	}
 
 	// Snapshot cursor + scroll position so a refresh (sort / filter /
@@ -369,6 +396,15 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case 'i':
 		t.app.openKindInfo(t.spec)
+		return nil
+	case 'm':
+		// Open the two-pane master-detail split (works from table view
+		// too — no need to `v` back to list first).
+		if len(t.spec.detailEdges) == 0 {
+			t.updateStatus("no detail edge — add enttui.DetailEdge{Edge:\"<edge>\"} to the schema")
+			return nil
+		}
+		t.app.pushMasterDetail(t.spec)
 		return nil
 	case '#':
 		// Capture the focused DATA column before the offset changes so
@@ -509,9 +545,13 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	}
 	switch ev.Key() {
 	case tcell.KeyCtrlU:
-		if t.filter != "" {
+		// Clear ALL filtering — substring + condition-builder.
+		if t.filter != "" || len(t.colFilters) > 0 {
 			t.filter = ""
+			t.colFilters = nil
+			t.page = 0
 			t.refresh()
+			t.updateStatus("filters cleared")
 		}
 		return nil
 	case tcell.KeyEnter:

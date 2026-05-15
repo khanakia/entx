@@ -98,6 +98,27 @@ func annotRelatedColumns(annots map[string]any) []struct{ Edge, Field, Label str
 	return out
 }
 
+// annotDetailEdges reads enttui.DetailEdge{Edge:"...", Edges:[...]} →
+// the combined ordered list of edge names (Edge first, then Edges).
+func annotDetailEdges(annots map[string]any) []string {
+	m, ok := annotMap(annots, "EntTUI.DetailEdge")
+	if !ok {
+		return nil
+	}
+	var out []string
+	if s, _ := m["Edge"].(string); s != "" {
+		out = append(out, s)
+	}
+	if raw, ok := m["Edges"].([]any); ok {
+		for _, v := range raw {
+			if s, ok := v.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
 // annotStringMap reads a map[string]string field — used by enttui.Chip
 // where the value is a value→tone mapping.
 //

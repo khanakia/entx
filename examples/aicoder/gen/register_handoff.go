@@ -45,7 +45,11 @@ func registerHandoff(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entHandoff.Or(
-					entHandoff.BodyContainsFold(opts.Filter),
+					entHandoff.IDContainsFold(opts.Filter),
+					entHandoff.ProjectIDContainsFold(opts.Filter),
+					entHandoff.FromActorIDContainsFold(opts.Filter),
+					entHandoff.ToActorIDContainsFold(opts.Filter),
+					entHandoff.StatusStrContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

@@ -36,6 +36,16 @@ func registerActor(app *runtime.App, client *ent.Client) {
 
 		Fetch: func(ctx context.Context, opts runtime.ListOpts) ([]*ent.Actor, int, error) {
 			q := client.Actor.Query()
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entActor.Or(
+					entActor.IDContainsFold(opts.Filter),
+					entActor.DisplayNameContainsFold(opts.Filter),
+					entActor.StableKeyContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

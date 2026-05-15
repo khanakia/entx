@@ -47,8 +47,14 @@ func registerHotfix(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entHotfix.Or(
+					entHotfix.IDContainsFold(opts.Filter),
+					entHotfix.SourceKindContainsFold(opts.Filter),
+					entHotfix.SourceRefContainsFold(opts.Filter),
+					entHotfix.ProjectIDContainsFold(opts.Filter),
+					entHotfix.RepoIDContainsFold(opts.Filter),
 					entHotfix.TitleContainsFold(opts.Filter),
-					entHotfix.BodyContainsFold(opts.Filter),
+					entHotfix.SupersededByIDContainsFold(opts.Filter),
+					entHotfix.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

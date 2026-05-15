@@ -45,7 +45,9 @@ func registerActivityArchive(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entActivityArchive.Or(
-					entActivityArchive.BodyContainsFold(opts.Filter),
+					entActivityArchive.IDContainsFold(opts.Filter),
+					entActivityArchive.ProjectIDContainsFold(opts.Filter),
+					entActivityArchive.KindContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

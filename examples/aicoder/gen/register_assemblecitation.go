@@ -41,6 +41,18 @@ func registerAssembleCitation(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entAssembleCitation.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entAssembleCitation.Or(
+					entAssembleCitation.IDContainsFold(opts.Filter),
+					entAssembleCitation.ProjectIDContainsFold(opts.Filter),
+					entAssembleCitation.AssembleRunIDContainsFold(opts.Filter),
+					entAssembleCitation.EntityTableContainsFold(opts.Filter),
+					entAssembleCitation.EntityIDContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

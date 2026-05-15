@@ -45,9 +45,11 @@ func registerPrompt(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entPrompt.Or(
+					entPrompt.IDContainsFold(opts.Filter),
+					entPrompt.ProjectIDContainsFold(opts.Filter),
 					entPrompt.NameContainsFold(opts.Filter),
-					entPrompt.DescriptionContainsFold(opts.Filter),
-					entPrompt.BodyContainsFold(opts.Filter),
+					entPrompt.ArgsSchemaContainsFold(opts.Filter),
+					entPrompt.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

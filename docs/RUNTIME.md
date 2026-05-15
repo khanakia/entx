@@ -18,6 +18,7 @@ enttui/runtime/
 ├── form.go        edit / create form + delete confirm modals
 ├── selection.go   row selection set, bulk copy, full export, format chooser
 ├── capabilities.go F (all-kinds matrix) + i (this-view card)
+├── masterdetail.go m — two-pane split, tabbed when >1 DetailEdge
 ├── preview.go     text/template runners for preview + status
 ├── theme.go       tview.Styles overrides + tone → tcell color mapping
 └── templates/
@@ -168,6 +169,19 @@ Two read-only overlays, both built from `App.capRows()` (iterates `kindListSorte
 - **`i` → `openKindInfo(spec)`**: single-kind card. Lists EVERY flag (on and off) — off ones carry the `enttui.*{}` annotation to add. Sourced from the same spec fields; no separate state. `F` from the card escalates to the matrix.
 
 Neither view mutates anything — pure introspection over the registry.
+
+## Master-detail split  (`masterdetail.go`)
+
+`m` → `App.pushMasterDetail(spec)` when `spec.detailEdges` is non-empty. Builds a `masterDetailView`:
+
+- `master *tableView` (master kind, full reuse) on top.
+- One `mdTab` per detail edge. Each tab's child `*tableView` is built **lazily** on first activation — the child kind is unknown until `edge.resolveDrill` runs once (different edges may target different kinds). A `slot` Flex holds the active tab's pane; `tabBar` TextView shows `[ a | b ]` with the active one highlighted.
+- `master.table.SetSelectionChangedFunc` → `syncActive(row)`: re-resolves the active tab's edge for that master row, sets the child table's `idFilter`, refreshes it. Inactive tabs are stale until switched to (avoids N fetches per cursor move).
+- `wrapKeys` layers split shortcuts over each table's own `keyCapture`: `tab`/`backtab` → `toggleFocus`, `]`/`[` → `activateTab(±1)`, `m` → exit (pop + `pushBrowser`). Everything else delegates to the wrapped `keyCapture`, so the focused pane keeps all its native shortcuts.
+- `tableView.idFilter` (added for this) post-filters fetched rows in-memory, same pattern as `browser.idFilter`.
+- The page registers the **master** instance, so the per-kind state cache + sidebar sync key off it.
+
+Single-edge specs (`DetailEdge{Edge:"x"}`) produce one tab with no visible tab-cycling cost — same code path, `len(tabs)==1`.
 
 ## Per-kind state cache  (`app.kindState`)
 

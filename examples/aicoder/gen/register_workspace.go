@@ -45,8 +45,9 @@ func registerWorkspace(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entWorkspace.Or(
+					entWorkspace.IDContainsFold(opts.Filter),
+					entWorkspace.ProjectIDContainsFold(opts.Filter),
 					entWorkspace.NameContainsFold(opts.Filter),
-					entWorkspace.BodyContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

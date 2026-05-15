@@ -41,6 +41,19 @@ func registerReminder(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entReminder.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entReminder.Or(
+					entReminder.IDContainsFold(opts.Filter),
+					entReminder.ProjectIDContainsFold(opts.Filter),
+					entReminder.TargetTableContainsFold(opts.Filter),
+					entReminder.TargetIDContainsFold(opts.Filter),
+					entReminder.MessageContainsFold(opts.Filter),
+					entReminder.CreatedByActorIDContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.

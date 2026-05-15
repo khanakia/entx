@@ -45,8 +45,11 @@ func registerSuggestion(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entSuggestion.Or(
+					entSuggestion.IDContainsFold(opts.Filter),
+					entSuggestion.ProjectIDContainsFold(opts.Filter),
 					entSuggestion.TitleContainsFold(opts.Filter),
-					entSuggestion.BodyContainsFold(opts.Filter),
+					entSuggestion.StatusStrContainsFold(opts.Filter),
+					entSuggestion.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

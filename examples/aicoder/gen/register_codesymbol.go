@@ -46,7 +46,12 @@ func registerCodeSymbol(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entCodeSymbol.Or(
+					entCodeSymbol.IDContainsFold(opts.Filter),
+					entCodeSymbol.ProjectIDContainsFold(opts.Filter),
+					entCodeSymbol.CodeFileIDContainsFold(opts.Filter),
 					entCodeSymbol.NameContainsFold(opts.Filter),
+					entCodeSymbol.KindContainsFold(opts.Filter),
+					entCodeSymbol.SignatureContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

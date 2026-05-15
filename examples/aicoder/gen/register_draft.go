@@ -41,7 +41,10 @@ func registerDraft(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entDraft.Or(
-					entDraft.BodyContainsFold(opts.Filter),
+					entDraft.IDContainsFold(opts.Filter),
+					entDraft.TargetTableContainsFold(opts.Filter),
+					entDraft.TargetIDContainsFold(opts.Filter),
+					entDraft.ActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

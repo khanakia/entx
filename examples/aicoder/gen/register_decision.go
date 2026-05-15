@@ -47,8 +47,14 @@ func registerDecision(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entDecision.Or(
+					entDecision.IDContainsFold(opts.Filter),
+					entDecision.SourceKindContainsFold(opts.Filter),
+					entDecision.SourceRefContainsFold(opts.Filter),
+					entDecision.ProjectIDContainsFold(opts.Filter),
+					entDecision.RepoIDContainsFold(opts.Filter),
 					entDecision.TitleContainsFold(opts.Filter),
-					entDecision.BodyContainsFold(opts.Filter),
+					entDecision.SupersededByIDContainsFold(opts.Filter),
+					entDecision.CreatedByActorIDContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

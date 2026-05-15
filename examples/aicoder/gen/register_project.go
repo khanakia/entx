@@ -27,6 +27,7 @@ func registerProject(app *runtime.App, client *ent.Client) {
 		ShowEdgeCounts: true,
 		AllowBulkCopy:  false,
 		AllowExport:    false,
+		DetailEdges:    []string{"repos", "memories"},
 		Default: runtime.DefaultView{
 			SortField: "created_at",
 			SortDir:   runtime.Desc,
@@ -40,7 +41,9 @@ func registerProject(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entProject.Or(
+					entProject.IDContainsFold(opts.Filter),
 					entProject.NameContainsFold(opts.Filter),
+					entProject.OriginURLContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

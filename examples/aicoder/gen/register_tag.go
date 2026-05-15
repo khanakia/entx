@@ -45,7 +45,10 @@ func registerTag(app *runtime.App, client *ent.Client) {
 			// in the table view but both can coexist.
 			if opts.Filter != "" {
 				q = q.Where(entTag.Or(
+					entTag.IDContainsFold(opts.Filter),
+					entTag.ProjectIDContainsFold(opts.Filter),
 					entTag.NameContainsFold(opts.Filter),
+					entTag.ColorContainsFold(opts.Filter),
 				))
 			}
 			// Phase E — structured per-column filters. AND-composed.

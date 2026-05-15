@@ -41,6 +41,19 @@ func registerCodeFile(app *runtime.App, client *ent.Client) {
 			if v := opts.Scope["project_id"]; v != "" {
 				q = q.Where(entCodeFile.ProjectID(v))
 			}
+			// Legacy substring filter — used by the list+preview browser's
+			// global `/` prompt. Phase E (Filters slice) supersedes this
+			// in the table view but both can coexist.
+			if opts.Filter != "" {
+				q = q.Where(entCodeFile.Or(
+					entCodeFile.IDContainsFold(opts.Filter),
+					entCodeFile.ProjectIDContainsFold(opts.Filter),
+					entCodeFile.RepoIDContainsFold(opts.Filter),
+					entCodeFile.PathContainsFold(opts.Filter),
+					entCodeFile.LanguageContainsFold(opts.Filter),
+					entCodeFile.ContentShaContainsFold(opts.Filter),
+				))
+			}
 			// Phase E — structured per-column filters. AND-composed.
 			// Unsupported operators for a given field type fall through
 			// silently rather than erroring — keeps the UI forgiving.
