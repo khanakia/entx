@@ -50,12 +50,12 @@ type modalHost struct {
 // table cursor: append (asc) → flip (desc) → remove. If the focused
 // column isn't Sortable, nothing happens.
 func (t *tableView) cycleSortOnFocused() {
-	_, col := t.table.GetSelection()
 	cols := t.visibleColumns()
-	if col < 0 || col >= len(cols) {
+	idx := t.focusedDataCol()
+	if idx < 0 || idx >= len(cols) {
 		return
 	}
-	c := cols[col]
+	c := cols[idx]
 	if !c.sortable {
 		t.updateStatus("column not sortable")
 		return

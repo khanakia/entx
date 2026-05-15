@@ -132,7 +132,7 @@ func (t *tableView) applyState(s viewState) {
 func (t *tableView) focusID(id string) {
 	for i, r := range t.rows {
 		if r.ID == id {
-			t.table.Select(i+1, 0) // +1 — row 0 is the header
+			t.table.Select(i+1, t.colOffset()) // +1 header; skip the # col
 			return
 		}
 	}
@@ -141,6 +141,31 @@ func (t *tableView) focusID(id string) {
 // newTableView builds the widget tree for an entity in table mode. Does
 // NOT push itself to the Pages stack — the caller does. Refresh runs once
 // before the function returns so cells are populated when shown.
+// colOffset is 1 when the dedicated row-number column is shown (it
+// occupies table column 0), else 0. Every data-column index in the
+// table is `colsIndex + colOffset()`.
+func (t *tableView) colOffset() int {
+	if t.showRowNum {
+		return 1
+	}
+	return 0
+}
+
+// focusedDataCol maps the table's selected column back to an index into
+// the visibleColumns slice, accounting for the row-number column. Always
+// clamped to a valid index (never negative, never past the end).
+func (t *tableView) focusedDataCol() int {
+	_, c := t.table.GetSelection()
+	i := c - t.colOffset()
+	if i < 0 {
+		return 0
+	}
+	if n := len(t.visibleColumns()); n > 0 && i >= n {
+		return n - 1
+	}
+	return i
+}
+
 func newTableView(app *App, spec *anySpec) *tableView {
 	ps := spec.pageSize
 	if ps <= 0 {
@@ -229,6 +254,14 @@ func (t *tableView) refresh() {
 	// header never accepts focus; ↑/↓ navigation skips straight past it
 	// onto data rows. Sort-stack position indicator appended when active.
 	cols := t.visibleColumns()
+	off := t.colOffset()
+	if off == 1 {
+		// Dedicated, non-selectable row-number / selection column.
+		t.table.SetCell(0, 0, tview.NewTableCell("#").
+			SetTextColor(tcell.ColorYellow).
+			SetAttributes(tcell.AttrBold).
+			SetSelectable(false))
+	}
 	for c, col := range cols {
 		label := col.label
 		for i, k := range t.sortStack {
@@ -246,21 +279,30 @@ func (t *tableView) refresh() {
 			SetAttributes(tcell.AttrBold).
 			SetSelectable(false).
 			SetExpansion(1)
-		t.table.SetCell(0, c, cell)
+		t.table.SetCell(0, c+off, cell)
 	}
 
 	// Data rows.
+	width := len(fmt.Sprintf("%d", len(rows)))
 	for r, row := range rows {
+		if off == 1 {
+			// Row number + selection marker live here, OUT of the id
+			// column. Non-selectable so the cursor skips it.
+			num := fmt.Sprintf("%*d", width, r+1)
+			if t.selection.has(row.ID) {
+				num = "[yellow]✓[-]" + num
+			}
+			t.table.SetCell(r+1, 0, tview.NewTableCell(num).
+				SetTextColor(tcell.ColorGray).
+				SetSelectable(false))
+		}
 		for c, col := range cols {
 			v := row.Columns[col.key]
 			label := truncate(v, 60)
-			// Column-0 gets the row-number prefix + selection marker.
-			// Neither changes the value — only the rendered cell.
-			if c == 0 {
-				if t.selection.has(row.ID) {
-					label = "[yellow]✓[-] " + label
-				}
-				label = rowNumPrefix(t.showRowNum, r, len(rows)) + label
+			// When the # column is off, the selection ✓ still needs a
+			// home — prefix the first data column like before.
+			if off == 0 && c == 0 && t.selection.has(row.ID) {
+				label = "[yellow]✓[-] " + label
 			}
 			cell := tview.NewTableCell(label).SetExpansion(1)
 			if col.chip != nil {
@@ -268,7 +310,7 @@ func (t *tableView) refresh() {
 					cell.SetTextColor(tcellColor(tone))
 				}
 			}
-			t.table.SetCell(r+1, c, cell)
+			t.table.SetCell(r+1, c+off, cell)
 		}
 	}
 
@@ -283,11 +325,13 @@ func (t *tableView) refresh() {
 		if selRow > len(rows) {
 			selRow = len(rows)
 		}
-		if selCol < 0 {
-			selCol = 0
+		// Valid data columns live in [off, off+len(cols)-1]; column 0
+		// is the non-selectable # column when on.
+		if selCol < off {
+			selCol = off
 		}
-		if selCol >= len(cols) {
-			selCol = len(cols) - 1
+		if selCol >= off+len(cols) {
+			selCol = off + len(cols) - 1
 		}
 		t.table.Select(selRow, selCol)
 		t.table.SetOffset(rowOff, colOff)
@@ -755,9 +799,8 @@ func (t *tableView) openBulkCopy() {
 	}
 	cols := t.visibleColumns()
 	focused := ""
-	_, c := t.table.GetSelection()
-	if c >= 0 && c < len(cols) {
-		focused = cols[c].key
+	if i := t.focusedDataCol(); i < len(cols) {
+		focused = cols[i].key
 	}
 	openFormatChooser(t.app, focused, func(choice formatChoice) {
 		text, err := formatRows(rows, cols, focused, choice)

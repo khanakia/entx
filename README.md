@@ -374,7 +374,7 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 | **`ctrl+f / pgdn / space`** | Scroll preview down half page              |
 | **`ctrl+b / pgup`** | Scroll preview up half page                        |
 
-**Row numbers + jump:** every row carries a gray 1-based index (`#` toggles it off/on, default on). `:` opens a goto prompt — type a number, or `$`/`last`, or `1`/`first`; out-of-range clamps. Independent of `g`/`G` (first/last *page*) and `n`/`p` (page nav).
+**Row numbers + jump:** every row carries a gray 1-based index — in the list it's a label prefix; in the table it's a dedicated non-selectable `#` column (not jammed into the id cell). `#` toggles it off/on (default on). `:` opens a goto prompt — type a number, or `$`/`last`, or `1`/`first`; out-of-range clamps. Independent of `g`/`G` (first/last *page*) and `n`/`p` (page nav).
 
 **Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live with `M`.
 

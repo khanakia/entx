@@ -171,7 +171,10 @@ Neither view mutates anything — pure introspection over the registry.
 
 ## Row numbers + goto  (`selection.go` / browser / table)
 
-`showRowNum` (default true) on both views. `rowNumPrefix(show, idx, total)` returns a gray right-aligned `%*d` prefix sized to the page total — browser prepends it to the list label, table to the column-0 cell (composed with the ✓ selection marker; neither alters the underlying value). `#` toggles.
+`showRowNum` (default true) on both views; `#` toggles.
+
+- **Browser**: `rowNumPrefix(show, idx, total)` — gray right-aligned `%*d` prefix prepended to the list label (composed with the ✓ selection marker).
+- **Table**: a **dedicated, non-selectable column 0** (`#`) — NOT a prefix inside the id cell. `tableView.colOffset()` returns 1 when on, 0 when off; every data-column index is `colsIndex + colOffset()`. `focusedDataCol()` maps the table's selected column back to a `visibleColumns` index (clamped). Sort-on-column, bulk-copy focused column, cursor restore, and `v`-toggle selection all route through these so they stay correct regardless of the `#` column. When off, the ✓ marker falls back to prefixing the first data column.
 
 `openGotoRow(app, n, jump)` is a tiny input modal. Parses `$`/`last`/`end` → `n-1`, `^`/`first`/`1` → `0`, integers → 1-based, anything else ignored; clamps to `[0,n-1]`. Browser passes `b.list.SetCurrentItem`; table passes `t.table.Select(idx+1, col)` (preserving the focused column, +1 to skip the header row). Bound to `:`. Independent of the existing `g`/`G` page-first/last + `n`/`p` page nav.
 

@@ -82,8 +82,9 @@ type browser struct {
 }
 
 // rowNumPrefix returns a right-aligned "<n> " prefix (width sized to
-// the page total) or "" when row numbers are off. Shared by browser +
-// table so the formatting matches.
+// the page total) or "" when row numbers are off. Used by the BROWSER
+// (list label prefix). The table renders the index as a dedicated
+// non-selectable column instead — see tableView.colOffset.
 func rowNumPrefix(show bool, idx, total int) string {
 	if !show {
 		return ""
