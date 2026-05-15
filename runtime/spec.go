@@ -188,6 +188,12 @@ type EntitySpec[T any] struct {
 	Display string // pretty label for the picker
 	Group   string // picker group, e.g. "workflow"
 	Icon    string // single rune, e.g. "✓"
+	// LabelKey / BodyKey / IDKey are resolved at codegen (annotation
+	// enttui.AsTitle / AsBody first, name convention as fallback). The
+	// runtime does NO field-name guessing — it reads these directly.
+	LabelKey string // column key used as the row label
+	BodyKey  string // column key rendered as the preview body ("" = none)
+	IDKey    string // column key holding the stable row id (any type)
 
 	// Behavior
 	PageSize       int  // initial page size; runtime caps at 1000

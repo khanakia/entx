@@ -335,7 +335,7 @@ func (b *browser) refresh() {
 		// Generic label: use whichever common-name column the spec
 		// happens to have. None of these are required — schemas with
 		// none fall back to the id, which always exists.
-		label := rowNumPrefix(b.showRowNum, i, len(rows)) + rowLabel(r)
+		label := rowNumPrefix(b.showRowNum, i, len(rows)) + rowLabel(r, b.spec.labelKey)
 		if b.selection.has(r.ID) {
 			label = "[yellow]✓[-] " + label
 		}
@@ -379,7 +379,7 @@ func (b *browser) refreshPreview() {
 		if v == "" {
 			continue
 		}
-		if isBodyColumnKey(c.key) {
+		if c.key != "" && c.key == b.spec.bodyKey {
 			data.Body = v
 			continue
 		}
@@ -838,7 +838,7 @@ func (b *browser) refreshDisplayOnly() {
 	cur := b.list.GetCurrentItem()
 	b.list.Clear()
 	for i, r := range b.rows {
-		label := rowNumPrefix(b.showRowNum, i, len(b.rows)) + rowLabel(r)
+		label := rowNumPrefix(b.showRowNum, i, len(b.rows)) + rowLabel(r, b.spec.labelKey)
 		if b.selection.has(r.ID) {
 			label = "[yellow]✓[-] " + label
 		}

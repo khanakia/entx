@@ -16,17 +16,22 @@ Each annotation is a small Go struct embedding `schema.Annotation`. ent persists
 
 ## Schema-level annotations
 
-### `Browse()`
+### `Browse{}`
 
-Opt this schema into the TUI.
+Force-include an entity the internal-table convention would otherwise
+skip. The generator skips obvious infra tables by name
+(`SchemaMigration`, `AuditLog`, `QueryLog`, `PiiPattern`, `*_fts`,
+`*shadow*`) — that's a **default, not a hardcode**: `enttui.Browse{}`
+on the schema overrides it so you *can* browse e.g. `audit_log`.
 
 ```go
-func (Post) Annotations() []schema.Annotation {
-    return []schema.Annotation{enttui.Browse()}
+func (AuditLog) Annotations() []schema.Annotation {
+    return []schema.Annotation{enttui.Browse{}}
 }
 ```
 
-Today every non-internal ent type with an ID is browsable, so `Browse()` is reserved for a future "exclude unless explicitly marked" mode. Including it now is a no-op.
+Exclusion the other way is config-driven: `enttui.Skip("X")` /
+`--skip X`. Non-internal entities are browsable with no annotation.
 
 ### `Display(string)`
 
@@ -238,12 +243,34 @@ field.String("title").
     Annotations(enttui.Sortable(), enttui.Filterable(), enttui.Editable{}),
 ```
 
-> **Note:** `AsTitle()` / `AsBody()` / `AsStatus()` were removed. The
-> library no longer has a hero-field concept — every field is just a
-> column, and the row label / preview body are picked by convention
-> (`title` → `name` → `display_name` → `id` for the label;
-> `body` / `description` / `content` rendered as the preview body).
-> See [CONVENTIONS.md](CONVENTIONS.md).
+### `AsTitle{}`
+
+Pins this field as the **row label** (list label / table-overlay title /
+master-detail child label / ref-picker label). Resolved at codegen into
+`spec.LabelKey` — the runtime never name-guesses. Without it, the
+convention fallback picks the first of `title → name → display_name →
+label → summary`, then the id.
+
+```go
+field.String("headline").Annotations(enttui.AsTitle{}),
+```
+
+### `AsBody{}`
+
+Pins this field as the **preview body** (the prose block under the
+field list; also Hidden from the table by default). Codegen →
+`spec.BodyKey`. Fallback when unset: first of `body → description →
+content`, else no body block.
+
+```go
+field.Text("content").Annotations(enttui.AsBody{}),
+```
+
+> Note: there is no hardcoded "id" column either — the runtime uses the
+> schema's actual ID field (`spec.IDKey`), whatever its name or type
+> (string / int / uuid); the generated accessor stringifies it.
+> `AsStatus{}` is declared but not yet wired (status coloring is via
+> `enttui.Chip` on the field).
 
 ### `Sortable()`
 
@@ -317,22 +344,25 @@ Attached to an edge builder:
 
 ```go
 edge.From("project", Project.Type).Ref("tasks").Unique().
-    Annotations(enttui.Upward("p")),
+    Annotations(enttui.Upward{Trigger: "p"}),
 ```
 
-### `Upward(trigger)`
+### `Upward{Trigger:"x"}`
 
-Marks this `Unique()` edge as breadcrumb-style (jumps to a single parent row). `trigger` is the key the user presses on a list row to follow it.
+Pins the keybinding for this `Unique()` (breadcrumb) edge. **Honored by
+codegen** — the generated `EdgeSpec.Trigger` is exactly your letter
+(skipped only if already taken by another edge on the same type). If
+omitted, a free letter is auto-picked from the edge name.
 
-If omitted, the generator auto-picks a trigger letter from the edge name.
+### `Drill{Trigger:"x"}`
 
-### `Drill(trigger)`
-
-Marks this non-unique edge as drillable (opens a new browser scoped to those rows). `trigger` is usually a single letter (`"c"` for comments, `"r"` for replies, etc.) — `"enter"` no longer has special meaning.
+Pins the key for this non-unique (drill) edge. Same precedence: your
+letter wins, else auto-pick. `"enter"` has no special meaning — every
+edge is a visible single-letter trigger; `enter` opens the preview.
 
 ```go
 edge.To("comments", Comment.Type).
-    Annotations(enttui.Drill("c")),
+    Annotations(enttui.Drill{Trigger: "c"}),
 ```
 
 ## Example: fully-annotated schema
@@ -366,8 +396,10 @@ func (Post) Annotations() []schema.Annotation {
 func (Post) Fields() []ent.Field {
     return []ent.Field{
         field.String("id").Unique().Immutable(),
-        field.String("title").NotEmpty(),
-        field.Text("body").Optional().Nillable(),
+        field.String("title").NotEmpty().
+            Annotations(enttui.AsTitle{}), // explicit row label
+        field.Text("body").Optional().Nillable().
+            Annotations(enttui.AsBody{}),  // explicit preview body
         field.Enum("status").Values("draft", "published", "archived").
             Annotations(
                 enttui.Chip(map[string]string{

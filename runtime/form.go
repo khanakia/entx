@@ -132,7 +132,7 @@ func openRefPicker(app *App, refKind string, pick func(id, label string)) {
 		// required fields).
 		list.AddItem("[gray](clear)[-]", "", 0, nil)
 		for _, r := range shown {
-			list.AddItem(rowLabel(r), "", 0, nil)
+			list.AddItem(rowLabel(r, cs.labelKey), "", 0, nil)
 		}
 		list.SetCurrentItem(0)
 	}
@@ -147,7 +147,7 @@ func openRefPicker(app *App, refKind string, pick func(id, label string)) {
 			return
 		}
 		r := shown[i-1]
-		pick(r.ID, rowLabel(r))
+		pick(r.ID, rowLabel(r, cs.labelKey))
 		close()
 	}
 
@@ -158,7 +158,7 @@ func openRefPicker(app *App, refKind string, pick func(id, label string)) {
 		} else {
 			shown = shown[:0]
 			for _, r := range rows {
-				if strings.Contains(strings.ToLower(rowLabel(r)+" "+r.ID), q) {
+				if strings.Contains(strings.ToLower(rowLabel(r, cs.labelKey)+" "+r.ID), q) {
 					shown = append(shown, r)
 				}
 			}

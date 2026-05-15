@@ -7,21 +7,17 @@
 An ent.Type is **browsable** if and only if:
 
 1. It has an `ID` field (every ent type does unless explicitly disabled).
-2. It's not on the **internal blocklist** (see below).
-3. It's not in the user's `--skip` flag.
+2. It's not on the internal blocklist **OR** it carries `enttui.Browse{}`.
+3. It's not in the user's `enttui.Skip(...)` / `--skip` config.
 
 Scope filtering is independent of inclusion: pass `Config.ScopeFields` (CLI: `--scope project_id,tenant_id`) and the codegen emits one predicate per match for whichever scope fields each entity actually has. Entities without those fields stay browsable, just unscoped — driven at runtime via `app.SetScope(key, value)`.
 
-Internal blocklist (skipped automatically):
+Internal blocklist (skipped by default — a convention, fully overridable):
 
-- `SchemaMigration`
-- `AuditLog`
-- `QueryLog`
-- `PiiPattern`
-- Anything ending in `_fts` (FTS5 shadow tables)
-- Anything containing `shadow` in the name
+- `SchemaMigration`, `AuditLog`, `QueryLog`, `PiiPattern`
+- `*_fts` (FTS5 shadow tables), `*shadow*`
 
-Override the blocklist behavior with `--skip Type1,Type2` for additional exclusions; **there is no opt-back-in flag yet** — if you need a blocklisted type, edit the generator's `isInternal()` and rebuild.
+**Opt back in** with `enttui.Browse{}` on the schema (no codegen edit needed). **Opt out** of anything else with `enttui.Skip("X")` / `--skip X`.
 
 ## Display defaults
 
@@ -32,40 +28,41 @@ Override the blocklist behavior with `--skip Type1,Type2` for additional exclusi
 | `Group`         | `"data"` (single group for everything until annotation support lands) |
 | `Icon`          | `"•"` (placeholder) |
 
-## Hero accessors
+## Label / body / id resolution
 
-These three closures are what `runtime.Row.Title` / `.Body` / `.Status` are populated from. They drive the list pane label, the preview body, and the colored chip.
+There is **no runtime field-name guessing**. Codegen resolves three
+column keys and emits them onto the spec (`LabelKey`, `BodyKey`,
+`IDKey`); the runtime just reads them.
 
-### Title
+### Row label (`spec.LabelKey`)
 
-First match in field iteration order (which is mixin fields first, then `Fields()` order):
+1. The field annotated **`enttui.AsTitle{}`** wins.
+2. Else convention fallback, first of: `title → name → display_name →
+   label → summary`.
+3. Else the id column.
 
-1. A field named **`title`**.
-2. A field named **`name`**.
-3. A field named **`display_name`**.
+### Preview body (`spec.BodyKey`)
 
-If none match → no Title accessor is emitted; list rows fall back to ID.
+1. The field annotated **`enttui.AsBody{}`** wins.
+2. Else convention fallback, first of: `body → description → content`.
+3. Else empty — preview shows only the field list.
 
-### Body
+Body-shaped columns are `Hidden` in the table by default (wide prose
+makes bad cells) but still present in `Row.Columns` for the preview and
+the `J` JSON copy.
 
-First match:
+### Row id (`spec.IDKey`)
 
-1. **`body`**
-2. **`description`**
-3. **`content`**
-
-If none → no Body accessor; preview shows only fields.
+The schema's **actual ID field** (`gen.Type.ID`) — whatever its name
+(`id`, `uuid`, `pk`, …) and type (string / int / uuid). The generated
+accessor stringifies non-string ids via `fmt.Sprintf`. No literal
+`"id"` anywhere in the runtime.
 
 ### Status
 
-First **enum-typed** field matching:
-
-1. **`status`**
-2. **`severity`**
-3. **`kind`**
-4. **`state`**
-
-The accessor returns `string(r.Field)`. Color chips happen only if you've also added `enttui.Chip(...)` to the field (annotations not wired yet) — until then, status appears as plain text.
+`enttui.AsStatus{}` is declared but not yet wired. Status coloring is
+done per-field via `enttui.Chip(map[string]string{...})` on the
+relevant enum/string column.
 
 ## Columns
 
@@ -112,7 +109,7 @@ Every edge whose target Type is itself browsable is included. (Edges to skipped 
 | `e.Unique == true` | `EdgeUpward`. Display: `"→ <TargetDisplay>"`. Triggered by an auto-picked single letter. |
 | `e.Unique == false`| `EdgeDrill`. Display: `<TargetDisplay>`. First non-unique edge claims `enter`. |
 
-Trigger key picking: walk the edge name letter by letter, take the first one that's:
+Trigger key: **`enttui.Upward{Trigger:"x"}` / `Drill{Trigger:"x"}` win** (honored by codegen; skipped only if the letter is already taken on that type). Otherwise auto-pick — walk the edge name letter by letter, take the first that's:
 
 - not reserved (`k`, `q`, `s`, `r`, `h`, `j`, `l`)
 - not already used by another edge on this type
@@ -132,7 +129,7 @@ Generic examples:
 
 ## Page size
 
-Hardcoded `200`. Annotation `enttui.PageSize(N)` will override (M1).
+Default `200`; `enttui.PageSize(N)` overrides per entity.
 
 ## Field-type kind discrimination
 
@@ -149,17 +146,22 @@ The generator's `fieldKind()` reduces every `codegen.Field` to one of:
 | `scalar`    | `int`/`float`/`bool` | `return fmt.Sprintf("%v", r.Foo)` |
 | `scalarPtr` | `*int` etc.      | nil-guard + Sprintf |
 
-The "needs fmt" flag (`em.NeedsFmt`) is computed by walking columns and hero fields — if any of them have kind `scalar` or `scalarPtr`, we import `fmt`; otherwise we don't (avoiding "unused import" errors).
+The "needs fmt" flag (`em.NeedsFmt`) is computed by walking columns — if any has kind `scalar` / `scalarPtr` (incl. an int/uuid id), we import `fmt`.
 
-## What annotations will change (M1)
+## Annotation overrides (all active)
 
-The annotations declared in `enttui/annotation.go` are the future overrides:
+Every convention above is just a default; these annotations override it,
+and the codegen reads them today:
 
-- `enttui.Browse()` → reserved for the future "exclude unless explicitly marked" mode.
-- `enttui.Display("…")`, `Group("…")`, `Icon("…")` → override display labels.
-- `enttui.AsTitle()`, `AsBody()`, `AsStatus()` → override the field-name heuristic (e.g. use `name` even when both `title` and `name` exist).
-- `enttui.Sortable()` / `Filterable()` / `Hidden()` → per-field flags.
-- `enttui.Chip(map[string]string)` → status color map.
-- `enttui.Drill(trigger)` / `Upward(trigger)` → control edge trigger keys, override the first-letter heuristic.
+- `enttui.Browse{}` → force-include an internal-blocklisted entity.
+- `enttui.Display/Group/Icon/PageSize/DefaultView` → identity + display.
+- `enttui.AsTitle{}` / `AsBody{}` → pin the label / preview-body column.
+- `enttui.Sortable()` / `Filterable()` / `Hidden()` / `Editable{}` → per-field flags (`/` quick filter + condition builder + sort + form).
+- `enttui.Chip(map[string]string)` → value→tone coloring.
+- `enttui.Upward{Trigger}` / `Drill{Trigger}` → pin edge keybindings.
+- `enttui.RelatedColumns(...)` (+ `Pick:true`) → cross-table column / ref picker.
+- `enttui.DetailEdge{Edge|Edges}` → master-detail split (`m`).
+- `enttui.AllowCreate{}/AllowDelete{}/AllowBulkCopy{}/AllowExport{}` → enable the corresponding actions.
 
-Until the codegen reads these, drop in conventions only.
+The runtime contains no schema field-name literals — all such decisions
+are resolved at codegen and emitted onto the spec.

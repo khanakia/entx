@@ -587,7 +587,7 @@ func (t *tableView) openPreviewOverlay() {
 		if v == "" {
 			continue
 		}
-		if isBodyColumnKey(c.key) {
+		if c.key != "" && c.key == t.spec.bodyKey {
 			data.Body = v
 			continue
 		}
@@ -616,7 +616,7 @@ func (t *tableView) openPreviewOverlay() {
 		SetWordWrap(true)
 	body.SetText(renderPreview(data))
 	body.SetBorder(true).
-		SetTitle(" " + rowLabel(r) + " ").
+		SetTitle(" " + rowLabel(r, t.spec.labelKey) + " ").
 		SetTitleColor(tcell.ColorYellow).
 		SetBorderColor(tcell.ColorOrange)
 

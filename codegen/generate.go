@@ -73,6 +73,14 @@ type EntityMeta struct {
 	Icon             string
 	PredPkg          string // predicate package name on disk, e.g. "post"
 	PredAlias        string // import alias used in generated file, e.g. "entPost"
+	// LabelKey / BodyKey / IDKey resolve, at codegen time, which column
+	// the runtime should use for the row label, the preview body, and
+	// the stable row id — annotation-first (enttui.AsTitle / AsBody),
+	// falling back to the name convention. The runtime then has ZERO
+	// field-name guessing; it just reads spec.LabelKey etc.
+	LabelKey string
+	BodyKey  string
+	IDKey    string
 	// ScopeFields are the subset of Options.ScopeFields this entity
 	// actually has on its schema. Template emits one predicate per entry.
 	ScopeFields      []ScopeFieldMeta
@@ -337,6 +345,13 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		em.AllowDelete = true
 	}
 
+	// The ID column is whatever ent says the schema's ID field is —
+	// NOT the literal "id". Works for string / int / uuid ids alike;
+	// the generated Get accessor stringifies via fieldKind.
+	if n.ID != nil {
+		em.IDKey = n.ID.Name
+	}
+
 	// Iterate ID field separately — gen.Type stores it on .ID, not in .Fields.
 	allFields := []*gen.Field{}
 	if n.ID != nil {
@@ -346,6 +361,16 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 	for _, f := range allFields {
 		fm := fieldMetaOf(f)
 
+		// Annotation-first label / body selection. enttui.AsTitle on a
+		// field wins outright; enttui.AsBody likewise. Convention is a
+		// fallback applied after the loop only if unset.
+		if hasAnnot(f.Annotations, "EntTUI.AsTitle") {
+			em.LabelKey = f.Name
+		}
+		if hasAnnot(f.Annotations, "EntTUI.AsBody") {
+			em.BodyKey = f.Name
+		}
+
 		// --- Field-level annotation reads (Phase C) ---
 		fm.Sortable = hasAnnot(f.Annotations, "EntTUI.Sortable")
 		fm.Filterable = hasAnnot(f.Annotations, "EntTUI.Filterable")
@@ -354,7 +379,7 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		// "Required" mirrors the schema's notion of must-be-set. ent
 		// exposes this via field.Optional + field.Nillable; a field is
 		// required when it's neither.
-		fm.Required = !f.Optional && !f.Nillable && f.Name != "id"
+		fm.Required = !f.Optional && !f.Nillable && f != n.ID
 		// Enum cast used by the generated form setter. e.g. "entPost.Status".
 		if f.IsEnum() {
 			fm.EnumGoTypeCast = em.PredAlias + "." + fm.GoName
@@ -447,8 +472,25 @@ func extractEntity(n *gen.Type, opts Options, kindByType map[string]string) (Ent
 		return em, false
 	}
 
-	// Skip entities that are clearly internal/shadow.
-	if isInternal(n.Name) {
+	// Convention fallback for label / body — only when the schema
+	// didn't pin them with enttui.AsTitle / enttui.AsBody. Pure
+	// default; every annotation overrides it. The runtime never
+	// name-guesses — it just reads em.LabelKey / em.BodyKey.
+	if em.LabelKey == "" {
+		em.LabelKey = pickByName(allFields, "title", "name", "display_name", "label", "summary")
+	}
+	if em.LabelKey == "" {
+		em.LabelKey = em.IDKey // last resort: the id itself
+	}
+	if em.BodyKey == "" {
+		em.BodyKey = pickByName(allFields, "body", "description", "content")
+	}
+
+	// Internal-table skip is a CONVENTION default, overridable: an
+	// explicit enttui.Browse{} annotation force-includes the entity
+	// (e.g. you DO want to browse audit_log). Exclusion otherwise
+	// stays config-driven via enttui.Skip / --skip.
+	if isInternal(n.Name) && !hasAnnot(n.Annotations, "EntTUI.Browse") {
 		return em, false
 	}
 
@@ -708,11 +750,22 @@ func edgeMetaOf(e *gen.Edge, targetKind string, used map[string]bool) EdgeMeta {
 		em.Kind = "EdgeDrill"
 		em.Display = pluralize(e.Type.Name)
 	}
-	// Every edge gets a single-char letter trigger — no magic "first
-	// drill edge claims enter". With multiple drill edges (TaskList has
-	// tasks + subtasks + comments) the implicit primary was confusing.
-	// Enter always means "open preview"; drill via the visible letter.
-	em.Trigger = pickTrigger(e.Name, used)
+	// Trigger: annotation-first. enttui.Upward{Trigger:"p"} /
+	// enttui.Drill{Trigger:"c"} on the edge pins the key; otherwise
+	// auto-pick a free letter. No magic "first drill claims enter".
+	trig := ""
+	if s, ok := annotString(e.Annotations, "EntTUI.Upward", "Trigger"); ok && s != "" {
+		trig = s
+	}
+	if s, ok := annotString(e.Annotations, "EntTUI.Drill", "Trigger"); ok && s != "" {
+		trig = s
+	}
+	if trig != "" && !used[trig] {
+		used[trig] = true
+		em.Trigger = trig
+	} else {
+		em.Trigger = pickTrigger(e.Name, used)
+	}
 	return em
 }
 
@@ -743,6 +796,21 @@ func pickTrigger(name string, used map[string]bool) string {
 		return key
 	}
 	return "?"
+}
+
+// pickByName returns the first field whose name matches one of the
+// candidates, in candidate order — the convention fallback for label /
+// body when no enttui.AsTitle / AsBody annotation pinned them. Returns
+// "" when nothing matches (caller decides the last resort).
+func pickByName(fields []*gen.Field, candidates ...string) string {
+	for _, c := range candidates {
+		for _, f := range fields {
+			if f.Name == c {
+				return f.Name
+			}
+		}
+	}
+	return ""
 }
 
 func isInternal(name string) bool {

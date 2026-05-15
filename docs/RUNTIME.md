@@ -59,17 +59,25 @@ The **untyped** projection the UI actually renders:
 
 ```go
 type Row struct {
-    ID, Title, Body, Status string
-    CreatedAt, UpdatedAt    time.Time
-    Columns map[string]string  // per-column rendered value
+    ID      string            // = Columns[spec.idKey], stringified
+    Columns map[string]string // per-column rendered value
+    JSON    []byte            // ent-native MarshalJSON (for `J`)
 }
 ```
 
-Produced by `projectRow(spec, t)` at fetch time. The browser/preview never see `T`.
+No hero fields. Produced by `projectRow(spec, t)` at fetch time; the browser/preview never see `T`.
+
+**No runtime field-name guessing.** The runtime never tests `Columns["title"]` / `"body"` / `"id"`. Codegen resolves those once (annotation-first, name convention as fallback) and emits `spec.LabelKey` / `spec.BodyKey` / `spec.IDKey` onto the `*anySpec`. Helpers:
+
+- `rowLabel(r, spec.labelKey)` — list label / titles. Falls back to `r.ID` when the label column is empty.
+- preview-body test is `c.key == spec.bodyKey` (not a name set).
+- `extractID` reads the `spec.IDKey` column — works for any id name/type (the generated accessor stringifies int/uuid via `fmt.Sprintf`).
+
+This is the contract that keeps the library schema-agnostic: every "which field is X" decision is made in codegen and travels as data, never inferred at render time.
 
 ### `*anySpec`  (`registry.go`)
 
-The type-erased shape inside the runtime. Mirrors `EntitySpec[T]` but with string accessors. **The single unsafe seam in enttui.** Generic gymnastics live in `Register[T]` and `projectRow[T]`; everything else operates on `*anySpec`.
+The type-erased shape inside the runtime. Mirrors `EntitySpec[T]` but with string accessors (plus `labelKey`/`bodyKey`/`idKey`/`detailEdges`/…). **The single unsafe seam in enttui.** Generic gymnastics live in `Register[T]` and `projectRow[T]`; everything else operates on `*anySpec`.
 
 ## The App + page stack
 

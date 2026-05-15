@@ -13,10 +13,13 @@ import (
 // rest of the runtime (browser, picker, edge nav) can iterate registered
 // entities without any generic gymnastics.
 type anySpec struct {
-	kind    string
-	display string
-	group   string
-	icon    string
+	kind     string
+	display  string
+	group    string
+	icon     string
+	labelKey string
+	bodyKey  string
+	idKey    string
 
 	pageSize       int
 	multiSort      bool
@@ -211,6 +214,9 @@ func Register[T any](app *App, spec EntitySpec[T]) {
 		display:        spec.Display,
 		group:          spec.Group,
 		icon:           spec.Icon,
+		labelKey:       spec.LabelKey,
+		bodyKey:        spec.BodyKey,
+		idKey:          spec.IDKey,
 		pageSize:       spec.PageSize,
 		multiSort:      spec.MultiSort,
 		showEdgeCounts: spec.ShowEdgeCounts,
@@ -254,38 +260,26 @@ func projectRow[T any](spec EntitySpec[T], r T) Row {
 	return out
 }
 
-// rowLabel returns the best single-line label for a row — preferring
-// common name-shaped columns, falling back to the id when none match.
-// Schemas without any of these columns still get a usable display.
-//
-// "Common shapes" are convention, not requirement. The list is small
-// and easy to extend without changing every caller.
-func rowLabel(r Row) string {
-	for _, k := range []string{"title", "name", "display_name", "label", "summary"} {
-		if v := r.Columns[k]; v != "" {
+// rowLabel returns the single-line label for a row using the codegen-
+// resolved label column (annotation enttui.AsTitle first, name
+// convention as fallback — all decided at generate time). The runtime
+// does NO name guessing; it just reads the configured key. Empty
+// label column or value → fall back to the id.
+func rowLabel(r Row, labelKey string) string {
+	if labelKey != "" {
+		if v := r.Columns[labelKey]; v != "" {
 			return v
 		}
 	}
 	return r.ID
 }
 
-// isBodyColumnKey reports whether a column key looks like a long-prose
-// field that should be rendered as the preview body rather than a
-// one-line field. Convention-based; schemas without any of these still
-// just get an empty body. No special-casing at the codegen layer.
-func isBodyColumnKey(k string) bool {
-	switch k {
-	case "body", "description", "content":
-		return true
-	}
-	return false
-}
-
-// extractID looks for a column keyed "id". Generated code always emits one.
-// Falls back to empty string (display-only entities).
+// extractID reads the row's ID via the codegen-resolved ID column
+// (the schema's actual ID field — string / int / uuid alike, the
+// generated Get accessor stringifies it). No literal "id".
 func extractID[T any](spec EntitySpec[T], r T) string {
 	for _, c := range spec.Columns {
-		if c.Key == "id" {
+		if c.Key == spec.IDKey {
 			return c.Get(r)
 		}
 	}
