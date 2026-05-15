@@ -48,6 +48,12 @@ type App struct {
 	// struct (*browser or *tableView). Used to recover state for v-toggle.
 	instances map[string]any
 
+	// kindState caches the last viewState (filter / sort / columns /
+	// page / selected row) per entity kind, so switching Tasks →
+	// TaskLists → Tasks restores the Tasks filters instead of starting
+	// fresh. Snapshotted on teardown, re-applied on (re)open.
+	kindState map[string]viewState
+
 	// rootFlex hosts the optional left sidebar + the pages container.
 	// When the sidebar is hidden, only pages occupies it.
 	rootFlex *tview.Flex
@@ -344,6 +350,9 @@ func (a *App) replaceTopKind(kind string) {
 		return
 	}
 	top := a.stack[len(a.stack)-1]
+	// Preserve the outgoing kind's filter/sort/etc so coming back
+	// restores it instead of starting fresh.
+	a.snapshotKindState(top.name, top.kind)
 	a.pages.RemovePage(top.name)
 	a.clearInstance(top.name)
 	a.stack = a.stack[:len(a.stack)-1]
@@ -382,8 +391,9 @@ func (a *App) pushBrowser(kind, focusID string) {
 		name := pageName("table", kind, "")
 		a.pages.AddPage(name, t.root, true, true)
 		a.stack = append(a.stack, pageEntry{name: name, title: title + " (table)", kind: kind})
-		a.tv.SetFocus(t.table)
 		a.registerInstance(name, t)
+		a.restoreKindState(kind, t) // re-apply cached filter/sort if any
+		a.tv.SetFocus(t.table)
 		return
 	}
 
@@ -391,11 +401,15 @@ func (a *App) pushBrowser(kind, focusID string) {
 	name := pageName("browse", kind, focusID)
 	a.pages.AddPage(name, b.root, true, true)
 	a.stack = append(a.stack, pageEntry{name: name, title: title, kind: kind})
-	a.tv.SetFocus(b.list)
 	a.registerInstance(name, b)
+	// focusID (edge-upward jump) pins one row → don't clobber it with
+	// a cached filter that might exclude that row.
 	if focusID != "" {
 		b.focusID(focusID)
+	} else {
+		a.restoreKindState(kind, b)
 	}
+	a.tv.SetFocus(b.list)
 	a.syncSidebar()
 }
 
@@ -518,6 +532,47 @@ func (a *App) pageInstance(name string) any {
 
 func (a *App) clearInstance(name string) {
 	delete(a.instances, name)
+}
+
+// snapshotKindState records the live view's filter/sort/etc under its
+// kind, so reopening that kind later restores it. Called right before
+// a page is torn down.
+func (a *App) snapshotKindState(name, kind string) {
+	if kind == "" {
+		return
+	}
+	switch v := a.pageInstance(name).(type) {
+	case *browser:
+		if v != nil {
+			a.rememberKindState(kind, v.state())
+		}
+	case *tableView:
+		if v != nil {
+			a.rememberKindState(kind, v.state())
+		}
+	}
+}
+
+func (a *App) rememberKindState(kind string, s viewState) {
+	if a.kindState == nil {
+		a.kindState = map[string]viewState{}
+	}
+	a.kindState[kind] = s
+}
+
+// restoreKindState applies any cached state for kind onto inst. No-op
+// when nothing was cached (first visit).
+func (a *App) restoreKindState(kind string, inst any) {
+	s, ok := a.kindState[kind]
+	if !ok {
+		return
+	}
+	switch v := inst.(type) {
+	case *browser:
+		v.applyState(s)
+	case *tableView:
+		v.applyState(s)
+	}
 }
 
 // pushBrowserList opens a new Browser page filtered to a fixed set of

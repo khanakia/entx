@@ -169,6 +169,10 @@ Two read-only overlays, both built from `App.capRows()` (iterates `kindListSorte
 
 Neither view mutates anything — pure introspection over the registry.
 
+## Per-kind state cache  (`app.kindState`)
+
+`App.kindState map[string]viewState` survives kind switches so Tasks → TaskLists → Tasks restores the Tasks filter/sort/columns/page/selected-row instead of starting fresh. `snapshotKindState(name, kind)` is called right before a page teardown (currently `replaceTopKind` — the sidebar's live-preview path); `restoreKindState(kind, inst)` runs in `pushBrowser` after the instance is built. Edge-upward jumps pass a `focusID` and skip the restore so a pinned row isn't excluded by a cached filter. Selection (`selectionSet`) is deliberately NOT part of `viewState`, so marks don't bleed across kinds.
+
 ## Row numbers + goto  (`selection.go` / browser / table)
 
 `showRowNum` (default true) on both views; `#` toggles.

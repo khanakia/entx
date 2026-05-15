@@ -412,7 +412,7 @@ The sidebar's highlight always reflects the kind shown in the body — drilling 
 
 ### Filter, sort, and column visibility — view-agnostic
 
-A view is purely a layout: the same modals work in both list+preview and table mode, and any state they apply persists across `v` toggles.
+A view is purely a layout: the same modals work in both list+preview and table mode, and any state they apply persists across `v` toggles **and across kind switches** — switch Tasks → TaskLists → Tasks (via the sidebar) and the Tasks filter / sort stack / column visibility / page / selected row are restored. State is cached per kind; selection marks are intentionally not carried across kinds.
 
 - **`f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
 - **`S`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
