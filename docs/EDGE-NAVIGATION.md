@@ -34,7 +34,7 @@ No reflection, no any-type erasure inside the closure body — fully typed again
 Each edge has a single letter key that follows it. Two ways triggers are assigned:
 
 1. **By annotation** (M1): `enttui.Upward("a")` / `enttui.Drill("c")`.
-2. **By convention**: the generator walks the edge name letter by letter, skipping reserved keys (`k`, `q`, `s`, `r`, `h`, `j`, `l`), takes the first unused one. **`enter` is reserved for "open preview" — never auto-assigned to an edge.**
+2. **By convention**: the generator walks the edge name letter by letter, skipping reserved keys (`h`, `j`, `k`, `l`, `g`, `n`, `p`, `r`, `q`, `v`, `y`, `s` — vim-faithful top-level), takes the first unused one. **`enter` is reserved for "open preview" — never auto-assigned to an edge.**
 
 The preview footer always shows the chosen triggers so users discover them:
 
@@ -110,13 +110,16 @@ ent has no native polymorphism. If your schema uses `entity_table + entity_id` c
 
 | Key   | Why reserved |
 |-------|--------------|
-| `k`   | Open kind picker |
-| `q`   | Quit |
-| `s`   | Cycle sort |
+| `h` `j` `k` `l` | Vim navigation (h=left, j=down, k=up, l=right) |
+| `g`   | `gg` first-row prefix |
+| `n` / `p` | Next / previous page |
 | `r`   | Refresh |
-| `h` / `j` / `l` | Vim-style pane navigation (h = left, j = down placeholder, l = right) |
+| `q`   | Quit |
+| `v`   | Visual-range select |
+| `y`   | Yank operator (`yy`/`yc`/`yj`/`yv`) |
+| `s`   | Reserved (sort lives under `,s`) |
 
-Single-letter triggers for edges can use any other a-z character. Multi-char triggers (`gg`, `dd`, etc.) are not supported in v1; one keystroke per edge.
+`,` is the leader and is never an edge trigger. Single-letter edge triggers can use any other a-z char. Multi-char triggers (`gg`, `dd`, etc.) are not supported; one keystroke per edge.
 
 ## Related docs
 

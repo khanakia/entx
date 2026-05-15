@@ -55,7 +55,7 @@ For each `*gen.Type` in the graph we call `extractEntity(n, opts, kindByType)`:
    - Each edge whose target type is itself browsable → an `EdgeMeta`.
    - `e.Unique` → `EdgeUpward` (jump to parent); else `EdgeDrill` (open child list).
    - The Go method name on the client (`client.Post.QueryAuthor`) comes from `e.StructField()` — never `strings.Title(e.Name)`, which would mangle `assemble_run` → `Assemble_run`.
-   - Every edge gets a single-char letter trigger picked from its name (reserved: `k q s r h j l`). No magic "first drill claims enter" — enter always means "open preview".
+   - Every edge gets a single-char letter trigger picked from its name (reserved: `h j k l g n p r q v y s` — vim top-level keys). No magic "first drill claims enter" — enter always means "open preview".
 
 5. **Enum values.** For ent `field.Enum(...)` fields the codegen pulls `f.EnumValues()` into `FieldMeta.EnumValues` and emits it into the generated `Column{EnumValues: []string{...}}` literal. Filterable enums also get a `case runtime.OpIn, runtime.OpNotIn` branch in the dispatch that splits the `|`-joined `FilterCondition.Value` and calls `pred.<Field>In(...)` / `<Field>NotIn(...)`. The `"strings"` import is gated on `EntityMeta.NeedsStrings`.
 
@@ -128,7 +128,7 @@ func registerPost(app *runtime.App, client *ent.Client) {
             return rows, total, err
         },
 
-        // Ent-native serialization — used by the `J` clipboard shortcut.
+        // Ent-native serialization — used by the `yj` clipboard shortcut.
         JSON: func(r *ent.Post) ([]byte, error) { return json.Marshal(r) },
 
         Columns: []runtime.Column[*ent.Post]{

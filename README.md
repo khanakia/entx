@@ -339,47 +339,86 @@ Each `register_<name>.go` is the output of feeding one `*gen.Type` (parsed from 
 
 ## Keybindings
 
+Vim-faithful. Frequent keys are zero-surprise vim; every rare verb hides behind the `,` leader and shows itself in an on-screen which-key popup — nothing to memorize.
+
+### Navigate
+
 | Key            | Action                                                  |
 |----------------|---------------------------------------------------------|
-| **`k`**        | Open kind picker (fuzzy-searchable modal)               |
-| **`ctrl+b`**   | Toggle the left-rail kind sidebar (live preview)        |
-| **`\`** (backslash) | Send focus to the sidebar (opens it if hidden); from the sidebar, send focus back to the body |
-| **`tab`**      | Switch focus between list pane ↔ preview pane           |
-| **`↑ / ↓`**    | Move selection in the focused pane                      |
-| **`enter`**    | Open the highlighted edge (or focus preview if none)    |
-| **`l p c …`**  | Single-letter triggers for each edge (see preview footer) |
-| **`/`**        | Quick filter — substring (ContainsFold) across every Filterable string column |
-| **`ctrl+u`**   | Clear the active filter                                 |
-| **`s`**        | Cycle sort direction (asc / desc on created_at)         |
-| **`f`**        | Open condition builder (per-column filters)             |
-| **`S`**        | Open sort-stack modal (multi-column sort, reorder)      |
-| **`c`**        | Open columns show/hide modal                            |
-| **`y`**        | With no selection: copy id (browser) / cell value (table). With selection: open format chooser → bulk copy |
-| **`Y`**        | Copy whole row as TSV                                   |
-| **`J`**        | Copy whole row as pretty-printed JSON                   |
-| **`space`**    | Toggle row selection (requires `enttui.AllowBulkCopy{}`) |
-| **`*` / `0`**  | Select all visible / clear selection                    |
-| **`X`**        | Export full filtered+sorted dataset (requires `enttui.AllowExport{}`) |
-| **`e`**        | Edit current row (requires `enttui.Editable{}` per field) |
-| **`N`**        | New row (requires `enttui.AllowCreate{}`; scope keys auto-filled) |
-| **`D`**        | Delete current row with confirm (requires `enttui.AllowDelete{}`) |
-| **`esc`**      | Pop the current page (back-stack)                       |
-| **`?`**        | Searchable keybindings palette (`@cat` to scope, `ctrl+e` to export CSV) |
-| **`i`**        | Capabilities card for the current view (what's on/off + how to enable) |
-| **`F`**        | Capabilities matrix — every kind × feature flags (filter, CSV, enter to jump) |
-| **`M`**        | Toggle mouse capture (off by default → terminal text selection / copy works) |
-| **`#`**        | Toggle the 1-based row-number prefix (default on)        |
-| **`:`**        | Go to row — `42`, `$`/`last`, `1`/`first` (vim-style)    |
-| **`m`**        | Master-detail split (needs `enttui.DetailEdge{}`); tabbed when >1 edge |
+| **`j k h l`** / arrows | Move selection / pane (vim)                     |
+| **`gg`**       | Jump to first row                                       |
+| **`G`**        | Jump to last row                                        |
+| **`:`**        | Go to row — `42`, `$`/`last`, `1`/`first`               |
+| **`n` / `p`**  | Next / previous page                                    |
+| **`+` / `-`**  | Grow / shrink page size                                 |
+| **`tab`**      | Switch focus list pane ↔ preview pane                   |
+| **`enter`**    | Open highlighted edge (or focus preview if none)        |
+| edge letters   | Single-letter triggers per edge (see preview footer)    |
+| **`r`**        | Refresh current view                                    |
+| **`esc`**      | Pop current page (back-stack); clears selection first   |
+| **`?`**        | Searchable keybindings palette (`@cat` scope, `ctrl+e` CSV) |
 | **`q`**        | Quit                                                    |
-| **`ctrl+f / pgdn / space`** | Scroll preview down half page              |
+
+### Filter
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`/`**        | Quick filter — substring (ContainsFold) across every Filterable string column |
+| **`ctrl+u`**   | Clear all active filters                                |
+
+### Select (vim visual)
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`space`**    | Toggle row selection (requires `enttui.AllowBulkCopy{}`) |
+| **`v`**        | Visual range — extend selection from anchor             |
+| **`ctrl+a`**   | Select all visible                                      |
+| **`esc`**      | Clear selection                                         |
+
+### Yank (two-key operator, `y` + target)
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`yy`**       | Yank whole row as TSV                                    |
+| **`yc`**       | Yank cell value (table) / id (browser)                  |
+| **`yj`**       | Yank row as pretty-printed JSON                         |
+| **`yv`**       | Yank current selection → format chooser (bulk)          |
+
+### Leader — `,` opens which-key popup
+
+Press `,` then the shown key. The popup lists everything live, so the table below is reference only:
+
+| `,` + | Action                                                  |
+|-------|---------------------------------------------------------|
+| **`v`** | Toggle list ↔ table view                              |
+| **`e`** | Edit current row (requires `enttui.Editable{}`)       |
+| **`a`** | Add / new row (requires `enttui.AllowCreate{}`)       |
+| **`d`** | Delete current row, with confirm (`enttui.AllowDelete{}`) |
+| **`f`** | Condition builder (per-column filters)                |
+| **`o`** | Sort-stack modal (multi-column, reorderable)          |
+| **`s`** | Cycle sort direction on the focused column            |
+| **`c`** | Columns show/hide modal                               |
+| **`x`** | Export full filtered+sorted dataset (`enttui.AllowExport{}`) |
+| **`m`** | Master-detail split (`enttui.DetailEdge{}`); tabbed when >1 edge |
+| **`i`** | Capabilities card for the current view                |
+| **`K`** | Capabilities matrix — every kind × feature flags      |
+| **`k`** | Kind picker (fuzzy-searchable)                         |
+| **`t`** | Toggles submenu → `#` row numbers · `b` status bar · `m` mouse capture |
+
+### Sidebar / preview / global
+
+| Key            | Action                                                  |
+|----------------|---------------------------------------------------------|
+| **`ctrl+b`**   | Toggle the left-rail kind sidebar (live preview)        |
+| **`\`** (backslash) | Focus sidebar (opens if hidden); from sidebar, focus back to body |
+| **`ctrl+f / pgdn`** | Scroll preview down half page                      |
 | **`ctrl+b / pgup`** | Scroll preview up half page                        |
 
-**Row numbers + jump:** every row carries a gray 1-based index — in the list it's a label prefix; in the table it's a dedicated non-selectable `#` column (not jammed into the id cell). `#` toggles it off/on (default on). `:` opens a goto prompt — type a number, or `$`/`last`, or `1`/`first`; out-of-range clamps. Independent of `g`/`G` (first/last *page*) and `n`/`p` (page nav).
+**Row numbers + jump:** every row carries a gray 1-based index — in the list a label prefix; in the table a dedicated non-selectable `#` column (not jammed into the id cell). `,t#` toggles it off/on (default on). `:` opens a goto prompt — number, or `$`/`last`, or `1`/`first`; out-of-range clamps. `gg`/`G` jump to first/last row; `n`/`p` page.
 
-**Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live with `M`.
+**Mouse:** off by default so your terminal's native click-drag selection + copy keep working. Opt in with `app.SetMouseEnabled(true)` before `Run()`, or toggle live via `,tm`.
 
-When an input field has focus (filter, picker, sidebar), single-letter shortcuts go to the input — `k` types a `k`, not "open picker." `esc` always closes the input. `ctrl+b` is the one exception: it's caught BEFORE the typing-guard so it can toggle the sidebar even while you're mid-filter.
+When an input field has focus (filter, picker, sidebar), single-letter shortcuts go to the input — `,` types a `,`, not "open leader." `esc` always closes the input. `ctrl+b` is the one exception: caught BEFORE the typing-guard so it toggles the sidebar even mid-filter.
 
 ### Keybindings palette (`?`)
 
@@ -394,9 +433,9 @@ Searchable table of every shortcut (Category · Key · Action). It self-document
 
 Three levels, increasing scope:
 
-1. **Status-bar chips** — passive glance on every view: `✎ e edit`, `+ N new`, `✗ D delete`, `☐ space sel · y copy`, `⇩ X export`. Only shown when the schema opted in.
-2. **`i` — this-view card.** Lists every feature flag for the current kind, **on _and_ off**, each off-flag annotated with the exact `enttui.*{}` to add. Plus column / filterable / sortable / edge counts. `F` from here jumps to the full matrix.
-3. **`F` — capabilities matrix.** Searchable table of *every* registered kind × `EDIT NEW DEL BULK EXPORT COLS FILT SORT EDGES`. Filter with free text or `cap:edit` / `cap:export` / … to isolate one capability. `ctrl+e` dumps the shown rows to `<cwd>/enttui-capabilities-<ts>.csv`. `enter` on a row opens that kind.
+1. **Status-bar chips** — passive glance on every view: `✎ ,e edit`, `+ ,a new`, `✗ ,d delete`, `☐ space sel · y… yank`, `⇩ ,x export`. Only shown when the schema opted in.
+2. **`,i` — this-view card.** Lists every feature flag for the current kind, **on _and_ off**, each off-flag annotated with the exact `enttui.*{}` to add. Plus column / filterable / sortable / edge counts. `,K` from here jumps to the full matrix.
+3. **`,K` — capabilities matrix.** Searchable table of *every* registered kind × `EDIT NEW DEL BULK EXPORT COLS FILT SORT EDGES`. Filter with free text or `cap:edit` / `cap:export` / … to isolate one capability. `ctrl+e` dumps the shown rows to `<cwd>/enttui-capabilities-<ts>.csv`. `enter` on a row opens that kind.
 
 ### Sidebar (left rail)
 
@@ -415,9 +454,9 @@ The sidebar's highlight always reflects the kind shown in the body — drilling 
 
 A view is purely a layout: the same modals work in both list+preview and table mode, and any state they apply persists across `v` toggles **and across kind switches** — switch Tasks → TaskLists → Tasks (via the sidebar) and the Tasks filter / sort stack / column visibility / page / selected row are restored. State is cached per kind; selection marks are intentionally not carried across kinds.
 
-- **`f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
-- **`S`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
-- **`c`** opens the **columns show/hide modal** — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
+- **`,f`** opens the **condition builder** — pick column → operator → value, add multiple conditions, AND-composed. Apply with `s` (or click Apply). Edit a row with `enter`/`e`; delete with `d`. Operator menu is typed to the column: enum columns surface `= / != / in / not_in / is_null / not_null` and replace the value step with a picker of the declared enum values (multi-select for `in`/`not_in` — green ✓ / red ✗, space toggles, `s` applies).
+- **`,o`** opens the **sort-stack modal** — reorder with `K`/`J` or `ctrl+↑`/`↓`, flip direction with `enter`, delete with `d`, clear with `c`.
+- **`,c`** opens the **columns show/hide modal** — `space` / `enter` toggle a row, `s` apply, `r` reset to schema defaults. Visibility uses green ✓ / red ✗ glyphs.
 
 All three operate on the SAME state regardless of which view opened them. Toggle `v` and the dataset stays narrowed, sorted, and the column set you picked remains.
 
@@ -438,7 +477,7 @@ func (Project) Annotations() []schema.Annotation {
 }
 ```
 
-Press **`m`** (from list or table view) → a two-pane page: the master kind's table on top, a **live child table** below. Both panes are full tables — scroll, `s` sort, `f` filter, `e` edit, `y` copy, `:` goto, everything.
+Press **`,m`** (from list or table view) → a two-pane page: the master kind's table on top, a **live child table** below. Both panes are full tables — scroll, `,s` sort, `,f` filter, `,e` edit, `y…` yank, `:` goto, everything. `]`/`[` cycle detail tabs when >1 edge; `,m` again exits.
 
 - Move the **master** cursor → the detail table re-resolves the edge and re-filters to that row's children (in-memory `idFilter`, 5s ctx).
 - **`tab`** → switch focus master ⇄ detail; the active pane gets an orange border.
@@ -449,9 +488,12 @@ Press **`m`** (from list or table view) → a two-pane page: the master kind's t
 
 ### Clipboard
 
-- **`y`** with no selection — copies the current row's id (browser) or focused cell value (table).
-- **`Y`** copies the whole row as TAB-separated values.
-- **`J`** copies the row as pretty-printed JSON (uses ent's native struct serialization, includes `edges:` for eager-loaded relations).
+`y` is a two-key yank operator (vim `y` + target):
+
+- **`yc`** — copies the current row's id (browser) or focused cell value (table).
+- **`yy`** — copies the whole row as TAB-separated values.
+- **`yj`** — copies the row as pretty-printed JSON (uses ent's native struct serialization, includes `edges:` for eager-loaded relations).
+- **`yv`** — with a selection, opens the bulk format chooser (see below).
 
 Status bar surfaces `copied <label>: <preview…>` on success, or `clipboard error: …` on headless hosts without `xclip` / `pbcopy`.
 
@@ -471,17 +513,17 @@ func (Post) Annotations() []schema.Annotation {
 **Selection** — visible only when `AllowBulkCopy{}` is on:
 
 - **`space`** toggles the focused row's selection. Selected rows get a `[yellow]✓[-]` marker.
-- **`V`** range toggle (vim-visual style): first `V` drops an anchor at the cursor, move to the far end, second `V` selects the whole span — or *deselects* it if every row in the span was already selected. Order-independent; adds to any existing selection.
-- **`*`** selects every row on the visible page.
-- **`0`** clears all. **`esc`** also clears the selection first — it only pops the page once nothing is selected (so "esc to deselect" never navigates you away by surprise).
-- Status bar shows `[yellow]N selected[-]` while non-empty, and the chip `☐ space sel · * all · 0 clear · y copy`.
+- **`v`** range toggle (vim-visual style): first `v` drops an anchor at the cursor, move to the far end, second `v` selects the whole span — or *deselects* it if every row in the span was already selected. Order-independent; adds to any existing selection.
+- **`ctrl+a`** selects every row on the visible page.
+- **`esc`** clears the selection first — it only pops the page once nothing is selected (so "esc to deselect" never navigates you away by surprise).
+- Status bar shows `[yellow]N selected[-]` while non-empty, and the chip `☐ space sel · v range · ⌃a all · yv yank`.
 
-**Bulk copy** — `y` upgrades when one or more rows are selected:
+**Bulk copy** — `yv` with one or more rows selected:
 
 - Opens a format chooser modal: **JSON array** · **CSV** · in the table view, also **focused-column JSON** + **focused-column CSV** (copies just that one cell value across every selected row).
 - ← / → / tab switch options, enter picks.
 
-**Export** — **`X`**. Scope precedence:
+**Export** — **`,x`**. Scope precedence:
 
 - **With a selection** → exports *exactly the selected rows* (your explicit pick wins; no re-fetch). Status: `selected N rows`.
 - **No selection** → re-fetches every row matching the current filter + sort + scope (capped at 10 000).
@@ -493,9 +535,9 @@ Then the JSON / CSV chooser, then a **destination modal**:
 - **Copy to clipboard** → for the small case.
 - If the dataset overflowed the cap, the status message includes `(truncated from M — cap 10000)` so you know to narrow your filter.
 
-Bulk copy (`y` with a selection) is always clipboard — it's a yank, small by nature.
+Bulk copy (`yv` with a selection) is always clipboard — it's a yank, small by nature.
 
-Pressing `space` / `X` on an entity that hasn't opted in surfaces a status hint pointing at the missing annotation — never a silent no-op.
+Pressing `space` / `,x` on an entity that hasn't opted in surfaces a status hint pointing at the missing annotation — never a silent no-op.
 
 ### Editing
 
@@ -603,7 +645,7 @@ What you get out of the box for each entry:
 |----------------|--------------|
 | **Display**    | Eager-loaded via `q.With<Edge>()`. Accessor reads `r.Edges.<Edge>.<Field>` with nil checks (pointer targets get an extra deref guard). No N+1; multiple fields off the same edge share one `With` call. |
 | **Filter**     | Press `f`, pick the related column, pick `=` / `!=` / `contains`, enter a value. Generated as `pred.Has<Edge>With(targetPred.<Field>EQ(v))` etc. — a sub-select, so SQL pagination stays valid. |
-| **Sort**       | Press `s` on the column header, or add via `S`. Generated as `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())` using ent's edge-order helper. Multi-column sort works seamlessly with native columns. |
+| **Sort**       | `,s` on the focused column, or add via the `,o` sort-stack. Generated as `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())` using ent's edge-order helper. Multi-column sort works seamlessly with native columns. |
 
 Field rules:
 

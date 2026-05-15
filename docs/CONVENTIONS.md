@@ -111,7 +111,7 @@ Every edge whose target Type is itself browsable is included. (Edges to skipped 
 
 Trigger key: **`enttui.Upward{Trigger:"x"}` / `Drill{Trigger:"x"}` win** (honored by codegen; skipped only if the letter is already taken on that type). Otherwise auto-pick — walk the edge name letter by letter, take the first that's:
 
-- not reserved (`k`, `q`, `s`, `r`, `h`, `j`, `l`)
+- not reserved (`h`, `j`, `k`, `l`, `g`, `n`, `p`, `r`, `q`, `v`, `y`, `s` — the vim-faithful top-level keys)
 - not already used by another edge on this type
 - a-z only
 

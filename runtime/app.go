@@ -192,14 +192,12 @@ func (a *App) Run() error {
 			}
 			return ev
 		}
+		// Global keys are now MINIMAL — everything verb-y moved into the
+		// per-view `,` leader (which-key). Global keeps only: sidebar
+		// reach (`\`), help (`?`), quit (`q`). Kind picker / capabilities
+		// / toggles / mouse all live under `,` now.
 		switch ev.Rune() {
-		case 'k':
-			a.openPicker()
-			return nil
 		case '\\':
-			// `\` swings focus from the body INTO the sidebar (the
-			// sidebar's own handlers swing it back out). Opens the
-			// sidebar first if it's hidden — convenient one-key reach.
 			if !a.sidebarVisible {
 				a.showSidebar()
 				return nil
@@ -213,29 +211,6 @@ func (a *App) Run() error {
 			return nil
 		case '?':
 			a.openHelp()
-			return nil
-		case 'F':
-			a.openCapabilities()
-			return nil
-		case 'B':
-			// Show/hide the (two-line) status bar on the front view.
-			switch v := a.pageInstance(a.stack[len(a.stack)-1].name).(type) {
-			case *browser:
-				v.toggleStatus()
-			case *tableView:
-				v.toggleStatus()
-			}
-			return nil
-		case 'M':
-			// Live mouse toggle. Off → terminal text selection / copy
-			// works; on → click + scroll-wheel inside the TUI.
-			a.mouseEnabled = !a.mouseEnabled
-			a.tv.EnableMouse(a.mouseEnabled)
-			st := "off (terminal selection restored)"
-			if a.mouseEnabled {
-				st = "on (TUI click + scroll)"
-			}
-			a.flash("mouse " + st)
 			return nil
 		}
 		if ev.Key() == tcell.KeyEscape {

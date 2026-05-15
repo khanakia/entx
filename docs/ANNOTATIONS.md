@@ -137,8 +137,8 @@ Codegen behavior:
   in its picker. Selecting it emits a `pred.Has<Edge>With(targetPred.<Field><Op>(v))`
   sub-select. v1 supports `= / != / contains` for string targets; enum
   / numeric / time follow the same pattern when wired in.
-- **Sortable = true** — pressing `s` on the column header (or adding it
-  via the `S` sort-stack modal) emits `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())`
+- **Sortable = true** — `,s` on the focused column (or adding it
+  via the `,o` sort-stack modal) emits `pred.By<Edge>Field(targetPred.Field<Field>, sql.OrderAsc())`
   using ent's generated edge-order helper. Works alongside native-column
   sort keys in the multi-sort stack.
 - Generated file gains an aliased import of the target predicate
@@ -167,9 +167,9 @@ Moving the master cursor re-filters the active tab via an in-memory
 
 ### `AllowBulkCopy{}` — entity-level
 
-Enables row-selection (`space` toggles, `*` selects all visible, `0`
-clears) and the multi-row `y` copy flow. Pressing `y` with one or more
-rows selected opens a format-chooser modal:
+Enables row-selection (`space` toggles, `v` visual-range, `ctrl+a`
+selects all visible, `esc` clears) and the bulk yank flow. With one or
+more rows selected, `yv` opens a format-chooser modal:
 
 - **JSON array** of `{id, col1, col2, ...}` objects
 - **CSV** with `id` + every visible column as header
@@ -189,7 +189,7 @@ func (Post) Annotations() []schema.Annotation {
 
 ### `AllowExport{}` — entity-level
 
-Enables the **`X`** shortcut. With rows selected (`space`), exports
+Enables the **`,x`** shortcut. With rows selected (`space`), exports
 exactly those — your pick overrides the filter. With no selection,
 re-fetches every row matching the current filter / sort / scope (capped
 at 10 000). Then the JSON / CSV chooser, then a destination modal: an
@@ -207,7 +207,7 @@ Status bar shows `[blue]⇩ X export[-]` when active.
 
 ### `AllowCreate{}` — entity-level
 
-Enables the **`N`** (new row) keybinding. The form opens with every
+Enables the **`,a`** (add / new row) keybinding. The form opens with every
 Editable field empty; scope keys from `app.SetScope(...)` are
 auto-injected so the new row lands in the right tenant / project / etc.
 Generated code emits a `Create: func(ctx, vals) (id, err)` closure that
@@ -219,14 +219,14 @@ func (Post) Annotations() []schema.Annotation {
 }
 ```
 
-Status bar shows `[green]+ N new[-]` when active.
+Status bar shows `[green]+ ,a new[-]` when active.
 
 ### `AllowDelete{}` — entity-level
 
-Enables the **`D`** (delete with confirm) keybinding for this entity.
+Enables the **`,d`** (delete with confirm) keybinding for this entity.
 Off by default — destructive actions opt-in only. Generated code emits a
 `Delete: func(ctx, id) error { return client.X.DeleteOneID(id).Exec(ctx) }`
-closure. Status bar shows `[red]✗ D delete[-]` when active.
+closure. Status bar shows `[red]✗ ,d delete[-]` when active.
 
 ```go
 func (Post) Annotations() []schema.Annotation {
@@ -298,7 +298,7 @@ field.Enum("status").Values("draft", "published").
 ```
 
 When any field on the entity carries `Editable{}`, the status bar shows
-`[green]✎ e edit[-]`. Pressing `e` on a schema with none → status hint
+`[green]✎ ,e edit[-]`. Pressing `,e` on a schema with none → status hint
 points at this annotation.
 
 ### `Hidden()`

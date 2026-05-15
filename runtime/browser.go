@@ -81,6 +81,63 @@ type browser struct {
 	showRowNum bool
 	// statusVisible — `B` collapses the status bar to reclaim rows.
 	statusVisible bool
+	// pendingY / pendingG implement the two-key vim operators (`y`
+	// yank-prefix, `g` goto-prefix). Set when the first key lands;
+	// the next keypress completes or cancels them.
+	pendingY bool
+	pendingG bool
+}
+
+// leaderItems builds the `,` which-key menu for the browser. Each item
+// is a thin closure over an existing action — no behavior moves, only
+// the keybinding does.
+func (b *browser) leaderItems() []wkItem {
+	app, spec := b.app, b.spec
+	return []wkItem{
+		{'v', "toggle list ⇄ table view", func() { app.swapToTable(spec) }},
+		{'e', "edit row", func() {
+			if i := b.list.GetCurrentItem(); i >= 0 && i < len(b.rows) {
+				openEditForm(app, spec, b.rows[i], b.updateStatus, b.refresh)
+			}
+		}},
+		{'a', "add row", func() { openCreateForm(app, spec, b.updateStatus, b.refresh) }},
+		{'d', "delete row", func() {
+			if i := b.list.GetCurrentItem(); i >= 0 && i < len(b.rows) {
+				openDeleteConfirm(app, spec, b.rows[i], b.updateStatus, b.refresh)
+			}
+		}},
+		{'f', "filter — condition builder", func() { openConditionBuilder(b.host()) }},
+		{'o', "order — sort-stack modal", func() { openSortModal(b.host()) }},
+		{'s', "sort: cycle direction", func() { b.cycleSort() }},
+		{'c', "columns show/hide", func() { openColumnsModal(b.host()) }},
+		{'x', "export (JSON/CSV → file)", func() {
+			if !spec.allowExport {
+				b.updateStatus("export not enabled — add enttui.AllowExport{}")
+				return
+			}
+			b.openExport()
+		}},
+		{'m', "master-detail split", func() {
+			if len(spec.detailEdges) == 0 {
+				b.updateStatus("no detail edge — add enttui.DetailEdge{}")
+				return
+			}
+			app.pushMasterDetail(spec)
+		}},
+		{'i', "this-view capabilities", func() { app.openKindInfo(spec) }},
+		{'K', "all-kinds matrix", func() { app.openCapabilities() }},
+		{'k', "kind picker (modal)", func() { app.openPicker() }},
+		{'t', "toggles › (#, bar, mouse)", func() {
+			openWhichKey(app, "toggles", []wkItem{
+				{'#', "row numbers", func() { b.showRowNum = !b.showRowNum; b.refreshDisplayOnly() }},
+				{'b', "status bar", b.toggleStatus},
+				{'m', "mouse capture", func() {
+					app.mouseEnabled = !app.mouseEnabled
+					app.tv.EnableMouse(app.mouseEnabled)
+				}},
+			})
+		}},
+	}
 }
 
 // toggleStatus shows/hides the status bar by resizing its flex slot.
@@ -411,56 +468,64 @@ func (b *browser) refreshPreview() {
 }
 
 func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
-	switch ev.Rune() {
+	r := ev.Rune()
+
+	// --- pending vim operators (resolve first) ---
+	if b.pendingG {
+		b.pendingG = false
+		if r == 'g' { // gg → first row
+			b.list.SetCurrentItem(0)
+		}
+		return nil
+	}
+	if b.pendingY {
+		b.pendingY = false
+		switch r {
+		case 'y': // yy → row as TSV
+			b.copyFocusedRow()
+		case 'c': // yc → id (browser has no cell)
+			b.copyFocusedID()
+		case 'j': // yj → row as JSON
+			b.copyFocusedRowJSON()
+		case 'v': // yv → selection → format chooser
+			if b.spec.allowBulkCopy && b.selection.count() > 0 {
+				b.openBulkCopy("")
+			} else {
+				b.updateStatus("no selection — space/v to select first")
+			}
+		}
+		return nil
+	}
+
+	// --- single-key, top-level ---
+	switch r {
+	case ',': // leader
+		openWhichKey(b.app, "actions", b.leaderItems())
+		return nil
+	case 'y': // yank operator
+		b.pendingY = true
+		b.updateStatus("yank: y row · c id · j json · v selection")
+		return nil
+	case 'g': // goto prefix (gg = first row)
+		b.pendingG = true
+		return nil
+	case 'G': // last row (current page)
+		if n := len(b.rows); n > 0 {
+			b.list.SetCurrentItem(n - 1)
+		}
+		return nil
 	case '/':
 		b.openFilter()
-		return nil
-	case 's':
-		b.cycleSort()
 		return nil
 	case 'r':
 		b.refresh()
 		return nil
-	case 'i':
-		// Capabilities card for THIS view.
-		b.app.openKindInfo(b.spec)
-		return nil
-	case 'm':
-		// Open the two-pane master-detail split (master table on top,
-		// live child table below).
-		if len(b.spec.detailEdges) == 0 {
-			b.updateStatus("no detail edge — add enttui.DetailEdge{Edge:\"<edge>\"} to the schema")
-			return nil
-		}
-		b.app.pushMasterDetail(b.spec)
-		return nil
-	case '#':
-		b.showRowNum = !b.showRowNum
-		b.refreshDisplayOnly()
-		return nil
 	case ':':
-		// vim-style goto: number / $ / first.
-		openGotoRow(b.app, len(b.rows), func(idx int) {
-			b.list.SetCurrentItem(idx)
-		})
+		openGotoRow(b.app, len(b.rows), func(idx int) { b.list.SetCurrentItem(idx) })
 		return nil
-	case 'f':
-		// Same condition builder the table view opens — operates on the
-		// shared carried-filters state, so adding a condition here is
-		// immediately reflected in the table view too.
-		openConditionBuilder(b.host())
-		return nil
-	case 'S':
-		openSortModal(b.host())
-		return nil
-	case 'c':
-		openColumnsModal(b.host())
-		return nil
-	case ' ':
-		// Toggle selection on the focused row. AllowBulkCopy gates this
-		// so read-only library users don't trip over an unexpected key.
+	case ' ': // toggle row selection
 		if !b.spec.allowBulkCopy {
-			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{}")
 			return nil
 		}
 		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
@@ -468,18 +533,15 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			b.refreshDisplayOnly()
 		}
 		return nil
-	case 'V':
-		// Range select. First V drops an anchor at the cursor; move
-		// to the far end; second V marks the whole span. Saves
-		// space-tapping N times for 1..N.
+	case 'v': // visual range (anchor → move → v)
 		if !b.spec.allowBulkCopy {
-			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			b.updateStatus("selection not enabled — add enttui.AllowBulkCopy{}")
 			return nil
 		}
 		cur := b.list.GetCurrentItem()
 		if b.selAnchor < 0 {
 			b.selAnchor = cur
-			b.updateStatus("range anchor set — move to the other end, press V again")
+			b.updateStatus("visual: move, press v again to (de)select the span")
 		} else {
 			n, sel := b.selection.toggleRange(b.rows, b.selAnchor, cur)
 			b.selAnchor = -1
@@ -488,116 +550,41 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			if sel {
 				verb = "selected"
 			}
-			b.updateStatus(fmt.Sprintf("%s %d rows in range", verb, n))
+			b.updateStatus(fmt.Sprintf("%s %d rows", verb, n))
 		}
-		return nil
-	case '*':
-		if b.spec.allowBulkCopy {
-			b.selection.addAll(b.rows)
-			b.refreshDisplayOnly()
-		}
-		return nil
-	case '0':
-		if b.spec.allowBulkCopy {
-			b.selection.clear()
-			b.selAnchor = -1
-			b.refreshDisplayOnly()
-		}
-		return nil
-	case 'y':
-		// Multi-row branch when selection is non-empty.
-		if b.spec.allowBulkCopy && b.selection.count() > 0 {
-			b.openBulkCopy("")
-			return nil
-		}
-		b.copyFocusedID()
-		return nil
-	case 'Y':
-		b.copyFocusedRow()
-		return nil
-	case 'X':
-		// Full export — re-fetch all filtered/sorted rows and copy.
-		if !b.spec.allowExport {
-			b.updateStatus("export not enabled — add enttui.AllowExport{} to the schema")
-			return nil
-		}
-		b.openExport()
-		return nil
-	case 'J':
-		b.copyFocusedRowJSON()
-		return nil
-	case 'e':
-		// Edit current row. If the spec has no Editable() fields, the
-		// form surfaces a "no editable fields" hint in the status bar.
-		// Refresh is wired as onSaved — runs only after the save
-		// completes, so the row reflects the new values immediately.
-		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
-			openEditForm(b.app, b.spec, b.rows[idx], b.updateStatus, b.refresh)
-		}
-		return nil
-	case 'N':
-		// New row. Capital N because lowercase n is the next-page key.
-		// Scope keys (e.g. project_id) pre-injected via app.SetScope().
-		openCreateForm(b.app, b.spec, b.updateStatus, b.refresh)
-		return nil
-	case 'D':
-		if idx := b.list.GetCurrentItem(); idx >= 0 && idx < len(b.rows) {
-			row := b.rows[idx]
-			openDeleteConfirm(b.app, b.spec, row, b.updateStatus, b.refresh)
-		}
-		return nil
-	case 'v':
-		// Phase A: swap this page to a table view of the same spec.
-		// Filter / sort state is intentionally NOT carried across — keeps
-		// the toggle stateless. Phase D can preserve state.
-		b.app.swapToTable(b.spec)
 		return nil
 	case 'n':
-		// Phase B: next page (clamped).
 		if (b.page+1)*b.pageSize < b.total {
 			b.page++
 			b.refresh()
 		}
 		return nil
 	case 'p':
-		// Phase B: previous page (clamped).
 		if b.page > 0 {
 			b.page--
 			b.refresh()
 		}
 		return nil
-	case 'G':
-		// Phase B: jump to last page.
-		if b.pageSize > 0 && b.total > 0 {
-			b.page = (b.total - 1) / b.pageSize
-			b.refresh()
-		}
-		return nil
-	case 'g':
-		// Phase B: jump to first page.
-		if b.page != 0 {
-			b.page = 0
-			b.refresh()
-		}
-		return nil
 	case '+', '=':
-		// Phase B: bump to next page size in the cycle.
 		b.pageSize = nextPageSize(b.pageSize, +1)
 		b.page = 0
 		b.refresh()
 		return nil
 	case '-', '_':
-		// Phase B: drop to previous page size in the cycle.
 		b.pageSize = nextPageSize(b.pageSize, -1)
 		b.page = 0
 		b.refresh()
 		return nil
 	}
+
 	switch ev.Key() {
-	case tcell.KeyCtrlU:
-		// Clear ALL filtering — the legacy `/` substring AND the
-		// condition-builder conditions. Previously only cleared the
-		// substring one, so it looked dead after using `f`.
+	case tcell.KeyCtrlA: // select all visible
+		if b.spec.allowBulkCopy {
+			b.selection.addAll(b.rows)
+			b.refreshDisplayOnly()
+		}
+		return nil
+	case tcell.KeyCtrlU: // clear ALL filters
 		if b.filter != "" || len(b.carriedFilters) > 0 {
 			b.filter = ""
 			b.carriedFilters = nil
@@ -613,9 +600,9 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		b.activateEdgeOrPreview()
 		return nil
 	}
-	// Edge triggers (single-char letters only — enter is reserved for
-	// preview focus, never auto-bound to a "primary" drill edge).
-	if r := ev.Rune(); r != 0 {
+
+	// Edge triggers (single letter, footer-shown).
+	if r != 0 {
 		for _, e := range b.spec.edges {
 			if e.trigger == string(r) {
 				b.followEdge(e)
@@ -623,7 +610,7 @@ func (b *browser) listKeyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			}
 		}
 	}
-	return ev
+	return ev // arrows / j / k fall through to tview.List native nav
 }
 
 // previewKeyCapture lets the user return focus to the list via Tab/←/h.

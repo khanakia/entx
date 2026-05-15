@@ -770,10 +770,15 @@ func edgeMetaOf(e *gen.Edge, targetKind string, used map[string]bool) EdgeMeta {
 }
 
 // pickTrigger walks an edge name looking for an unused single character,
-// avoiding reserved keys (k, q, /, s, r, enter, esc).
+// avoiding keys the new keymap binds at top level (vim nav + operators
+// + leader). Anything not here is fair game for an auto-picked edge
+// trigger; an explicit enttui.Upward/Drill{Trigger} bypasses this.
 func pickTrigger(name string, used map[string]bool) string {
 	reserved := map[string]bool{
-		"k": true, "q": true, "s": true, "r": true, "h": true, "j": true, "l": true,
+		// vim nav + paging + operators that fire before edge triggers
+		"h": true, "j": true, "k": true, "l": true,
+		"g": true, "n": true, "p": true, "r": true, "q": true,
+		"v": true, "y": true, "s": true,
 	}
 	for _, r := range strings.ToLower(name) {
 		if r < 'a' || r > 'z' {

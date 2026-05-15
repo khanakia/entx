@@ -259,7 +259,7 @@ func registerTechDoc(app *runtime.App, client *ent.Client) {
 
 		Edges: []runtime.EdgeSpec[*ent.TechDoc]{
 			{
-				Name: "pages", Display: "TechDocPages", Kind: runtime.EdgeDrill, Trigger: "p",
+				Name: "pages", Display: "TechDocPages", Kind: runtime.EdgeDrill, Trigger: "a",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.

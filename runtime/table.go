@@ -62,9 +62,11 @@ type tableView struct {
 
 	// Row-selection set (driven by space / V / * / 0; consumed by `y`).
 	selection  *selectionSet
-	selAnchor  int  // V-range anchor data-row index; -1 = unset
-	showRowNum    bool // `#` toggles a 1-based index prefix in column 0
-	statusVisible bool // `B` collapses the status bar
+	selAnchor  int  // visual-range anchor data-row index; -1 = unset
+	showRowNum    bool // toggled via ,t#
+	statusVisible bool // toggled via ,tb
+	pendingY      bool // vim `y` operator pending
+	pendingG      bool // vim `g` prefix pending (gg)
 	// idFilter, when non-nil, restricts rows to this set — used by the
 	// master-detail split so the detail table shows only the selected
 	// master row's children.
@@ -367,66 +369,148 @@ func (t *tableView) refresh() {
 }
 
 // keyCapture handles table-specific shortcuts. Returns nil if eaten.
+// leaderItems builds the `,` which-key menu for the table view.
+func (t *tableView) leaderItems() []wkItem {
+	app, spec := t.app, t.spec
+	return []wkItem{
+		{'v', "toggle table ⇄ list view", func() { app.swapToBrowser(spec) }},
+		{'e', "edit row", func() {
+			row, _ := t.table.GetSelection()
+			if row >= 1 && row-1 < len(t.rows) {
+				openEditForm(app, spec, t.rows[row-1], t.updateStatus, t.refresh)
+			}
+		}},
+		{'a', "add row", func() { openCreateForm(app, spec, t.updateStatus, t.refresh) }},
+		{'d', "delete row", func() {
+			row, _ := t.table.GetSelection()
+			if row >= 1 && row-1 < len(t.rows) {
+				openDeleteConfirm(app, spec, t.rows[row-1], t.updateStatus, t.refresh)
+			}
+		}},
+		{'f', "filter — condition builder", t.openConditionBuilder},
+		{'o', "order — sort-stack modal", t.openSortModal},
+		{'s', "sort focused column", t.cycleSortOnFocused},
+		{'c', "columns show/hide", t.openColumnsModal},
+		{'x', "export (JSON/CSV → file)", func() {
+			if !spec.allowExport {
+				t.updateStatus("export not enabled — add enttui.AllowExport{}")
+				return
+			}
+			t.openExport()
+		}},
+		{'m', "master-detail split", func() {
+			if len(spec.detailEdges) == 0 {
+				t.updateStatus("no detail edge — add enttui.DetailEdge{}")
+				return
+			}
+			app.pushMasterDetail(spec)
+		}},
+		{'i', "this-view capabilities", func() { app.openKindInfo(spec) }},
+		{'K', "all-kinds matrix", func() { app.openCapabilities() }},
+		{'k', "kind picker (modal)", func() { app.openPicker() }},
+		{'t', "toggles › (#, bar, mouse)", func() {
+			openWhichKey(app, "toggles", []wkItem{
+				{'#', "row numbers", func() {
+					dataCol := t.focusedDataCol()
+					selRow, _ := t.table.GetSelection()
+					t.showRowNum = !t.showRowNum
+					t.refresh()
+					if selRow >= 1 {
+						t.table.Select(selRow, dataCol+t.colOffset())
+					}
+				}},
+				{'b', "status bar", t.toggleStatus},
+				{'m', "mouse capture", func() {
+					app.mouseEnabled = !app.mouseEnabled
+					app.tv.EnableMouse(app.mouseEnabled)
+				}},
+			})
+		}},
+	}
+}
+
 func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
-	switch ev.Rune() {
-	case 'v':
-		// Toggle back to list+preview browser.
-		t.app.swapToBrowser(t.spec)
+	r := ev.Rune()
+
+	if t.pendingG {
+		t.pendingG = false
+		if r == 'g' { // gg → first row, keep focused column
+			_, c := t.table.GetSelection()
+			t.table.Select(1, c)
+		}
+		return nil
+	}
+	if t.pendingY {
+		t.pendingY = false
+		switch r {
+		case 'y':
+			t.copyFocusedRow()
+		case 'c':
+			t.copyFocusedCell()
+		case 'j':
+			t.copyFocusedRowJSON()
+		case 'v':
+			if t.spec.allowBulkCopy && t.selection.count() > 0 {
+				t.openBulkCopy()
+			} else {
+				t.updateStatus("no selection — space/v to select first")
+			}
+		}
+		return nil
+	}
+
+	switch r {
+	case ',':
+		openWhichKey(t.app, "actions", t.leaderItems())
+		return nil
+	case 'y':
+		t.pendingY = true
+		t.updateStatus("yank: y row · c cell · j json · v selection")
+		return nil
+	case 'g':
+		t.pendingG = true
+		return nil
+	case 'G': // last row, keep focused column
+		if n := len(t.rows); n > 0 {
+			_, c := t.table.GetSelection()
+			t.table.Select(n, c)
+		}
+		return nil
+	case 'j': // tview.Table has no native j/k — wire them
+		rr, c := t.table.GetSelection()
+		if rr < len(t.rows) {
+			t.table.Select(rr+1, c)
+		}
+		return nil
+	case 'k':
+		rr, c := t.table.GetSelection()
+		if rr > 1 {
+			t.table.Select(rr-1, c)
+		}
+		return nil
+	case 'h':
+		rr, c := t.table.GetSelection()
+		if c > t.colOffset() {
+			t.table.Select(rr, c-1)
+		}
+		return nil
+	case 'l':
+		rr, c := t.table.GetSelection()
+		t.table.Select(rr, c+1) // tview clamps to the last column
 		return nil
 	case '/':
 		t.openFilter()
 		return nil
-	case 's':
-		t.cycleSortOnFocused()
-		return nil
-	case 'S':
-		// Open the multi-sort modal (Phase D).
-		t.openSortModal()
-		return nil
-	case 'f':
-		// Open the condition-builder modal (Phase F).
-		t.openConditionBuilder()
-		return nil
-	case 'c':
-		// Open the column show/hide modal (Phase G).
-		t.openColumnsModal()
-		return nil
 	case 'r':
 		t.refresh()
 		return nil
-	case 'i':
-		t.app.openKindInfo(t.spec)
-		return nil
-	case 'm':
-		// Open the two-pane master-detail split (works from table view
-		// too — no need to `v` back to list first).
-		if len(t.spec.detailEdges) == 0 {
-			t.updateStatus("no detail edge — add enttui.DetailEdge{Edge:\"<edge>\"} to the schema")
-			return nil
-		}
-		t.app.pushMasterDetail(t.spec)
-		return nil
-	case '#':
-		// Capture the focused DATA column before the offset changes so
-		// the cursor stays on the same column after toggling (otherwise
-		// hiding the # column shifted the cursor one column right).
-		dataCol := t.focusedDataCol()
-		selRow, _ := t.table.GetSelection()
-		t.showRowNum = !t.showRowNum
-		t.refresh()
-		if selRow >= 1 {
-			t.table.Select(selRow, dataCol+t.colOffset())
-		}
-		return nil
 	case ':':
 		_, col := t.table.GetSelection()
-		openGotoRow(t.app, len(t.rows), func(idx int) {
-			t.table.Select(idx+1, col) // +1: row 0 is the header
-		})
+		openGotoRow(t.app, len(t.rows), func(idx int) { t.table.Select(idx+1, col) })
 		return nil
 	case ' ':
 		if !t.spec.allowBulkCopy {
-			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{}")
 			return nil
 		}
 		row, _ := t.table.GetSelection()
@@ -435,19 +519,19 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			t.refresh()
 		}
 		return nil
-	case 'V':
+	case 'v':
 		if !t.spec.allowBulkCopy {
-			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{} to the schema")
+			t.updateStatus("selection not enabled — add enttui.AllowBulkCopy{}")
 			return nil
 		}
 		rsel, _ := t.table.GetSelection()
-		cur := rsel - 1 // data-row index (row 0 = header)
+		cur := rsel - 1
 		if cur < 0 {
 			return nil
 		}
 		if t.selAnchor < 0 {
 			t.selAnchor = cur
-			t.updateStatus("range anchor set — move to the other end, press V again")
+			t.updateStatus("visual: move, press v again to (de)select the span")
 		} else {
 			n, sel := t.selection.toggleRange(t.rows, t.selAnchor, cur)
 			t.selAnchor = -1
@@ -456,56 +540,7 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 			if sel {
 				verb = "selected"
 			}
-			t.updateStatus(fmt.Sprintf("%s %d rows in range", verb, n))
-		}
-		return nil
-	case '*':
-		if t.spec.allowBulkCopy {
-			t.selection.addAll(t.rows)
-			t.refresh()
-		}
-		return nil
-	case '0':
-		if t.spec.allowBulkCopy {
-			t.selection.clear()
-			t.selAnchor = -1
-			t.refresh()
-		}
-		return nil
-	case 'y':
-		if t.spec.allowBulkCopy && t.selection.count() > 0 {
-			t.openBulkCopy()
-			return nil
-		}
-		t.copyFocusedCell()
-		return nil
-	case 'Y':
-		t.copyFocusedRow()
-		return nil
-	case 'X':
-		if !t.spec.allowExport {
-			t.updateStatus("export not enabled — add enttui.AllowExport{} to the schema")
-			return nil
-		}
-		t.openExport()
-		return nil
-	case 'J':
-		t.copyFocusedRowJSON()
-		return nil
-	case 'e':
-		row, _ := t.table.GetSelection()
-		if row >= 1 && row-1 < len(t.rows) {
-			openEditForm(t.app, t.spec, t.rows[row-1], t.updateStatus, t.refresh)
-		}
-		return nil
-	case 'N':
-		openCreateForm(t.app, t.spec, t.updateStatus, t.refresh)
-		return nil
-	case 'D':
-		row, _ := t.table.GetSelection()
-		if row >= 1 && row-1 < len(t.rows) {
-			r := t.rows[row-1]
-			openDeleteConfirm(t.app, t.spec, r, t.updateStatus, t.refresh)
+			t.updateStatus(fmt.Sprintf("%s %d rows", verb, n))
 		}
 		return nil
 	case 'n':
@@ -517,18 +552,6 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 	case 'p':
 		if t.page > 0 {
 			t.page--
-			t.refresh()
-		}
-		return nil
-	case 'g':
-		if t.page != 0 {
-			t.page = 0
-			t.refresh()
-		}
-		return nil
-	case 'G':
-		if t.pageSize > 0 && t.total > 0 {
-			t.page = (t.total - 1) / t.pageSize
 			t.refresh()
 		}
 		return nil
@@ -544,8 +567,13 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	switch ev.Key() {
+	case tcell.KeyCtrlA:
+		if t.spec.allowBulkCopy {
+			t.selection.addAll(t.rows)
+			t.refresh()
+		}
+		return nil
 	case tcell.KeyCtrlU:
-		// Clear ALL filtering — substring + condition-builder.
 		if t.filter != "" || len(t.colFilters) > 0 {
 			t.filter = ""
 			t.colFilters = nil
@@ -555,9 +583,6 @@ func (t *tableView) keyCapture(ev *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyEnter:
-		// Enter always opens the preview overlay. To drill into an
-		// edge, press its single-char trigger (shown in the preview
-		// footer). No magic "primary drill" — every edge is explicit.
 		t.openPreviewOverlay()
 		return nil
 	}

@@ -880,7 +880,7 @@ func registerTask(app *runtime.App, client *ent.Client) {
 				},
 			},
 			{
-				Name: "plan", Display: "→ Plans", Kind: runtime.EdgeUpward, Trigger: "p",
+				Name: "plan", Display: "→ Plans", Kind: runtime.EdgeUpward, Trigger: "a",
 				// Count is emitted for BOTH upward and drill edges. For
 				// upward edges it returns 0 or 1 (parent exists / doesn't).
 				// For drill edges, the child row count.
