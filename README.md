@@ -11,6 +11,7 @@ Extensions for [ent](https://entgo.io) — the Go entity framework.
 | [entpoly](./entpoly) | Laravel-style polymorphic relationships — MorphTo / MorphOne / MorphMany / MorphedByMany with compile-time + DB-level type safety + GraphQL union surface |
 | [entreadonly](./entreadonly) | Make a schema read-only at codegen — strips Create/Update/Delete builders so writes fail to compile, while edges + queries + GraphQL stay intact |
 | [entskiptable](./entskiptable) | Exclude externally-owned tables from ent auto-migration via a composable migration DiffHook (no DDL on tables you only read) |
+| [enttui](./enttui) | Schema-driven terminal UI / admin browser for ent — a `k9s`-style keyboard-driven data explorer generated straight from your schema |
 
 ## Installation
 
@@ -20,6 +21,7 @@ go get github.com/khanakia/entx/entgqlmulti
 go get github.com/khanakia/entx/entpoly
 go get github.com/khanakia/entx/entreadonly
 go get github.com/khanakia/entx/entskiptable
+go get github.com/khanakia/entx/enttui
 ```
 
 Each package is a standalone Go module — install only what you need.
@@ -140,6 +142,23 @@ A small composable migration `DiffHook` filters the computed schema changes: any
 
 See [entskiptable/README.md](./entskiptable/README.md) for the full rationale, API, and FAQ.
 
+## enttui
+
+A schema-driven **terminal UI / admin browser** for ent — think **`k9s` for your ent models**. Point it at the same `./schema` directory you pass to `entc.Generate`, run one extra codegen pass, and every entity becomes a fast, keyboard-driven view for browsing, searching, filtering, sorting, and editing — no hand-written admin panels, no web server, no reflection.
+
+```
+┌─ Tasks ──────────────────────────────────────┐┌─ preview ─────────────────────────────────────────┐
+│ ▸ Migrate 5 lists to ServerDataTable         ││ id: tsk_019e25a435f47…                            │
+│   Apply useDelayedFlag to /areas             ││ title: Migrate 5 lists to ServerDataTable         │
+│   Implement TaskAssignees GraphQL resolver   ││ status: doing  priority: p1                       │
+└──────────────────────────────────────────────┘└───────────────────────────────────────────────────┘
+ Tasks  52/52  sort:created_at↓   j/k move · / filter · , leader · ? help · enter open · esc back · q quit
+```
+
+Works with any ent SQL dialect (SQLite, PostgreSQL, MySQL), any ID type (`string` / `int` / `uuid.UUID`, per entity), and any terminal (tview/tcell). It runs as a standalone codegen pass and does **not** modify or replace your existing `entc` generation.
+
+See [enttui/README.md](./enttui/README.md) for setup, theming (Catppuccin), vim-style navigation, and the [testenttui/](./testenttui/) demo.
+
 ## Development
 
 This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces); each package is an independently versioned module:
@@ -151,9 +170,11 @@ This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces); each pack
 | `entpoly/`         | Polymorphic relationships generator (source)                            |
 | `entreadonly/`     | Compile-time read-only schema (extension + AST strip) (source)          |
 | `entskiptable/`    | Migration DiffHook excluding externally-owned tables (source)           |
+| `enttui/`          | Schema-driven terminal UI / admin browser for ent (source)              |
 | `testent/`         | Integration harness for `entcascade` (ent + SQLite)                     |
 | `testentgqlmulti/` | End-to-end harness for `entgqlmulti` (ent + entgql + gqlgen + SQLite)   |
 | `testentpoly/`     | End-to-end harness for `entpoly` (ent + gqlgen + SQLite + HTTP server)  |
+| `testenttui/`      | Demo / harness for `enttui`                                             |
 
 ```bash
 # entcascade tests

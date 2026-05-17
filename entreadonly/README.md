@@ -198,9 +198,30 @@ No. Only the **write** surface is removed. `Query()`, `Get()`, `GetX()`, edge tr
 
 It is deterministic and idempotent, and it must run **on every code-generation**. Chain it right after `entc.Generate` in the same task. If generation runs without the strip, the write surface reappears until the strip runs again — your build is the safety net (any code calling the removed methods won't compile).
 
-### Can I keep a runtime guard as well?
+### Is there a runtime guard too, or only compile-time?
 
-Yes. `entreadonly` composes with a schema `Hooks()` that rejects mutations — useful as defence-in-depth for any non-generated code path.
+Both, from two different places:
+
+- **Compile-time (entreadonly):** the builders and `<T>Client` write methods are removed, so `client.X.Create()` etc. don't exist — writes fail to compile.
+- **Runtime backstop (entreadonly):** `Strip` neutralizes the generic `<T>Client.mutate` so the `client.Mutate(ctx, m)` dispatch path returns a read-only error instead of writing.
+
+`entreadonly` does **not** ship a schema `Hooks()`. If you want an extra runtime guard, you add it **yourself** in your own schema — it composes fine with the strip:
+
+```go
+var ErrReadOnly = errors.New("User is read-only")
+
+func (User) Hooks() []ent.Hook {
+	return []ent.Hook{
+		func(next ent.Mutator) ent.Mutator {
+			return ent.MutateFunc(func(ctx context.Context, _ ent.Mutation) (ent.Value, error) {
+				return nil, ErrReadOnly
+			})
+		},
+	}
+}
+```
+
+This is optional defence-in-depth (mainly for the window where codegen ran without the strip); the compile-time removal is the primary guarantee.
 
 ### How do I make another schema read-only?
 
