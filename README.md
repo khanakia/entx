@@ -9,6 +9,8 @@ Extensions for [ent](https://entgo.io) — the Go entity framework.
 | [entcascade](./entcascade) | Generate cascade delete functions from schema annotations |
 | [entgqlmulti](./entgqlmulti) | Generate per-API GraphQL schemas from a single ent schema |
 | [entpoly](./entpoly) | Laravel-style polymorphic relationships — MorphTo / MorphOne / MorphMany / MorphedByMany with compile-time + DB-level type safety + GraphQL union surface |
+| [entreadonly](./entreadonly) | Make a schema read-only at codegen — strips Create/Update/Delete builders so writes fail to compile, while edges + queries + GraphQL stay intact |
+| [entskiptable](./entskiptable) | Exclude externally-owned tables from ent auto-migration via a composable migration DiffHook (no DDL on tables you only read) |
 
 ## Installation
 
@@ -16,6 +18,8 @@ Extensions for [ent](https://entgo.io) — the Go entity framework.
 go get github.com/khanakia/entx/entcascade
 go get github.com/khanakia/entx/entgqlmulti
 go get github.com/khanakia/entx/entpoly
+go get github.com/khanakia/entx/entreadonly
+go get github.com/khanakia/entx/entskiptable
 ```
 
 Each package is a standalone Go module — install only what you need.
@@ -98,15 +102,55 @@ case nil:         // unset
 
 See [entpoly/README.md](./entpoly/README.md) for the full feature matrix, [entpoly/docs/features/](./entpoly/docs/features/) for per-feature step-by-step guides, and [testentpoly/](./testentpoly/) for the end-to-end integration harness.
 
+## entreadonly
+
+Make an ent schema read-only **at code-generation time**. ent normally generates a full write surface (`Create`/`Update`/`Delete` builders + client methods) for every schema. When a table is owned by another module/service and your app only models it to query it and traverse edges to it, those write builders are a footgun — they compile, so anyone can write the foreign table and bypass the real owner's validation.
+
+```go
+// app's projection of authmgr's auth_users — read it, never write it
+func (User) Annotations() []schema.Annotation {
+    return []schema.Annotation{
+        entsql.Annotation{Table: "auth_users"},
+        entreadonly.ReadOnly(), // app.User.Create() etc. won't even exist
+    }
+}
+```
+
+An annotation-driven entc extension records the marked types; a deterministic post-codegen AST pass removes their write surface. `client.User.Create()/Update()/Delete()` no longer exist — writes fail to **compile** — while `Query()`, edges, eager-loading and entgql stay fully intact. Works where `ent.View` can't (it breaks FK edges and entgql node codegen).
+
+See [entreadonly/README.md](./entreadonly/README.md) for the multi-module auth use case, the "why can't this be dynamic" explanation, and the full mechanism.
+
+## entskiptable
+
+Stop ent auto-migration from emitting `CREATE` / `ALTER` / `DROP` DDL against tables your client only **reads** — tables owned by another service, another ent client, a view, or a hand-managed migration. Modeling such a table as an `ent.Schema` (so edges work) otherwise lets `client.Schema.Create()` reshape a table you don't own.
+
+```go
+err := client.Schema.Create(ctx,
+    schema.WithForeignKeys(false),
+    schema.WithDiffHook(entskiptable.SkipHook(
+        entskiptable.Any(
+            entskiptable.ByPrefix("auth_"),          // a module-owned namespace
+            entskiptable.ByName("billing_accounts"), // a specific foreign table
+        ),
+    )),
+)
+```
+
+A small composable migration `DiffHook` filters the computed schema changes: any table-scoped change targeting an excluded table is dropped before it is applied. Reads, edges, and code-generation are untouched.
+
+See [entskiptable/README.md](./entskiptable/README.md) for the full rationale, API, and FAQ.
+
 ## Development
 
-This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces) with six modules:
+This repo is a [Go workspace](https://go.dev/doc/tutorial/workspaces); each package is an independently versioned module:
 
 | Module             | Purpose                                                                 |
 | ------------------ | ----------------------------------------------------------------------- |
 | `entcascade/`      | Cascade-delete generator (source)                                       |
 | `entgqlmulti/`     | Per-API GraphQL schema generator (source)                               |
 | `entpoly/`         | Polymorphic relationships generator (source)                            |
+| `entreadonly/`     | Compile-time read-only schema (extension + AST strip) (source)          |
+| `entskiptable/`    | Migration DiffHook excluding externally-owned tables (source)           |
 | `testent/`         | Integration harness for `entcascade` (ent + SQLite)                     |
 | `testentgqlmulti/` | End-to-end harness for `entgqlmulti` (ent + entgql + gqlgen + SQLite)   |
 | `testentpoly/`     | End-to-end harness for `entpoly` (ent + gqlgen + SQLite + HTTP server)  |
