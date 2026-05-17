@@ -1,4 +1,4 @@
-module github.com/khanakia/entx/entxmigrate
+module github.com/khanakia/entx/entskiptable
 
 go 1.26.1
 

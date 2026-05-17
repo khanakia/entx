@@ -1,4 +1,4 @@
-// Package entxmigrate provides a reusable ent auto-migration DiffHook
+// Package entskiptable provides a reusable ent auto-migration DiffHook
 // that EXCLUDES selected tables from migration.
 //
 // Use case: a table is owned by another module/service (a different ent
@@ -19,10 +19,10 @@
 //
 //	client.Schema.Create(ctx,
 //	    migrate.WithForeignKeys(false),
-//	    schema.WithDiffHook(entxmigrate.SkipHook(
-//	        entxmigrate.Any(
-//	            entxmigrate.ByPrefix("auth_"),
-//	            entxmigrate.ByName("billing_accounts"),
+//	    schema.WithDiffHook(entskiptable.SkipHook(
+//	        entskiptable.Any(
+//	            entskiptable.ByPrefix("auth_"),
+//	            entskiptable.ByName("billing_accounts"),
 //	        ),
 //	    )),
 //	)
@@ -30,7 +30,7 @@
 // The hook can READ the excluded tables (SELECT) — it only strips
 // schema CHANGES (Add/Drop/Modify/Rename table) targeting them, so ent
 // never emits DDL for them.
-package entxmigrate
+package entskiptable
 
 import (
 	"strings"

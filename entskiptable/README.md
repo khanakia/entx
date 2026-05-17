@@ -1,16 +1,16 @@
-# entxmigrate — skip / exclude tables from [ent](https://entgo.io) auto-migration (Go ORM)
+# entskiptable — skip / exclude tables from [ent](https://entgo.io) auto-migration (Go ORM)
 
 > **Exclude externally-owned tables from ent's auto-migration.** A tiny, dependency-light migration `DiffHook` for the [ent ORM](https://entgo.io) that stops `client.Schema.Create` from emitting `CREATE` / `ALTER` / `DROP` DDL against tables your ent client only *reads* — tables owned by another service, another ent client, a database view, or a hand-managed migration. Keep ent code-generation and foreign-key edges fully intact.
 
-`go get github.com/khanakia/entx/entxmigrate`
+`go get github.com/khanakia/entx/entskiptable`
 
-[Quickstart](#quickstart) · [Install](#install) · [Why](#why-entxmigrate) · [API](#api) · [How do I…](#how-do-i) · [FAQ](#faq)
+[Quickstart](#quickstart) · [Install](#install) · [Why](#why-entskiptable) · [API](#api) · [How do I…](#how-do-i) · [FAQ](#faq)
 
 ---
 
-## What is entxmigrate?
+## What is entskiptable?
 
-`entxmigrate` solves a common multi-module / micro-service problem with the [ent ORM](https://entgo.io): you model a table as a normal `ent.Schema` so you can **query it and traverse edges to it**, but that table is actually **owned by something else** — a different ent client, a separate service, a database view, or a manually-managed table. ent's auto-migration doesn't know that. On the next `client.Schema.Create()` it will happily reshape the foreign table to match your local schema, e.g.:
+`entskiptable` solves a common multi-module / micro-service problem with the [ent ORM](https://entgo.io): you model a table as a normal `ent.Schema` so you can **query it and traverse edges to it**, but that table is actually **owned by something else** — a different ent client, a separate service, a database view, or a manually-managed table. ent's auto-migration doesn't know that. On the next `client.Schema.Create()` it will happily reshape the foreign table to match your local schema, e.g.:
 
 ```sql
 ALTER TABLE "auth_users" ALTER COLUMN "email" DROP NOT NULL, ALTER COLUMN "status" SET DEFAULT 'available';
@@ -18,16 +18,16 @@ ALTER TABLE "auth_users" ALTER COLUMN "email" DROP NOT NULL, ALTER COLUMN "statu
 
 That is destructive, cross-owner DDL on a table you don't own.
 
-`entxmigrate` is a small [ent migration `DiffHook`](https://entgo.io/docs/migration#diff-hook) that **filters the computed schema changes**: any `AddTable` / `DropTable` / `ModifyTable` / `RenameTable` targeting a table you mark as externally-owned is dropped before ent applies it. Reads still work — only schema **changes** are suppressed.
+`entskiptable` is a small [ent migration `DiffHook`](https://entgo.io/docs/migration#diff-hook) that **filters the computed schema changes**: any `AddTable` / `DropTable` / `ModifyTable` / `RenameTable` targeting a table you mark as externally-owned is dropped before ent applies it. Reads still work — only schema **changes** are suppressed.
 
 ```
-schema author models the foreign table   →   ent diffs it   →   entxmigrate strips its changes   →   0 DDL emitted
+schema author models the foreign table   →   ent diffs it   →   entskiptable strips its changes   →   0 DDL emitted
        (so edges + queries work)              (wants ALTER)        (DiffHook)                          (table untouched)
 ```
 
 No code generation. No struct tags. No fork of ent. Just one hook in your migration call.
 
-## Why entxmigrate?
+## Why entskiptable?
 
 ent's built-in escape hatches don't cover this case:
 
@@ -37,7 +37,7 @@ ent's built-in escape hatches don't cover this case:
 | `ent.View` schema | A view-typed ent schema **cannot carry foreign-key edges** (ent ≤ v0.14.x) — you lose the relationships you modeled the table for. |
 | Hand-rolled `WithDiffHook` per project | Works, but every project re-writes the same change-filtering boilerplate. |
 
-A migration `DiffHook` is the only approach that keeps **code-generation and FK edges intact**. `entxmigrate` packages it once, generically, with composable predicates.
+A migration `DiffHook` is the only approach that keeps **code-generation and FK edges intact**. `entskiptable` packages it once, generically, with composable predicates.
 
 ## Quickstart
 
@@ -46,15 +46,15 @@ Mark which tables are externally-owned when you run auto-migration:
 ```go
 import (
     "entgo.io/ent/dialect/sql/schema"
-    "github.com/khanakia/entx/entxmigrate"
+    "github.com/khanakia/entx/entskiptable"
 )
 
 err := client.Schema.Create(ctx,
     schema.WithForeignKeys(false),
-    schema.WithDiffHook(entxmigrate.SkipHook(
-        entxmigrate.Any(
-            entxmigrate.ByPrefix("auth_"),          // a whole module-owned namespace
-            entxmigrate.ByName("billing_accounts"), // a specific foreign table
+    schema.WithDiffHook(entskiptable.SkipHook(
+        entskiptable.Any(
+            entskiptable.ByPrefix("auth_"),          // a whole module-owned namespace
+            entskiptable.ByName("billing_accounts"), // a specific foreign table
         ),
     )),
 )
@@ -65,7 +65,7 @@ That's it. ent will still **read** `auth_*` and `billing_accounts` (queries, edg
 ## Install
 
 ```bash
-go get github.com/khanakia/entx/entxmigrate
+go get github.com/khanakia/entx/entskiptable
 ```
 
 **Compatibility**
@@ -76,7 +76,7 @@ go get github.com/khanakia/entx/entxmigrate
 | [entgo.io/ent](https://entgo.io) | v0.14.x |
 | [ariga.io/atlas](https://atlasgo.io) | v1.2.x |
 
-`entxmigrate` only imports `entgo.io/ent/dialect/sql/schema` and `ariga.io/atlas/sql/schema` — no other runtime dependencies.
+`entskiptable` only imports `entgo.io/ent/dialect/sql/schema` and `ariga.io/atlas/sql/schema` — no other runtime dependencies.
 
 ## API
 
@@ -102,7 +102,7 @@ func SkipHook(skip Predicate) schema.DiffHook
 `Predicate` is just `func(string) bool`, so you can supply your own logic:
 
 ```go
-schema.WithDiffHook(entxmigrate.SkipHook(func(table string) bool {
+schema.WithDiffHook(entskiptable.SkipHook(func(table string) bool {
     return table == "legacy_users" || strings.HasSuffix(table, "_readonly")
 }))
 ```
@@ -110,10 +110,10 @@ schema.WithDiffHook(entxmigrate.SkipHook(func(table string) bool {
 ## How do I…
 
 **…protect an entire namespace owned by another module?**
-`entxmigrate.ByPrefix("auth_")` — every `auth_*` table is left untouched.
+`entskiptable.ByPrefix("auth_")` — every `auth_*` table is left untouched.
 
 **…add one more foreign table later?**
-Add it to the predicate: `entxmigrate.Any(entxmigrate.ByPrefix("auth_"), entxmigrate.ByName("foo", "bar"))`. One place, exact match.
+Add it to the predicate: `entskiptable.Any(entskiptable.ByPrefix("auth_"), entskiptable.ByName("foo", "bar"))`. One place, exact match.
 
 **…keep reading the table?**
 You already can. `SkipHook` only filters schema *changes*; `SELECT` / edge traversal / eager-loading are unaffected.
@@ -130,7 +130,7 @@ No. Only changes targeting tables your predicate matches are dropped. Every othe
 No. The hook operates purely on the migration diff. Queries, edges and eager-loading on the excluded table keep working.
 
 **Why not `entsql.Annotation{Skip: true}`?**
-It breaks ent code-generation as soon as another schema has an edge to the skipped type. `entxmigrate` works regardless of edges.
+It breaks ent code-generation as soon as another schema has an edge to the skipped type. `entskiptable` works regardless of edges.
 
 **Is it safe with `WithForeignKeys(false)`?**
 Yes — that's the recommended setup. The hook is independent of FK handling; it only filters table-level changes.

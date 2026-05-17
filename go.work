@@ -4,7 +4,7 @@ use (
 	./entcascade
 	./entgqlmulti
 	./entpoly
-	./entxmigrate
+	./entskiptable
 	./enttui
 	./testent
 	./testentgqlmulti
